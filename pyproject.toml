@@ -43,8 +43,9 @@ procrastinate = ["procrastinate>=3.0"]
 dbos = ["dbos>=2.0"]
 redis = ["redis>=5.0", "time-machine>=2.10"]
 rq = ["rq>=2.6", "redis>=5.0", "time-machine>=2.10"]
-# The wire adapter binds PyMongo's 4.x connection API; 4.18 replaced its bulk-write boundary.
-mongodb = ["pymongo>=4.9,<4.18", "motor>=3.7,<4"]
+# The wire adapter binds PyMongo's private 4.x connection API, version-gated at 4.18;
+# each later minor release must be checked before the bound moves.
+mongodb = ["pymongo>=4.9,<4.19", "motor>=3.7,<4"]
 prefect = ["prefect>=3.7,<3.8"]
 aiokafka = ["aiokafka>=0.12,<0.15"]
 
