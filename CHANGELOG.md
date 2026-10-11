@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.8.0...v0.9.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* port recovery isolation and owed-row conformance checks ([#46](https://github.com/gigaverse-app/pytest-obligation/issues/46))
+
+### Features
+
+* inject and detect acknowledgement without application on opted-in seams ([#40](https://github.com/gigaverse-app/pytest-obligation/issues/40)) ([e7f5d46](https://github.com/gigaverse-app/pytest-obligation/commit/e7f5d46df31e131b14489f2f11a599a1f6fa6709))
+* port recovery isolation and owed-row conformance checks ([#46](https://github.com/gigaverse-app/pytest-obligation/issues/46)) ([8c60ebb](https://github.com/gigaverse-app/pytest-obligation/commit/8c60ebb4279f0825e13f33e0bc992fb09198f70a))
+* support scoped handoff arrangements ([#49](https://github.com/gigaverse-app/pytest-obligation/issues/49)) ([fae502e](https://github.com/gigaverse-app/pytest-obligation/commit/fae502e90cc4a957e1bb4da7021a4a2d55f86ede))
+
 ## [0.8.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.7.0...v0.8.0) (2026-10-01)
 
 
