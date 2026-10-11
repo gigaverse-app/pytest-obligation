@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
 from datetime import timedelta
 from typing import Any
 
+from django.db import connection, transaction
 from django.db.models import Model, QuerySet
 from django.test import TestCase
 
@@ -20,6 +21,7 @@ from pytest_obligation.integrations.django.edge_values import CandidateEdge, wri
 from pytest_obligation.integrations.django.lifecycle_states import (
     new_entries,
     observed_effects,
+    resolve_state_path,
 )
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
@@ -121,7 +123,9 @@ def failure_ends_of_sweep(sweep: DueWorkSweep, *, retries_bounded: bool) -> Fail
     state_fields = sweep.lifecycle.state_fields
 
     def state_of(row: Model) -> tuple[Any, ...]:
-        return tuple(getattr(row, state_field) for state_field in state_fields)
+        # A related path ("campaign__status") is read from the row it reaches.
+        paths = [resolve_state_path(type(row), state_field) for state_field in state_fields]
+        return tuple(getattr(path.holder(row), path.field.attname) for path in paths)
 
     def is_terminal(row: Any) -> bool:
         if not type(row)._base_manager.filter(pk=row.pk).exists():
@@ -158,9 +162,14 @@ def _serve(execute: Callable[[Any], Any], delivery: Any, *, dispatched_ids: Call
         try:
             runner = current_host().handoff_runner
             if runner is not None:
-                runner(lambda: execute(delivery))
+
+                def run_delivery() -> object:
+                    with worker_transaction():
+                        return execute(delivery)
+
+                runner(run_delivery)
             else:
-                with TestCase.captureOnCommitCallbacks(execute=True):
+                with TestCase.captureOnCommitCallbacks(execute=True), worker_transaction():
                     execute(delivery)
         except HandoffsNeverStop:
             raise
@@ -222,48 +231,19 @@ def assert_database_legal_owed_row_is_handled(
         return
 
     row.refresh_from_db()
-    # ARRANGE: what the tick would publish for this row now, read after the edge write.
-    delivery = deliver(row) if deliver is not None else identity
-    before = _rows_as_persisted((row, target))
-    calls_before = effect_calls_for(row) if effect_calls_for is not None else 0
-    try:
-        served = _serve(execute, delivery, dispatched_ids=dispatched_ids)
-    except HandoffsNeverStop as endless:
-        raise OwedRowNotHandled(
-            f"{name}: delivering the row with {edge.id} ({edge.value!r}) started a chain that {endless}; every "
-            f"tick would start it again"
-        ) from endless
-    failure, worked = served.failure, served.worked
-    if effect_calls_for is not None and effect_calls_for(row) > calls_before:
-        worked = True
-    still_selected = identity in _selected(selection, identity_of)
-    unchanged = still_selected and _rows_as_persisted((row, target)) == before
-    # INVARIANT ENFORCEMENT: a row the next tick hands over again must not have
-    # raised (whatever the attempt stamped first), and must not have been handed
-    # back untouched by a chain that did nothing; either repeats on every tick.
-    if (failure is not None and still_selected) or (failure is None and unchanged and not worked):
-        outcome = (
-            f"{served.ran_in} raised {failure!r}" if failure is not None else f"{served.ran_in} did nothing at all"
-        )
-        left = "still selected" if failure is not None else "unchanged and still selected"
-        raise OwedRowNotHandled(
-            f"{name}: the selection returns a database-legal owed row with {edge.id} ({edge.value!r}), and "
-            f"{outcome}, leaving the row {left}. The next tick hands it "
-            f"the same row, so this repeats on every tick and the row holds a page slot a valid one needs. Exclude "
-            f"the row in the selection, or make the worker settle, fail or retire it"
-        ) from failure
-    # INVARIANT ENFORCEMENT: a raise on a row the chain moved out of the
-    # selection repeats once what moved it expires, or strands the row unfinished.
-    if failure is not None and not ends.end(row):
-        raise OwedRowNotHandled(
-            f"{name}: {served.ran_in} raised {failure!r} on a database-legal owed row with {edge.id} "
-            f"({edge.value!r}) after moving it out of the selection, and nothing ends it there: the row is in no "
-            f"terminal state {'of the sweep' if ends.is_terminal is not None else '(this contract declares none)'} "
-            f"and the contract claims no profile J to bound a repeat. Either what moved it expires (a claim, a lease, "
-            f"a backoff) and recovery hands the same row to the same raise, or no selection looks at it again and it "
-            f"stays unfinished. Exclude the row in the selection, end it in a terminal state instead of raising, or "
-            f"bound the retry with profile J"
-        ) from failure
+    assert_selected_owed_row_is_handled(
+        name=name,
+        row=row,
+        related=(target,),
+        describe=f"with {edge.id} ({edge.value!r})",
+        selection=selection,
+        identity_of=identity_of,
+        execute=execute,
+        deliver=deliver,
+        dispatched_ids=dispatched_ids,
+        effect_calls_for=effect_calls_for,
+        ends=ends,
+    )
 
 
 def assert_inadmissible_owed_row_does_not_block_the_next(
@@ -635,3 +615,104 @@ OWED_ROW_PROOFS: Mapping[str, OwedRowProof] = {
     assert_database_legal_owed_row_is_handled.__name__: _owed_row_is_handled,
     assert_inadmissible_owed_row_does_not_block_the_next.__name__: _owed_row_does_not_block_the_next,
 }
+
+
+@contextmanager
+def worker_transaction() -> Iterator[None]:
+    """
+    One delivery, run so that a failed SQL statement in it does not abort the proof's own transaction.
+
+    In autocommit (a transactional test) nothing is added: each statement
+    already ends on its own. Inside an enclosing test transaction a failed
+    statement would make every later query of the proof raise, so the delivery
+    runs under a savepoint. What it wrote is kept, as autocommit keeps it, even
+    when it raises; only a delivery that left the transaction aborted is rolled
+    back to the savepoint, with the commit callbacks it registered.
+    """
+    if not connection.in_atomic_block:
+        yield
+        return
+    savepoint = transaction.savepoint()
+    try:
+        yield
+    finally:
+        _end_delivery(savepoint)
+
+
+def _end_delivery(savepoint: str) -> None:
+    # PostgreSQL INERROR is 3: psycopg 2 exposes an int, psycopg 3 an IntEnum.
+    aborted = int(connection.connection.info.transaction_status) == 3
+    if aborted or connection.needs_rollback:
+        # Django refuses every query, the rollback's own included, until its flag is cleared (as Atomic does).
+        transaction.set_rollback(False)
+        transaction.savepoint_rollback(savepoint)
+    else:
+        transaction.savepoint_commit(savepoint)
+
+
+def assert_selected_owed_row_is_handled(
+    *,
+    name: str,
+    row: Any,
+    related: tuple[Model, ...],
+    describe: str,
+    selection: Callable[[], Iterable[Any]],
+    identity_of: Callable[[Any], Any],
+    execute: Callable[[Any], Any],
+    deliver: Callable[[Any], Any] | None = None,
+    dispatched_ids: Callable[[], list[Any]] | None = None,
+    effect_calls_for: Callable[[Any], int] | None = None,
+    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
+) -> None:
+    """
+    INVARIANT: one production delivery of a row the selection returns neither raises nor idles on it.
+
+    The judgment both owed-row admissibility and selection completeness pass
+    on a selected row, however it was made: ``related`` are rows the worker
+    reads through it, so "unchanged" covers them too, and ``describe`` names
+    what makes the row unusual (``"with status-blank ('')"``). ``ends`` is what
+    the contract says ends a row whose chain raised after moving it out of the
+    selection.
+    """
+    identity = identity_of(row)
+    # ARRANGE: what the tick would publish for this row now, read after the edge write.
+    delivery = deliver(row) if deliver is not None else identity
+    before = _rows_as_persisted((row, *related))
+    calls_before = effect_calls_for(row) if effect_calls_for is not None else 0
+    try:
+        served = _serve(execute, delivery, dispatched_ids=dispatched_ids)
+    except HandoffsNeverStop as endless:
+        raise OwedRowNotHandled(
+            f"{name}: delivering the row {describe} started a chain that {endless}; every tick would start it again"
+        ) from endless
+    failure, worked = served.failure, served.worked
+    if effect_calls_for is not None and effect_calls_for(row) > calls_before:
+        worked = True
+    still_selected = identity in _selected(selection, identity_of)
+    unchanged = still_selected and _rows_as_persisted((row, *related)) == before
+    # INVARIANT ENFORCEMENT: a row the next tick hands over again must not have
+    # raised (whatever the attempt stamped first), and must not have been handed
+    # back untouched by a chain that did nothing; either repeats on every tick.
+    if (failure is not None and still_selected) or (failure is None and unchanged and not worked):
+        outcome = (
+            f"{served.ran_in} raised {failure!r}" if failure is not None else f"{served.ran_in} did nothing at all"
+        )
+        left = "still selected" if failure is not None else "unchanged and still selected"
+        raise OwedRowNotHandled(
+            f"{name}: the selection returns a database-legal owed row {describe}, and "
+            f"{outcome}, leaving the row {left}. The next tick hands it "
+            f"the same row, so this repeats on every tick and the row holds a page slot a valid one needs. Exclude "
+            f"the row in the selection, or make the worker settle, fail or retire it"
+        ) from failure
+    # INVARIANT ENFORCEMENT: a raise on a row the chain moved out of the
+    # selection repeats once what moved it expires, or strands the row unfinished.
+    if failure is not None and not ends.end(row):
+        raise OwedRowNotHandled(
+            f"{name}: {served.ran_in} raised {failure!r} on a database-legal owed row {describe} "
+            f"after moving it out of the selection, and nothing ends it there: the row is in no "
+            f"terminal state {'of the sweep' if ends.is_terminal is not None else '(this contract declares none)'} "
+            f"and the contract claims no profile J to bound a repeat. Either what moved it expires (a claim, a lease, "
+            f"a backoff) and recovery hands the same row to the same raise, or no selection looks at it again and it "
+            f"stays unfinished. Exclude the row in the selection, end it in a terminal state instead of raising, or "
+            f"bound the retry with profile J"
+        ) from failure

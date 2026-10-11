@@ -390,7 +390,7 @@ def _adopter_annotation_defect(owner: str, binding: Callable[..., Any]) -> str |
         source = inspect.getsource(code)
     except (OSError, TypeError):
         return f"{owner} source is unavailable, so its adopter evidence annotations cannot be verified"
-    missing = [label for label in _ADOPTER_EVIDENCE_LABELS if label not in source]
+    missing = missing_evidence_annotations(source)
     if not missing:
         return None
     return (
@@ -618,6 +618,9 @@ class ObligationContract(HarnessModel):
     sweep: Callable[[], DueWorkSweep | AbstractContextManager[DueWorkSweep]] | None = None
 
     #: ORM model selected by the sweep, interpreted only by the host integration.
+    prove_selection_complete: bool = False
+    """Generate the Django selection-completeness proof over the sweep lifecycle."""
+
     owed_model: type | None = None
 
     #: Profile B: the domain's ownership mechanics.
@@ -842,6 +845,10 @@ def _profile_design_errors(contract: ObligationContract | SafetyContract, scope:
             if profile is Profile.A:
                 if gap_names := current_host().owed_row_gap_names:
                     valid |= gap_names(contract)
+                if isinstance(contract, ObligationContract) and contract.prove_selection_complete:
+                    selection_gaps, malformed = _selection_gaps(disposition.gaps)
+                    valid |= set(selection_gaps)
+                    errors.extend(malformed)
                 valid |= poison_gap_names("assert_one_poisoned_identity_does_not_stall_the_tick")
                 valid |= stop_gap_names("assert_a_soft_time_limit_ends_the_tick")
             if profile is Profile.G:
@@ -1001,6 +1008,8 @@ def _design_errors(contract: ObligationContract) -> list[str]:
             errors.append(f"convergence family {family.name} needs an assessment reason")
         if isinstance(assessment, KnownGap) or (isinstance(assessment, Claim) and assessment.gaps):
             errors.append("E-family gaps belong to existing profile proof IDs or exact scenario history IDs")
+    if contract.prove_selection_complete and not _claims_recovery(contract):
+        errors.append("prove_selection_complete requires a profile-A claim with a sweep")
     errors.extend(_profile_design_errors(contract, tuple(Profile)))
 
     seen: set[str] = set()
@@ -1392,6 +1401,8 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
         params.append(pytest.param(case, id=case.id, marks=marks))
     params.extend(interleaving_integration.cases(contract.in_flight, contract.fixtures))
     params.extend(interleaving_integration.cases(contract.evidence_confluence, contract.fixtures))
+    if contract.prove_selection_complete:
+        params.extend(current_host().require("selection_completeness_cases")(contract))
     params.extend(_coherence_cases(contract))
     params.extend(_handoff_cases(contract))
     for extra in contract.extras:
@@ -1813,6 +1824,10 @@ class ScheduledSelection(HarnessModel):
     #: Integration-owned loop and edge families (Django: OwedRows and EdgeFamily).
     owed_rows: Callable[[], Any] | None = None
     owed_edges: Mapping[str, Any] = Field(default_factory=dict)
+    #: Related lifecycle paths whose combinations the selection-completeness proof explores.
+    state_fields: tuple[str, ...] = ()
+    #: Combinations deliberately outside this recovery, with substantive reasons.
+    excluded_states: Mapping[str, str] = Field(default_factory=dict)
 
     def model_post_init(self, _context: Any) -> None:
         errors: list[str] = []
@@ -1826,7 +1841,15 @@ class ScheduledSelection(HarnessModel):
             errors.append("owed_rows and owed_edges come together")
         if any(not name.strip() for name in self.owed_edges):
             errors.append("owed_edges family names must be nonempty")
+        if self.state_fields and self.owed_rows is None:
+            errors.append("state_fields require owed_rows for selection completeness")
+        if self.excluded_states and not self.state_fields:
+            errors.append("excluded_states require state_fields")
         valid = {proof.__name__ for proof in SELECTION_PROOFS}
+        if self.state_fields:
+            selection_gaps, malformed = _selection_gaps(self.gaps)
+            valid |= set(selection_gaps)
+            errors.extend(malformed)
         if self.owed_rows is not None:
             defect = _adopter_annotation_defect("scheduled selection `owed_rows` binding", self.owed_rows)
             if defect:
@@ -1889,6 +1912,8 @@ def _populated_proof_runner(selection: ScheduledSelection, proof: Callable[[Any]
 def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
     """The selection-only proofs, plus schedule evidence when declared."""
     params: list[Any] = []
+    if selection.state_fields:
+        params.extend(current_host().require("selection_completeness_cases")(selection))
     if selection.owed_rows is not None:
         params.extend(current_host().require("owed_row_cases")(selection))
     for proof in SELECTION_PROOFS:
@@ -1941,3 +1966,28 @@ def scheduled_selection_suite(
         return _install_suite(cls, params, "test_scheduled_selection_contract", doc)
 
     return decorate
+
+
+def _selection_gaps(gaps: Mapping[str, str]) -> tuple[tuple[str, ...], list[str]]:
+    """The per-combination selection-completeness gaps among ``gaps``, and why any of them is malformed."""
+    named: list[str] = []
+    malformed: list[str] = []
+    for gap in gaps:
+        if not gap.startswith("assert_selection_is_complete["):
+            continue
+        inner = gap[len("assert_selection_is_complete[") : -1]
+        parts = [part.partition(":") for part in inner.split(",")]
+        if (
+            not gap.endswith("]")
+            or not inner
+            or not all(path and value and "|" not in value for path, _, value in parts)
+        ):
+            malformed.append(f"{gap!r}: a selection-completeness gap names one value per state path")
+            continue
+        named.append(gap)
+    return tuple(named), malformed
+
+
+def missing_evidence_annotations(source: str) -> list[str]:
+    """The same review evidence is required on a callable binding or a provider seam."""
+    return [label for label in _ADOPTER_EVIDENCE_LABELS if label not in source]

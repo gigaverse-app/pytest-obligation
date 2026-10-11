@@ -69,8 +69,11 @@ What these proofs deliberately do not claim:
   owns each excluded state; a reviewer checks the citation.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest import mock
@@ -136,7 +139,8 @@ class Lifecycle(HarnessModel):
     ``excluded_states`` maps a state no example produces to why this sweep need
     not cover it — the state precedes the obligation, or another named proof
     owns it. Key ``"field:value"`` for one field, or ``"value"`` for every state
-    field whose choices include it. Silence is not one of the options.
+    field whose choices include it. Related paths such as ``campaign__status`` are supported.
+    Comma-separated combinations are checked by the selection-completeness proof.
     """
 
     state_fields: tuple[str, ...]
@@ -165,7 +169,7 @@ class Lifecycle(HarnessModel):
     publishes_nothing_because: str | None = None
 
 
-def _lifecycle(sweep: "DueWorkSweep") -> Lifecycle:
+def _lifecycle(sweep: DueWorkSweep) -> Lifecycle:
     assert sweep.lifecycle is not None, (
         f"{sweep.name}: no `lifecycle=` declared. Name the production state field(s) and the "
         f"per-identity execution the tick dispatches, so the contract can prove every state is "
@@ -174,7 +178,7 @@ def _lifecycle(sweep: "DueWorkSweep") -> Lifecycle:
     return sweep.lifecycle
 
 
-def _queryset(sweep: "DueWorkSweep") -> QuerySet[Any]:
+def _queryset(sweep: DueWorkSweep) -> QuerySet[Any]:
     selection = sweep.due_work()
     assert isinstance(selection, QuerySet), (
         f"{sweep.name}: lifecycle proofs read the selection's WHERE clause, so due_work must return a Django "
@@ -183,7 +187,7 @@ def _queryset(sweep: "DueWorkSweep") -> QuerySet[Any]:
     return selection
 
 
-def _ages(sweep: "DueWorkSweep") -> tuple[timedelta, timedelta]:
+def _ages(sweep: DueWorkSweep) -> tuple[timedelta, timedelta]:
     """Owed examples age just past the recovery delay; terminal ones an hour past it."""
     from pytest_obligation.profiles.automatic_recovery import declared_recovery_delay
 
@@ -191,12 +195,12 @@ def _ages(sweep: "DueWorkSweep") -> tuple[timedelta, timedelta]:
     return delay + timedelta(minutes=1), delay + _SELECTION_HORIZON
 
 
-def _filtered_fields(where: WhereNode, model: type[Model]) -> set[str]:
-    """Names of ``model`` fields the selection's WHERE clause compares."""
+def filtered_fields(where: WhereNode, model: type[Model]) -> set[str]:
+    """Names of ``model`` fields the selection's WHERE clause compares (the selected model or a joined one)."""
     names: set[str] = set()
     for child in where.children:
         if isinstance(child, WhereNode):
-            names |= _filtered_fields(child, model)
+            names |= filtered_fields(child, model)
         elif isinstance(child, Lookup) and isinstance(child.lhs, Col) and child.lhs.target.model is model:
             names.add(child.lhs.target.name)
     return names
@@ -261,22 +265,27 @@ def _admitted_values(where: WhereNode, model: type[Model], field_name: str, choi
 
 
 def _state_values(model: type[Model], state_field: str) -> set[str]:
-    field_ = model._meta.get_field(state_field)
-    assert isinstance(field_, Field), f"{model._meta.label}.{state_field} is a relation, not a lifecycle field"
-    choices = field_.flatchoices
+    state = resolve_state_path(model, state_field)
+    assert not state.field.is_relation, (
+        f"{state.model._meta.label}.{state.field.name} is a relation, not a lifecycle field"
+    )
+    choices = state.field.flatchoices
     assert choices, (
-        f"{model._meta.label}.{state_field} declares no choices, so the harness cannot enumerate its "
+        f"{state.model._meta.label}.{state.field.name} declares no choices, so the harness cannot enumerate its "
         f"states from production. Name the field whose choices are the lifecycle"
     )
     return {str(value) for value, _label in choices}
 
 
-def _exclusions(sweep: "DueWorkSweep", production_states: dict[str, set[str]]) -> dict[str, dict[str, str]]:
+def _exclusions(sweep: DueWorkSweep, production_states: dict[str, set[str]]) -> dict[str, dict[str, str]]:
     """``excluded_states`` resolved to ``{field: {value: reason}}``, refusing unknown keys."""
     lifecycle = _lifecycle(sweep)
     resolved: dict[str, dict[str, str]] = {name: {} for name in production_states}
     unknown = []
     for key, reason in lifecycle.excluded_states.items():
+        if is_combination_key(key):
+            # A combination excludes no single value; the selection-completeness case reads it.
+            continue
         field_name, _, value = key.rpartition(":")
         targets = (
             [field_name] if field_name else [name for name, values in production_states.items() if value in values]
@@ -304,25 +313,25 @@ def _persisted_states(model: type[Model], rows: list[Any], fields: tuple[str, ..
     return observed
 
 
-def assert_every_lifecycle_state_is_declared(sweep: "DueWorkSweep") -> None:
+def assert_every_lifecycle_state_is_declared(sweep: DueWorkSweep) -> None:
     """
     INVARIANT 2b: every production lifecycle state is owed, terminal, or excluded with a reason.
 
     One representative ``make_owed`` plus hand-picked terminal rows is a
-    sample. A state absent from both — ``RETRYABLE_FAILED`` in the recording
-    example — is never built, so no proof can say whether the sweep strands
+    sample. A state absent from both — ``RETRYABLE_FAILED`` on the recording
+    contract — is never built, so no proof can say whether the sweep strands
     it. Enumerating the states from the model's ``choices`` turns that omission
     into a failing, named state.
     """
     lifecycle = _lifecycle(sweep)
     selection = _queryset(sweep)
     model = selection.model
-    filtered = _filtered_fields(selection.query.where, model)
     production_states: dict[str, set[str]] = {}
     for name in lifecycle.state_fields:
-        assert name in filtered, (
-            f"{sweep.name}: the production selection does not filter on {model.__name__}.{name}, so it "
-            f"is not the lifecycle this sweep recovers. Declare the field the selection compares"
+        state = resolve_state_path(model, name)
+        assert state.field.name in filtered_fields(selection.query.where, state.model), (
+            f"{sweep.name}: the production selection does not filter on {state.model.__name__}.{state.field.name}, "
+            f"so it is not the lifecycle this sweep recovers. Declare the field the selection compares"
         )
         production_states[name] = _state_values(model, name)
 
@@ -338,7 +347,12 @@ def assert_every_lifecycle_state_is_declared(sweep: "DueWorkSweep") -> None:
         f"that owns each state, or why it precedes this obligation"
     )
     admitted = {
-        name: _admitted_values(selection.query.where, model, name, production_states[name])
+        name: _admitted_values(
+            selection.query.where,
+            resolve_state_path(model, name).model,
+            resolve_state_path(model, name).field.name,
+            production_states[name],
+        )
         for name in lifecycle.state_fields
     }
     selected_but_excluded = {
@@ -431,7 +445,7 @@ def new_entries(before: list[Any], after: list[Any]) -> list[Any]:
     return after[len(before) :] if after[: len(before)] == before else after
 
 
-def _selectable(sweep: "DueWorkSweep") -> dict[timedelta, set[Any]]:
+def _selectable(sweep: DueWorkSweep) -> dict[timedelta, set[Any]]:
     """Identities the production selection returns at each horizon past the recovery delay."""
     from pytest_obligation.profiles.automatic_recovery import declared_recovery_delay
 
@@ -487,7 +501,7 @@ def observed_effects(dispatched_ids: Callable[[], list[Any]] | None) -> Iterator
         effects.dispatched = new_entries(dispatched_before, list(dispatched_ids()))
 
 
-def _execute_observed(sweep: "DueWorkSweep", lifecycle: Lifecycle, row: Any) -> tuple[_Effects, Exception | None]:
+def _execute_observed(sweep: DueWorkSweep, lifecycle: Lifecycle, row: Any) -> tuple[_Effects, Exception | None]:
     """Deliver one row to the production execution; an exception is evidence, not an escape."""
     failure: Exception | None = None
     model = type(row)
@@ -533,7 +547,7 @@ def _require_publication_observation(owner: str, lifecycle: Lifecycle) -> None:
     )
 
 
-def _assert_effect_counter_counts(sweep: "DueWorkSweep", lifecycle: Lifecycle, owed_age: timedelta) -> None:
+def _assert_effect_counter_counts(sweep: DueWorkSweep, lifecycle: Lifecycle, owed_age: timedelta) -> None:
     """
     The positive control for ``effect_calls_for``: some owed delivery must raise the count.
 
@@ -555,7 +569,7 @@ def _assert_effect_counter_counts(sweep: "DueWorkSweep", lifecycle: Lifecycle, o
     )
 
 
-def _positive_control(sweep: "DueWorkSweep", lifecycle: Lifecycle, owed_age: timedelta, when: str) -> None:
+def _positive_control(sweep: DueWorkSweep, lifecycle: Lifecycle, owed_age: timedelta, when: str) -> None:
     owed = sweep.make_owed(age=owed_age)
     control, failure = _execute_observed(sweep, lifecycle, owed)
     if failure is not None:
@@ -573,7 +587,7 @@ def _positive_control(sweep: "DueWorkSweep", lifecycle: Lifecycle, owed_age: tim
     )
 
 
-def assert_terminal_states_owe_nothing_further(sweep: "DueWorkSweep") -> None:
+def assert_terminal_states_owe_nothing_further(sweep: DueWorkSweep) -> None:
     """
     INVARIANT 2c: delivering a terminal row to the production worker creates no new obligation.
 
@@ -629,7 +643,45 @@ def assert_terminal_states_owe_nothing_further(sweep: "DueWorkSweep") -> None:
 
 
 #: Generated for every ``DueWorkSweep`` after invariant 2.
-TERMINAL_OBLIGATION_PROOFS: tuple[Callable[["DueWorkSweep"], None], ...] = (
+TERMINAL_OBLIGATION_PROOFS: tuple[Callable[[DueWorkSweep], None], ...] = (
     assert_every_lifecycle_state_is_declared,
     assert_terminal_states_owe_nothing_further,
 )
+
+
+@dataclass(frozen=True)
+class StatePath:
+    """A lifecycle state field of the selected row, or of a row it points to (``"campaign__status"``)."""
+
+    path: str
+    #: Forward relations walked from the selected row to the row holding the field.
+    relations: tuple[str, ...]
+    model: type[Model]
+    field: Field[Any, Any]
+
+    def holder(self, row: Model) -> Model:
+        """The row whose column holds this state: the selected row, or the one its relations reach."""
+        for relation in self.relations:
+            row = getattr(row, relation)
+        return row
+
+
+def resolve_state_path(model: type[Model], path: str) -> StatePath:
+    """``"status"`` on the selected model, or ``"campaign__status"`` through forward relations."""
+    *relations, name = path.split("__")
+    holder: type[Model] = model
+    for relation in relations:
+        link = holder._meta.get_field(relation)
+        assert (link.many_to_one or link.one_to_one) and link.concrete and link.related_model is not None, (
+            f"{holder._meta.label}.{relation} in state path {path!r} is not a forward relation; a related state "
+            f"path walks foreign keys from the selected row"
+        )
+        holder = link.related_model  # type: ignore[assignment]
+    state = holder._meta.get_field(name)
+    assert isinstance(state, Field), f"{path!r} names a reverse relation, not a lifecycle field"
+    return StatePath(path=path, relations=tuple(relations), model=holder, field=state)
+
+
+def is_combination_key(key: str) -> bool:
+    """An ``excluded_states`` key naming a combination of states rather than one value of one field."""
+    return "," in key or "|" in key

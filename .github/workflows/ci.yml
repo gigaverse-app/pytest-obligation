@@ -109,7 +109,7 @@ jobs:
         with:
           enable-cache: true
       # pytest-django gives each xdist worker its own test database.
-      - run: uv sync --locked --no-default-groups --extra django --extra celery --group xdist
+      - run: uv sync --locked --no-default-groups --extra django --extra celery --extra exploration --group xdist
       - run: uv run --no-sync pytest tests/django --ds=tests.django.settings -n 4
 
   # The same suite on psycopg2, which Django uses when psycopg 3 is not installed: pretix and many older
@@ -135,7 +135,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - run: uv sync --locked --no-default-groups --extra django --extra celery --group xdist
+      - run: uv sync --locked --no-default-groups --extra django --extra celery --extra exploration --group xdist
       - run: uv pip uninstall psycopg psycopg-binary && uv pip install psycopg2-binary
       - run: uv run --no-sync pytest tests/django --ds=tests.django.settings -n 4
 
