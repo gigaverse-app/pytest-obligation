@@ -115,6 +115,7 @@ from inspect import getattr_static, isasyncgen, isawaitable, iscoroutine, iscoro
 from typing import Any, Generic, NamedTuple, Protocol, TypeAlias, TypeVar
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
+from pytest_obligation.helpers import proof_context
 from pytest_obligation.host import CountedFaults, current_host
 from pytest_obligation.models import (
     MISSING,
@@ -200,7 +201,9 @@ class HandoffHistory(HarnessModel, Generic[HandleT, ObservationT]):
     One production transition that commits work and hands work off.
 
     ``arrange`` builds the state just before the transition and returns a
-    handle; it may write directly. ``transition`` is the real production
+    handle; it may write directly. It may return a context manager whose scope
+    stays open through recovery and the final observation, then closes even
+    when the transition or proof fails. ``transition`` is the real production
     command — the request handler, the reconcile step, the service method — and
     receives the handle. ``observe`` returns a comparable snapshot of the
     product and obligation state reachable from the handle: statuses,
@@ -210,7 +213,7 @@ class HandoffHistory(HarnessModel, Generic[HandleT, ObservationT]):
     """
 
     name: str
-    arrange: Callable[[], HandleT]
+    arrange: Callable[[], HandleT | AbstractContextManager[HandleT]]
     transition: Callable[[HandleT], object]
     observe: Callable[[HandleT], ObservationT]
     external_calls: tuple[ExternalCall, ...] = ()
@@ -582,52 +585,56 @@ def _run(
     crash_after_call: int | None = None,
     inject: _Injection | None = None,
 ) -> HistoryRun:
-    handle = history.arrange()
-    before = history.observe(handle)
-    with delivery.session() as session:
-        with _worker(history, crash_after, crash_after_call, inject) as worker:
-            try:
-                history.transition(handle)
-            # KeyboardInterrupt and SystemExit are the operator's, never the history's to judge.
-            except (Exception, WorkerDied, BaseExceptionGroup) as error:
-                if not _absorbed(error, worker):
-                    raise
-                _release(error)
-            else:
-                assert not worker.dead, (
-                    f"handoff {history.name!r} kept running after its worker died: something caught WorkerDied "
-                    f"(a BaseException) and carried on. A dead process runs nothing further, so a handoff made "
-                    f"after the catch would converge falsely; let it propagate"
+    arranged = history.arrange()
+    with ExitStack() as scope:
+        handle = (
+            scope.enter_context(proof_context(arranged)) if isinstance(arranged, AbstractContextManager) else arranged
+        )
+        before = history.observe(handle)
+        with delivery.session() as session:
+            with _worker(history, crash_after, crash_after_call, inject) as worker:
+                try:
+                    history.transition(handle)
+                # KeyboardInterrupt and SystemExit are the operator's, never the history's to judge.
+                except (Exception, WorkerDied, BaseExceptionGroup) as error:
+                    if not _absorbed(error, worker):
+                        raise
+                    _release(error)
+                else:
+                    assert not worker.dead, (
+                        f"handoff {history.name!r} kept running after its worker died: something caught WorkerDied "
+                        f"(a BaseException) and carried on. A dead process runs nothing further, so a handoff made "
+                        f"after the catch would converge falsely; let it propagate"
+                    )
+                if worker.refused is not None:
+                    # Reported even when the transition swallowed it, before anything else is judged.
+                    raise worker.refused
+                commits, calls = worker.commits, worker.calls
+                exercised = tuple(
+                    index
+                    for index, declared in enumerate(history.external_calls)
+                    if any(seen is declared for seen in worker.seams)
                 )
-            if worker.refused is not None:
-                # Reported even when the transition swallowed it, before anything else is judged.
-                raise worker.refused
-            commits, calls = worker.commits, worker.calls
-            exercised = tuple(
-                index
-                for index, declared in enumerate(history.external_calls)
-                if any(seen is declared for seen in worker.seams)
-            )
-            counts = {family.counted: worker.count(family) for family in _FAULT_FAMILIES}
-            interrupted = worker.dead or bool(worker.injected_failures)
-        if lose:
-            session.lose()
-            midway = history.observe(handle)
-        else:
-            midway = history.observe(handle)
-            session.deliver()
-        session.recover()
-    return HistoryRun(
-        label=label,
-        before=before,
-        midway=midway,
-        after=history.observe(handle),
-        commits=commits,
-        calls=calls,
-        exercised=exercised,
-        interrupted=interrupted or lose,
-        **counts,
-    )
+                counts = {family.counted: worker.count(family) for family in _FAULT_FAMILIES}
+                interrupted = worker.dead or bool(worker.injected_failures)
+            if lose:
+                session.lose()
+                midway = history.observe(handle)
+            else:
+                midway = history.observe(handle)
+                session.deliver()
+            session.recover()
+        return HistoryRun(
+            label=label,
+            before=before,
+            midway=midway,
+            after=history.observe(handle),
+            commits=commits,
+            calls=calls,
+            exercised=exercised,
+            interrupted=interrupted or lose,
+            **counts,
+        )
 
 
 def _absorbed(error: BaseException, worker: _Worker) -> bool:
