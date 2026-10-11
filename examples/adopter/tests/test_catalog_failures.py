@@ -109,7 +109,8 @@ def test_catalog_declaration_names_its_application_under_a_framework_host() -> N
     # Framework jobs have not enrolled adopter_app when they import the shared declaration.
     framework = Host(production_packages=frozenset({"unrelated_framework"}))
     with hosted(framework):
-        contract = catalog_contract("catalog under framework host")
+        contract = catalog_contract("catalog under framework host", fixtures=("executor_resource",))
+        assert contract.fixtures == ("executor_resource",)
         assert current_host() is framework
         for proof in contract.extras:
             proof.run()

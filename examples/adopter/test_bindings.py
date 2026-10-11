@@ -362,7 +362,7 @@ def recovery_failures(*, stop: bool = False) -> None:
             )
 
 
-def catalog_contract(name: str, run: Runner = inline) -> ObligationContract:
+def catalog_contract(name: str, run: Runner = inline, *, fixtures: tuple[str, ...] = ()) -> ObligationContract:
     """The same application guarantees through the chosen worker executor."""
     # Declaration-time guards run before application() enters its runtime host.
     # Enroll the same application without changing the importing executor's host.
@@ -370,6 +370,7 @@ def catalog_contract(name: str, run: Runner = inline) -> ObligationContract:
     with hosted(host.model_copy(update={"production_packages": host.production_packages | {"adopter_app"}})):
         return ObligationContract(
             name=name,
+            fixtures=fixtures,
             profiles={
                 Profile.A: Decline("This small example exposes reconcile explicitly; it ships no periodic scheduler."),
                 Profile.B: NotApplicable("A single serial executor runs the example; no lease changes hands."),
