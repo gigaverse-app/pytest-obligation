@@ -44,6 +44,7 @@ class CoverageConfig(HarnessModel):
     kinds: tuple[SiteKind, ...] = ()
     bridges: Mapping[str, int] = Field(default_factory=dict)
     bridge_methods: frozenset[str] = frozenset()
+    transaction_openers: frozenset[str] = frozenset()
     baseline: Mapping[str, int] = Field(default_factory=dict)
 
     def is_production(self, qualified: str) -> bool:
@@ -100,4 +101,5 @@ def load_config(root: Path | str = ".") -> CoverageConfig:
         bridges=_counts(table, "bridges"),
         bridge_methods=frozenset(_strings(table, "bridge-methods", ())),
         baseline=_counts(table, "baseline"),
+        transaction_openers=frozenset(_strings(table, "transaction-openers", ())),
     )

@@ -25,6 +25,7 @@ from pathlib import Path
 from pytest_obligation.coverage.config import baseline_from, load_config
 from pytest_obligation.coverage.report import Site
 from pytest_obligation.coverage.scan import baseline_growth, scan, sites_in_transaction, unaccounted_baseline
+from pytest_obligation.coverage.transactions import publications_before_commit
 
 
 class MissingBaseRef(ValueError):
@@ -114,6 +115,15 @@ def _in_transaction(root: Path) -> int:
     return 1
 
 
+def _before_commit(root: Path) -> int:
+    found = publications_before_commit(load_config(root))
+    for owner, publishers in sorted(found.items()):
+        for chain in sorted(publishers.values()):
+            print(" -> ".join((owner, *chain)) if chain else f"{owner} (direct publication)")
+    print(f"due-work-harness: {sum(map(len, found.values()))} publication path(s) before commit")
+    return int(bool(found))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="due-work-harness", description=__doc__.split("\n\n")[0].strip())
     commands = parser.add_subparsers(dest="command", required=True)
@@ -121,6 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("check", "fail unless every handoff site has exactly one disposition"),
         ("sites", "list every handoff site and its disposition"),
         ("baseline", "print a baseline table for the currently unaccounted sites"),
+        ("before-commit", "trace Celery publications through transaction-held calls; exit 1 if any"),
         ("in-transaction", "list handoffs made inside transaction.atomic(); exit 1 if any"),
     ):
         command = commands.add_parser(name, help=help_text)
@@ -133,6 +144,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _check(arguments.root, arguments.base_ref)
         if arguments.command == "sites":
             return _sites(arguments.root)
+        if arguments.command == "before-commit":
+            return _before_commit(arguments.root)
         if arguments.command == "in-transaction":
             return _in_transaction(arguments.root)
         return _baseline(arguments.root)

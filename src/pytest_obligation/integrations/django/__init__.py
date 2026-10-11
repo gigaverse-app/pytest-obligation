@@ -127,6 +127,11 @@ def django_host(
         from pytest_obligation.integrations.django.lifecycle_states import TERMINAL_OBLIGATION_PROOFS
 
         sweep_proofs = TERMINAL_OBLIGATION_PROOFS
+    if ambient_context is not None:
+        from pytest_obligation.profiles.automatic_recovery import AMBIENT_CONTEXT_PROOFS
+
+        # Supplying tenant context must enroll its proof, not silently lose it during migration.
+        sweep_proofs += AMBIENT_CONTEXT_PROOFS
     return Host(
         production_packages=frozenset(production_packages),
         database_marks=functools.partial(_database_marks, serialized_rollback=serialized_rollback),
