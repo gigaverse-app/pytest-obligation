@@ -92,7 +92,7 @@ BE's `extended` setting to the public `deep` mode deliberately.
 The earlier [migration rehearsal](plans/backend-migration-audit.md) remains
 historical evidence: native/light consumers matched 98 cases (90 passed, eight
 unchanged strict expected failures), but the work-table port did not exist then.
-The work-table gap is filled by Due #5 and #9. This completes library extraction, not
+The work-table gap is filled by Due #5 and #9. This completes the reusable harness extraction, not
 BE's production runtime/data cutover: retained receipts, table identity, queued
 task aliases, tenant routing and all application journeys still need a separate
 migration. No backend production code or database is changed by this port.
@@ -100,7 +100,7 @@ migration. No backend production code or database is changed by this port.
 ## Verification
 
 The complete Due suite ran against this obligation source with isolated
-PostgreSQL 17 and Redis: **823 passed before the final mutation controls**, including real Celery worker and
+PostgreSQL 17 and Redis: **887 passed**, including real Celery worker and
 process-death histories. CI also installs the built candidate wheel into Due's
 locked environment and requires executed A–J and application reports.
 
