@@ -14,3 +14,5 @@ Keep Django inspection in its integration, shared metadata and debt enforcement 
 Validated locally: 906 core passes, one optional skip; 328 Django passes and one expected failure. Two PostgreSQL plan cases required disabling unavailable LLVM JIT on the isolated server; rerun separately.
 
 All 20 CI checks pass, including all PostgreSQL plan checks, Python 3.11–3.14, minimum models, integration adopters, demos, types and build. Due companion full run: 1,256 passed, 4 explicit expected failures. BE work-table replacement: 1,340 passed and the same 6 expected failures; all 1,331 baseline outcomes preserved, with 15 additional passing admission-binding cases. Reproduction and the separate native/light comparison are in gigaverse-backend PR #5355.
+
+Freshness check: BE #5354 merged while this port was running. Its leading-key/partial-bitmap proof and shared catalog read are now ported too. New controls fail on the previous implementation; 23 canned-plan and 5 real PostgreSQL controls pass. Final local totals: 929 core passes, one optional skip; 335 Django passes, one intentional expected failure.

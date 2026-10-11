@@ -39,6 +39,7 @@ from django.db.models import Model, QuerySet
 from django.test.utils import CaptureQueriesContext
 
 from pytest_obligation.host import ReadCosts
+from pytest_obligation.integrations.django.indexes import attach_catalog_facts
 from pytest_obligation.integrations.django.writes import require_postgresql
 from pytest_obligation.integrations.postgres_plans import (
     bitmap_overturns_the_walk,
@@ -79,6 +80,7 @@ def explain_index_eligibility(queryset: QuerySet[Any], *, bitmap_only: bool = Fa
         plan = _plan(queryset.explain(format="json"))
         for setting, value in previous.items():
             cursor.execute("SELECT set_config(%s, %s, true)", [setting, value])
+    attach_catalog_facts(database, plan)
     return plan
 
 

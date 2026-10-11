@@ -342,11 +342,10 @@ def _active_attempts() -> QuerySet[ref.LifecycleAttempt]:
     return ref.LifecycleAttempt.objects.filter(status__in=ref.ACTIVE_STATUSES)
 
 
-def test_a_bitmap_over_a_partial_index_is_rejected_until_the_adopter_names_the_index(
+def test_a_bitmap_of_the_whole_partial_index_is_verified_from_the_catalog(
     bitmap_over_a_partial_index: str,
 ) -> None:
-    with pytest.raises(AssertionError, match="builds a bitmap.*no index condition"):
-        _index_served_with(due_work=_active_attempts)
+    _index_served_with(due_work=_active_attempts)
     _index_served_with(bitmap_over_a_partial_index, due_work=_active_attempts)
 
 
@@ -441,7 +440,14 @@ def test_the_inspector_asks_the_bitmap_plan_when_the_first_walks_an_unrelated_in
     bitmap = {
         "Node Type": "Bitmap Heap Scan",
         "Relation Name": _TABLE,
-        "Plans": [{"Node Type": "Bitmap Index Scan", "Index Name": "due_ix", "Index Cond": index_cond}],
+        "Plans": [
+            {
+                "Node Type": "Bitmap Index Scan",
+                "Index Name": "due_ix",
+                "Index Cond": index_cond,
+                "Catalog Index": {"Access Method": "btree", "Key Columns": ["updated_at"], "Predicate": None},
+            }
+        ],
     }
     asked: list[bool] = []
 

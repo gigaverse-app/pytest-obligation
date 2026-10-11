@@ -26,6 +26,9 @@ from typing import Any, TypeAlias
 from pytest_obligation.host import ReadCost
 
 #: Plan keys proving an index narrowed the rows a scan node returned.
+CATALOG_INDEX = "Catalog Index"
+"""Catalog access method, ordered keys and predicate attached to each named index."""
+
 PRUNING_KEYS = ("Index Cond", "Recheck Cond")
 
 
@@ -61,6 +64,7 @@ def index_served_verdict(plan: dict[str, Any], *, table: str, predicate_indexes:
     measures. Names alone, or an arbitrary ``Recheck Cond``, never establish the guarantee.
     """
     constrained = _constrained_columns(predicate_indexes)
+    alone = {node.get("Relation Name") for node in iter_plan_nodes(plan) if "Relation Name" in node} == {table}
     scans = [node for node in iter_plan_nodes(plan) if node.get("Relation Name") == table]
     if not scans:
         return (
@@ -93,7 +97,10 @@ def index_served_verdict(plan: dict[str, Any], *, table: str, predicate_indexes:
             # Every input is read to build AND/OR bitmaps: one selective branch
             # cannot vouch for another that walks its entire unrelated index.
             if not bitmap_scans or not all(
-                "Index Cond" in scan or scan.get("Index Name") in constrained for scan in bitmap_scans
+                "Index Cond" in scan
+                or scan.get("Index Name") in constrained
+                or (alone and "Filter" not in node and scan.get(CATALOG_INDEX, {}).get("Predicate") is not None)
+                for scan in bitmap_scans
             ):
                 return (
                     f"the selection builds a bitmap over {table!r} from an index scan with no index "
@@ -102,7 +109,12 @@ def index_served_verdict(plan: dict[str, Any], *, table: str, predicate_indexes:
                     f"every bitmap. Add an index whose leading columns match the selection's "
                     f"predicate.\n{_rendered(plan)}"
                 )
+            for scan in bitmap_scans:
+                if "Index Cond" in scan and (failure := _index_condition_failure(scan, table, plan)):
+                    return failure
             continue
+        if "Index Cond" in node and (failure := _index_condition_failure(node, table, plan)):
+            return failure
         # A scan with no Filter discards nothing: every row the index yields is
         # a result row. That is how a *partial* index serves a predicate — the
         # narrowing lives in the index's own WHERE clause, which EXPLAIN does
@@ -190,7 +202,14 @@ def bitmap_overturns_the_walk(
     a state index that still filters the due time reads the whole index, and
     is not narrowing.
     """
-    bounded = _range_bounded_columns(_expressions(walked, table, "Filter"))
+    unnarrowed = [
+        str(node["Index Cond"])
+        for scan in iter_plan_nodes(walked)
+        if scan.get("Relation Name") == table
+        for node in iter_plan_nodes(scan)
+        if "Index Cond" in node and CATALOG_INDEX in node and _leading_key_left_open(node) is not None
+    ]
+    bounded = _range_bounded_columns(_expressions(walked, table, "Filter") + unnarrowed)
     if not bounded:
         return False
     if index_served_verdict(bitmap, table=table, predicate_indexes=predicate_indexes) is not None:
@@ -283,7 +302,15 @@ def assert_plan_is_index_served(
        the index definition, invisible to the plan tree. Requiring a pruning key
        there rejects the best possible plan. A scan with no ``Filter`` discards
        nothing, so it is accepted: the waste this proof hunts is rows walked and
-       then thrown away, and that always shows up as a ``Filter``.
+       then thrown away. A condition on a later B-tree key can also discard rows inside the index scan.
+
+    5. *A later B-tree key cannot position the scan.* An index on
+       ``(campaign_id, state)`` with only ``state = 'UNKNOWN'`` in its Index Cond
+       can still read the whole index on PostgreSQL 16. Capture key order and
+       predicates under ``CATALOG_INDEX`` with ``explain_index_eligibility``.
+       Bare index conditions without catalog facts are unevaluable. A partial
+       index narrows by its predicate; a bitmap of one without a condition is
+       accepted only when no Filter or other relation can discard its rows.
 
     So the verdict inspects only the nodes scanning the selection's own table,
     requires each to be a non-sequential scan that either carries a pruning key
@@ -341,3 +368,51 @@ def read_cost(plan: dict[str, Any], *, table: str) -> ReadCost:
         visited=visited,
         sequential=any("Seq Scan" in node.get("Node Type", "") for node in scans),
     )
+
+
+_KEY_CONDITION = re.compile(r"(\w+)\)?(?:::[\w ]+?)?\s*(?:~[<>]=?~|<=|>=|=|<|>|IS (?:NOT )?NULL\b)")
+
+
+def _leading_key_left_open(access: dict[str, Any]) -> str | None:
+    """
+    The B-tree leading key column ``access``'s Index Cond leaves unconstrained, or ``None`` when the condition narrows.
+
+    A B-tree is ordered by its leading column first. A condition on a later key
+    column alone cannot position the scan, so PostgreSQL 16 reads every entry of
+    the index and tests the condition on each: the read grows with the table.
+    A partial index bounds the read by its own predicate, which the planner only
+    uses when the selection implies it, so any condition on one narrows. Other
+    access methods have no leading-column rule, and an expression key prints
+    differently in the catalog and the plan, so both keep the condition as
+    evidence.
+    """
+    catalog = access[CATALOG_INDEX]
+    if catalog["Predicate"] is not None or catalog["Access Method"] != "btree":
+        return None
+    leading = catalog["Key Columns"][0].strip().strip('"')
+    if not leading.isidentifier():
+        return None
+    return (
+        None
+        if leading
+        in set(_KEY_CONDITION.findall(_CAST.sub("", _LITERAL.sub("''", str(access["Index Cond"]))).replace('"', "")))
+        else leading
+    )
+
+
+def _index_condition_failure(access: dict[str, Any], table: str, plan: dict[str, Any]) -> str | None:
+    """Refuse an unevaluable or unbounded condition, for plain and bitmap scans."""
+    index = access.get("Index Name")
+    if CATALOG_INDEX not in access:
+        return (
+            f"the plan names index {index!r} on {table!r} without its catalog definition; "
+            f"capture it with explain_index_eligibility so key order can be judged.\n{_rendered(plan)}"
+        )
+    leading = _leading_key_left_open(access)
+    if leading is not None:
+        return (
+            f"index {index!r} on {table!r} has Index Cond {access['Index Cond']} but leaves its "
+            f"leading key column {leading!r} unconstrained. A B-tree reads the whole index when "
+            f"only a later key is constrained; add a leading key or a partial predicate.\n{_rendered(plan)}"
+        )
+    return None

@@ -149,3 +149,25 @@ without gaps. A light selection has neither guarantee and must fix or explicitly
 record the defect. A `still_owed` binding must answer for the specific row: the
 harness checks that a row served to completion is no longer owed while the
 poisoned row remains owed.
+
+
+### Index conditions need catalog evidence
+
+An `Index Cond` on the second key of `(campaign_id, state)` can still read the
+whole B-tree on PostgreSQL 16. The Django inspector now captures key order,
+access method and partial predicate from PostgreSQL's catalog, and rejects that
+plan unless its leading key is constrained or its partial predicate bounds the
+selection. A bitmap of a partial index is accepted automatically when it serves
+the whole selection; joins and heap filters still need narrowing evidence.
+
+```text
+(campaign_id, state) + WHERE state = 'UNKNOWN' → entire index can be walked
+(state, campaign_id) + WHERE state = 'UNKNOWN' → leading key narrows the read
+(id) WHERE state = 'UNKNOWN'                  → partial predicate bounds it
+```
+
+Direct plan consumers must use
+`pytest_obligation.integrations.django.selection.explain_index_eligibility` or
+attach equivalent `CATALOG_INDEX` facts. Bare EXPLAIN JSON cannot establish key
+order. `integrations.django.indexes.installed_indexes` exposes the same canonical
+catalog records for schema proofs, so downstream adapters need no duplicate SQL.
