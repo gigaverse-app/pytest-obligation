@@ -5,9 +5,10 @@ from typing import Any
 
 import pytest
 from adopter_app.catalog import Catalog
-from test_bindings import catalog_contract
+from test_bindings import catalog_contract, recovery_failures
 
 from pytest_obligation.interleavings import HistoryTrace, InterleavingFailure, replay_history
+from pytest_obligation.poison import PoisonDropped, PoisonStalled, PoisonUnreported, StopRequestIsolated
 
 
 def forget_remote_drift(original: Callable[..., None]) -> Callable[..., None]:
@@ -68,3 +69,35 @@ def test_optional_search_runs_the_actual_catalog() -> None:
 
     scenario = catalog_contract("search control").in_flight["catalog revisions"]
     explore(scenario, max_examples=30, max_steps=20)
+
+
+@pytest.mark.parametrize(
+    "defect, expected",
+    [
+        ("abort", PoisonStalled),
+        ("drop", PoisonDropped),
+        ("silence", PoisonUnreported),
+        ("isolate-stop", StopRequestIsolated),
+    ],
+)
+def test_recovery_proofs_reject_broken_application_loops(
+    monkeypatch: pytest.MonkeyPatch, defect: str, expected: type[AssertionError]
+) -> None:
+    def broken_recovery(catalog: Catalog) -> None:
+        failures = []
+        for identity in catalog.eligible():
+            try:
+                catalog.execute(identity)
+            except Exception as error:
+                if defect == "abort":
+                    raise
+                if defect == "drop":
+                    with catalog.db:
+                        catalog.db.execute("DELETE FROM obligations WHERE id=?", (identity,))
+                failures.append(error)
+        if failures and defect != "silence":
+            raise ExceptionGroup("failed recovery", failures)
+
+    monkeypatch.setattr(Catalog, "recover", broken_recovery)
+    with pytest.raises(expected):
+        recovery_failures(stop=defect == "isolate-stop")

@@ -6,7 +6,7 @@ from pathlib import Path
 from celery.exceptions import SoftTimeLimitExceeded
 
 from pytest_obligation import configure
-from pytest_obligation.integrations.celery import celery_publication_breaker
+from pytest_obligation.integrations.celery import celery_handoffs, celery_publication_breaker, celery_publications
 from pytest_obligation.integrations.django import django_host
 
 SALEOR = Path(__file__).resolve().parents[1] / ".upstream" / "saleor"
@@ -23,6 +23,8 @@ configure(
     django_host(
         production_packages={"saleor", "django"},
         publication_breaker=celery_publication_breaker,
+        publication_recorder=celery_publications,
+        handoff_runner=celery_handoffs,
         lifecycle_proofs=False,
         stop_exception=SoftTimeLimitExceeded,
     )

@@ -7,6 +7,7 @@ results and all harness-owned assertions stay identical across executors.
 import json
 import sqlite3
 from collections.abc import Callable, Iterator
+from concurrent.futures import CancelledError
 from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 from functools import partial
@@ -24,6 +25,7 @@ from pytest_obligation import (
     Claim,
     Decline,
     ExecutionGate,
+    ExtraProof,
     NotApplicable,
     ObligationContract,
     Profile,
@@ -42,6 +44,8 @@ from pytest_obligation.interleavings import (
     ProviderControl,
 )
 from pytest_obligation.models import HarnessModel
+from pytest_obligation.poison import PoisonSwitch, assert_a_stop_request_ends_the_tick
+from pytest_obligation.profiles.automatic_recovery import assert_one_failing_row_does_not_stall_the_tick
 from pytest_obligation.profiles.catalog import ConvergenceFamily
 
 # Executor implementations are external to the application and may queue this callable.
@@ -100,7 +104,11 @@ def application() -> Iterator[ApplicationResources]:
         )
         try:
             with hosted(
-                Host(production_packages=frozenset({"adopter_app"}), in_transaction=lambda: catalog.db.in_transaction)
+                Host(
+                    production_packages=frozenset({"adopter_app"}),
+                    in_transaction=lambda: catalog.db.in_transaction,
+                    stop_exception=CancelledError,
+                )
             ):
                 yield ApplicationResources(
                     catalog=catalog, provider=provider, remote=remote, facts=facts, publications=events
@@ -317,6 +325,43 @@ def replay(run: Runner = inline) -> Iterator[ReplaySafeEffect]:
         )
 
 
+def recovery_failures(*, stop: bool = False) -> None:
+    # ARRANGE: two approved SQL obligations; the older one reaches the failing provider first.
+    # REAL PRODUCTION: Catalog.recover selects and executes work, preserving SQL intent on failure.
+    # EXTERNAL SEAM: the remote writer refuses only the armed identity.
+    # OBSERVE: actual remote writes for progress, durable SQL owners for retained responsibility.
+    # This proves the application loop itself; executor shutdown/transport semantics have separate tests.
+    with application() as state:
+        catalog = state.catalog
+        switch = PoisonSwitch()
+        write = catalog.write
+
+        def checked_write(identity: int, value: str) -> None:
+            switch.check(identity)
+            write(identity, value)
+
+        catalog.write = checked_write
+        if stop:
+            interrupted = catalog.admit("red")
+            healthy = catalog.admit("blue")
+            assert_a_stop_request_ends_the_tick(
+                name="catalog reconciliation",
+                poison=switch.poisoned(interrupted),
+                run_tick=catalog.recover,
+                progressed=lambda: healthy in state.remote,
+                still_owed=lambda: interrupted in catalog.owed(),
+            )
+        else:
+            assert_one_failing_row_does_not_stall_the_tick(
+                name="catalog reconciliation",
+                make_owed=lambda: catalog.admit("red"),
+                run_tick=catalog.recover,
+                switch=switch,
+                dispatched_ids=lambda: list(state.remote),
+                still_owed=lambda identity: identity in catalog.owed(),
+            )
+
+
 def catalog_contract(name: str, run: Runner = inline) -> ObligationContract:
     """The same application guarantees through the chosen worker executor."""
     return ObligationContract(
@@ -335,6 +380,10 @@ def catalog_contract(name: str, run: Runner = inline) -> ObligationContract:
             Profile.I: Claim(),
             Profile.J: NotApplicable("Reconciliation has no retry limit; it retains intent until convergence."),
         },
+        extras=(
+            ExtraProof(name="recovery-poison", run=recovery_failures),
+            ExtraProof(name="recovery-stop", run=partial(recovery_failures, stop=True)),
+        ),
         eligibility=partial(gate, run),
         replay=partial(replay, run),
         admission={"publish": admission},
