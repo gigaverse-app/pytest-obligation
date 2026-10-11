@@ -38,7 +38,9 @@ would be inappropriate, without weakening their existing suites.
 
 Local red evidence: catalog poison stalled the healthy tail; Saleor blank and
 maximum-length currency edges repeatedly failed completion; Wagtail poisoned and
-interrupted tasks became FAILED and left automatic recovery. Guards caught two
+interrupted tasks became FAILED and left automatic recovery. The complete CI run
+also exposed blank/unconfigured maximum-length queue names aborting the worker
+before the healthy tail; these are two edge-specific liveness gaps. Guards caught two
 binding mistakes during adoption (UUID normalization and a test-authored ORM
 filter), both fixed rather than exempted. The READY partial index is now named
 for catalog-backed verification, not declared as an index defect.

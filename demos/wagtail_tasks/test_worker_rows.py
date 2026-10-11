@@ -99,6 +99,14 @@ READY_TASKS = ScheduledSelection(
     owed_rows=worker_rows,
     owed_edges={"task": EdgeFamily(model=DBTaskResult)},
     gaps={
+        "assert_inadmissible_owed_row_does_not_block_the_next[task-queue_name-blank]": (
+            "The all-queues worker selects an empty queue name. Its error handler reconstructs the invalid "
+            "task and raises InvalidTask, abandoning the healthy task behind it."
+        ),
+        "assert_inadmissible_owed_row_does_not_block_the_next[task-queue_name-max_length]": (
+            "A database-legal but unconfigured 32-character queue name is selected by the all-queues worker. "
+            "Error reporting raises InvalidTask and aborts before the healthy tail."
+        ),
         "assert_one_poisoned_identity_does_not_stall_the_tick[dropped]": (
             "Worker.run_task catches the receiver failure and makes the task FAILED. The healthy tail completes, "
             "but ready() never selects the failed task again and no automatic retry restores it."
