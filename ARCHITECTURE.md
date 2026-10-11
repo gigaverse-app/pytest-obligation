@@ -1,6 +1,6 @@
 # Architecture
 
-`due-work-harness` states invariants about **due work** — work a program records
+`pytest-obligation` states invariants about **due work** — work a program records
 now and a worker completes later — as executable proofs. The proofs are
 framework-free. Frameworks reach them only through one small interface, the
 **host**, and through optional **integrations**.
@@ -64,7 +64,7 @@ dataclasses:
 | `receiver_breaker(fail_at)` | `ReceiverBreaker \| None` | crash histories (each receiver of the signals an adopter names failing; `django_receiver_breaker(*signals)` for Django) |
 | `connection_scope()` | `Callable[[], ContextManager]` | two-connection races (profile B); inside a racer, `host.race_timeout()` is the race's deadline, to bound the racer's waits from |
 | `selection_inspectors` | `tuple[SelectionInspector, ...]` | profile A database proofs: `index_served(selection)`, `replica_read(selection)`, `scan_counts(selection)`, `statements_during(run)` |
-| `ambient_context()` | `Callable[[], object] \| None` | profile A `AMBIENT_CONTEXT_PROOFS`: a tick restores ambient context (opt-in; fails when unset) |
+| `ambient_context()` | `Callable[[], object] \| None` | profile A `AMBIENT_CONTEXT_PROOFS`: a tick restores ambient context (automatically registered by `django_host` when supplied) |
 | `publication_recorder()` | `Callable[[], ContextManager[list[str]]] \| None` | lifecycle-state proof 2c: work handed off only as a queue message |
 | `frozen_clock(moment)` | `Callable[[datetime], ContextManager] \| None` | lifecycle-state proofs: aging rows past the recovery delay |
 | `sweep_proofs` | `tuple[Callable, ...]` | profile A proofs only a framework can run (the Django host adds 2b/2c) |
@@ -101,7 +101,11 @@ pytest_obligation/
     report.py            Site, Disposition, CoverageReport
     scan.py              the rules that match the two
     config.py            [tool.due-work-harness]
-    cli.py               due-work-harness check | sites | baseline
+    transactions.py      public pre-commit publication evidence and reviewed policy
+    schedules.py         public schedule classifications and cadence validation
+    proof_calls.py       optional direct-proof declaration policy
+    _internal/           private AST visitors, call graphs and source-shape helpers
+    cli.py               pytest-obligation check | sites | baseline | before-commit
   evidence/              observation reports
   profiles/
     automatic_recovery.py   profile A (DueWorkSweep and its proofs)
@@ -146,7 +150,9 @@ tests/django self-tests against PostgreSQL through the Django integration
   `DeliverySession`: `deliver()` runs what the transition published;
   `lose()` drops it (or `can_lose = False` when there is nothing separate from
   the database to lose, as with a PostgreSQL job queue); `recover()` runs the
-  bounded normal recovery production performs.
+  bounded normal recovery production performs. A `RecoveryDeliverySession` also
+  implements `recover_with(ticks)` for histories declaring downstream production
+  recovery entry points. Unsupported sessions reject those declarations.
   `CallableDelivery(name, recover, deliver=None, lose=None)` covers most hosts.
 - `crash_histories.assert_crash_at_every_commit_converges(delivery, history)`.
 - `crash_histories.assert_histories_converge(name, runs: list[HistoryRun])`,
@@ -167,3 +173,11 @@ boundary. `owed_row_cases` and `owed_row_gap_names` let the core contract delega
 Django case enumeration without importing Django. The typed `EdgeFamily` and
 `OwedRows` declarations belong to that integration. Core poison oracles import no
 framework; the Celery publication seam lives only in `integrations/celery.py`.
+
+## Adoption and policy interfaces
+
+The [harness guide](docs/harness-guide.md) maps public APIs to adopter workflows,
+with ownership diagrams and scope rules. The [source-policy guide](docs/source-policies.md)
+documents scanner inputs, reviewed exceptions and resolution limits. Private
+coverage analysis lives in `coverage/_internal`; public declarations and validators
+remain in `coverage.transactions` and `coverage.schedules`.

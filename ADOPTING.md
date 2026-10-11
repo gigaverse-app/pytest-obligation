@@ -1,5 +1,10 @@
 # Adopting due-work-harness
 
+For a guided map of interfaces, examples and debugging paths, see the
+[harness guide](docs/harness-guide.md). Application source-policy checks are
+covered separately in [source policies](docs/source-policies.md).
+
+
 This is the path from "we use Django/Celery, Procrastinate or DBOS" to "CI fails
 when background work can be lost or repeated". A complete, minimal adopter lives
 in [`examples/adopter/`](examples/adopter/); the harness's own CI runs it through

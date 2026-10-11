@@ -165,6 +165,17 @@ Open your application in Claude Code or Codex and ask:
 > generate and run the standard tests, then add focused crash/retry tests.
 > Report what passed, what failed, and which guarantees remain unassessed.
 
+## Documentation
+
+| You want to… | Read |
+| --- | --- |
+| Find the right workflow or public interface | [Harness guide and module map](docs/harness-guide.md) |
+| Bind your application and run generated proofs | [Adoption walkthrough](ADOPTING.md), [runnable SQLite adopter](examples/adopter/) |
+| Inspect transaction and schedule policy | [Handoff coverage](docs/coverage.md), [source-policy APIs and examples](docs/source-policies.md) |
+| Understand recovery and outcome evidence | [Recovery edge cases](docs/recovery-edge-cases.md), [what a green result means](docs/what-a-green-result-means.md) |
+| Replace the backend harness | [Completed port and ownership map](docs/backend-harness-port.md) |
+| Contribute a proof or integration | [Architecture](ARCHITECTURE.md), [contributor workflow](CONTRIBUTING.md) |
+
 Start with the [adoption guide](ADOPTING.md) if you want to bind a contract
 yourself. For framework boundaries and the handoff scan, see
 [integrations](docs/integrations.md) and [coverage](docs/coverage.md). To probe

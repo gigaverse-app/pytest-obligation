@@ -5,11 +5,7 @@ from pathlib import Path
 from textwrap import dedent, indent
 from typing import NotRequired, TypedDict
 
-from pytest_obligation.coverage.config import CoverageConfig
-from pytest_obligation.coverage.project import Project
-from pytest_obligation.coverage.schedules import (
-    RecoveryTick,
-    Sweep,
+from pytest_obligation.coverage._internal.schedules import (
     _Callable,
     _declared_stale_after,
     _early_return,
@@ -20,6 +16,9 @@ from pytest_obligation.coverage.schedules import (
     _tick_problem,
     _ticks_somewhere,
 )
+from pytest_obligation.coverage.config import CoverageConfig
+from pytest_obligation.coverage.project import Project
+from pytest_obligation.coverage.schedules import RecoveryTick, Sweep
 
 
 class ScheduleArguments(TypedDict):

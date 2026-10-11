@@ -15,6 +15,8 @@ _HARNESS_PACKAGES = ("pytest_obligation", "due_work_harness", "due.django.confor
 
 
 class ProofCall(HarnessModel):
+    """One direct assertion call: dotted source module, local proof name and line."""
+
     module: str
     proof: str
     line: int
