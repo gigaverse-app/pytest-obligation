@@ -10,7 +10,7 @@ otherwise pass for the wrong reason and nobody would see it.
 import pytest
 from sample_production import cache
 
-from pytest_obligation.gap_probes import LossIsAbsorbedElsewhere
+from pytest_obligation.gap_probes import LossDropsOnlyANotification, LossIsAbsorbedElsewhere
 from pytest_obligation.host import Host, hosted
 
 # Every test here binds an absorbing path the probe must recognise as production.
@@ -93,3 +93,93 @@ def test_production_is_what_the_host_says_it_is() -> None:
     effect = _Effect()
     with hosted(Host()), pytest.raises(AssertionError, match="absorb is test code that references no production"):
         LossIsAbsorbedElsewhere(strand=effect.strand, observe=effect.observe, absorb=effect.absorb)()
+
+
+class _Announcement:
+    """A best-effort notification beside product state the producer commits on its own."""
+
+    def __init__(self, *, sends: bool = True, writes_product: bool = False) -> None:
+        self.sent: set[int] = set()
+        self.committed: dict[int, str] = {}
+        self.sends = sends
+        self.writes_product = writes_product
+        self._ids = iter(range(1, 100))
+
+    def strand(self) -> int:
+        """Commit the product state; the notification's dispatch is lost."""
+        identity = next(self._ids)
+        self.committed[identity] = "scheduled"
+        return identity
+
+    def notified(self, identity: int) -> bool:
+        return identity in self.sent
+
+    def product(self, identity: int) -> str | None:
+        return self.committed.get(identity)
+
+    def deliver(self, identity: int) -> None:
+        cache.read_only(self.sent, identity)
+        if self.sends:
+            self.sent.add(identity)
+        if self.writes_product:
+            self.committed[identity] = "announced"
+
+
+def _drops_only(announcement: _Announcement) -> LossDropsOnlyANotification:
+    return LossDropsOnlyANotification(
+        strand=announcement.strand,
+        notified=announcement.notified,
+        product=announcement.product,
+        deliver=announcement.deliver,
+    )
+
+
+def test_a_notification_nothing_waits_for_holds() -> None:
+    _drops_only(_Announcement())()
+
+
+def test_a_dispatch_that_also_writes_product_state_is_refused() -> None:
+    """Delivering it changes what the product reads, so losing it loses more than a notification."""
+    with pytest.raises(AssertionError, match="does more than notify"):
+        _drops_only(_Announcement(writes_product=True))()
+
+
+def test_product_state_that_waits_for_the_dispatch_is_refused() -> None:
+    announcement = _Announcement()
+
+    def strand_awaiting_the_dispatch() -> int:
+        identity = announcement.strand()
+        del announcement.committed[identity]
+        return identity
+
+    with pytest.raises(AssertionError, match="something waits for it"):
+        _drops_only(announcement).model_copy(update={"strand": strand_awaiting_the_dispatch})()
+
+
+def test_a_notification_that_was_never_suppressed_is_refused() -> None:
+    """The positive control before delivery: absence must be the dispatch's doing."""
+    announcement = _Announcement()
+
+    def strand_without_suppressing() -> int:
+        identity = announcement.strand()
+        announcement.sent.add(identity)
+        return identity
+
+    with pytest.raises(AssertionError, match="never actually suppressed"):
+        _drops_only(announcement).model_copy(update={"strand": strand_without_suppressing})()
+
+
+def test_an_observation_the_dispatch_never_produces_is_refused() -> None:
+    """The positive control after delivery: `notified` must see what this dispatch does."""
+    with pytest.raises(AssertionError, match="produced no notification"):
+        _drops_only(_Announcement(sends=False))()
+
+
+def test_a_test_authored_deliverer_is_refused() -> None:
+    announcement = _Announcement()
+
+    def deliver_here(identity: int) -> None:
+        announcement.sent.add(identity)
+
+    with pytest.raises(AssertionError, match="deliver is test code that references no production"):
+        _drops_only(announcement).model_copy(update={"deliver": deliver_here})()

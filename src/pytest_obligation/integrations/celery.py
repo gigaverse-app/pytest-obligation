@@ -13,12 +13,15 @@ message with its arguments; :func:`celery_publication_breaker` is a
 would. Each imports Celery when entered.
 """
 
-import importlib
+from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any, NamedTuple
 from unittest import mock
+
+from pytest_obligation.host import HandoffsNeverStop, current_host
+from pytest_obligation.poison import PoisonSwitch
 
 
 def _beat_schedule(app: Any | None) -> Mapping[str, Mapping[str, Any]]:
@@ -40,29 +43,24 @@ def celery_beat_evidence(task_path: str, *, app: Any | None = None) -> Callable[
     tick in production. That is precisely the "nothing runs it" failure profile
     A's invariant 8 exists to catch, and such a check cannot see it.
 
-    So the path must also resolve to something callable. A dotted import is the
-    portable check: Celery registers a task by importing the module that
-    decorates it, so a path that cannot be imported cannot be a registered task
-    either.
+    Check the Celery app registry: beat publishes the registered name, which
+    may differ from the Python import path. Importing a callable is not evidence
+    that a worker registered it. With no explicit app, use Celery's current app
+    and Django's schedule. Worker startup imports remain an integration concern.
     """
 
     def check() -> None:
         scheduled = {entry.get("task") for entry in _beat_schedule(app).values()}
         assert task_path in scheduled, f"{task_path!r} is not in the beat schedule, so nothing runs it"
 
-        module_path, _, attribute = task_path.rpartition(".")
-        try:
-            task = getattr(importlib.import_module(module_path), attribute)
-        except (ImportError, AttributeError) as error:
-            raise AssertionError(
-                f"{task_path!r} is in the beat schedule but does not resolve to anything ({error!r}). "
-                f"Beat will publish it and the worker will reject it as unregistered, so the sweep never "
-                f"runs — which every other invariant would still pass"
-            ) from error
+        registered_app = app
+        if registered_app is None:
+            from celery import current_app
 
-        assert callable(task) or hasattr(task, "delay"), (
-            f"{task_path!r} resolves to {task!r}, which is neither callable nor a Celery task, "
-            f"so scheduling it runs nothing"
+            registered_app = current_app
+        assert registered_app.tasks.get(task_path) is not None, (
+            f"{task_path!r} is in the beat schedule but does not resolve to a registered Celery task. "
+            f"Beat will publish it and the worker will reject it as unregistered, so the sweep never runs"
         )
 
     return check
@@ -86,6 +84,7 @@ class Publication(NamedTuple):
     task: str
     args: tuple[Any, ...]
     kwargs: dict[str, Any]
+    options: dict[str, Any] | None = None
 
 
 @contextmanager
@@ -103,12 +102,12 @@ def _holding(record: Callable[[Publication], object]) -> Iterator[None]:
         return AsyncResult(f"held-{count[0]}")
 
     def apply_async(task: Any, args: Any = None, kwargs: Any = None, *_rest: Any, **_options: Any) -> AsyncResult:
-        return held(Publication(task.name, tuple(args or ()), dict(kwargs or {})))
+        return held(Publication(task.name, tuple(args or ()), dict(kwargs or {}), _options))
 
     def send_task(
         _app: Any, name: str, args: Any = None, kwargs: Any = None, *_rest: Any, **_options: Any
     ) -> AsyncResult:
-        return held(Publication(name, tuple(args or ()), dict(kwargs or {})))
+        return held(Publication(name, tuple(args or ()), dict(kwargs or {}), _options))
 
     with mock.patch.object(Task, "apply_async", apply_async), mock.patch.object(Celery, "send_task", send_task):
         yield
@@ -216,3 +215,60 @@ def celery_publications() -> Iterator[list[str]]:
     names: list[str] = []
     with _holding(lambda publication: names.append(publication.task)):
         yield names
+
+
+@contextmanager
+def refusing_publication(
+    switch: PoisonSwitch,
+    task: Any,
+    key: Callable[[tuple[Any, ...], dict[str, Any]], Any] | None = None,
+) -> Iterator[None]:
+    """Poison one task's publication, preserving the innermost publication recorder."""
+    from celery import Task
+
+    def apply_async(args: Any = None, kwargs: Any = None, **options: Any) -> Any:
+        positional, keyword = tuple(args or ()), dict(kwargs or {})
+        if key is None:
+            assert positional, "keyword-only publication needs key="
+            identity = positional[0]
+        else:
+            identity = key(positional, keyword)
+        switch.check(identity, f"the broker refused {task.name}")
+        return Task.apply_async(task, args, kwargs, **options)
+
+    with mock.patch.object(task, "apply_async", apply_async):
+        yield
+
+
+def celery_handoffs(execute: Callable[[], object]) -> None:
+    """Run an entry point and up to 20 handoffs, including countdowns and commit callbacks.
+
+    A delivered task scheduling itself again is a retry; leave that for profile J.
+    Task.apply drives Celery's real retry/autoretry handling with an eager request.
+    """
+    from celery import current_app
+    from celery.exceptions import Retry
+
+    with held_publications() as published:
+        with current_host().commit_scope():
+            execute()
+        pending = deque(published)
+        published.clear()
+        delivered = 0
+        while pending:
+            if delivered == 20:
+                raise HandoffsNeverStop("still publishing after 20 deliveries")
+            message = pending.popleft()
+            task = current_app.tasks[message.task]
+            with current_host().commit_scope():
+                task.apply(args=message.args, kwargs=message.kwargs, throw=True)
+            delivered += 1
+            for followup in published:
+                options = followup.options or {}
+                if followup.task == message.task and (
+                    options.get("countdown") is not None or options.get("eta") is not None
+                ):
+                    # A retry-only chain is not evidence that the row was handled.
+                    raise Retry("the handoff only rescheduled itself")
+                pending.append(followup)
+            published.clear()

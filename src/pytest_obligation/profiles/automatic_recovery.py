@@ -142,6 +142,12 @@ from pytest_obligation.binding import (
 )
 from pytest_obligation.host import SelectionInspector, current_host
 from pytest_obligation.models import HarnessModel
+from pytest_obligation.poison import (
+    PoisonedHistory,
+    PoisonSwitch,
+    assert_a_stop_request_ends_the_tick,
+    assert_poison_is_isolated,
+)
 
 
 class OwedWorkVariant(HarnessModel):
@@ -308,6 +314,13 @@ class DueWorkSweep(HarnessModel):
     #: integration, which the framework-free core never imports, and a Pydantic
     #: field cannot name a type imported only for the type checker.
     lifecycle: SkipValidation[Any] = None
+
+    #: Per-identity fault seam; yielding a counter proves the tick actually reached it.
+    poison: Callable[[Any], AbstractContextManager[Callable[[], int]]] | None = None
+    #: Observe actual progress when dispatch alone is not completion.
+    progressed: Callable[[Any], bool] | None = None
+    #: Observe owed work moved to a backoff or successor selection.
+    still_owed: Callable[[Any], bool] | None = None
 
 
 def declared_recovery_delay(sweep: DueWorkSweep) -> timedelta:
@@ -574,6 +587,20 @@ def assert_sweep_bindings_are_production_bound(sweep: DueWorkSweep) -> None:
     if sweep.observe_outstanding is not None:
         assert_the_backlog_reading_is_production_published(sweep)
     assert_lifecycle_execution_is_production_bound(sweep)
+    if sweep.still_owed is not None:
+        assert_binding_reaches_production(
+            adopter=sweep.name,
+            field="still_owed",
+            binding=sweep.still_owed,
+            forbidden=INVOCATION_AUTHORING_OPERATIONS,
+            production_shape="the production selection owning this obligation after failure",
+        )
+        assert_test_binding_consumes_its_first_parameter(
+            adopter=sweep.name,
+            field="still_owed",
+            binding=sweep.still_owed,
+            parameter_shape="the poisoned row",
+        )
 
 
 def assert_lifecycle_execution_is_production_bound(sweep: DueWorkSweep) -> None:
@@ -913,45 +940,111 @@ def assert_the_tick_is_actually_scheduled(sweep: DueWorkSweep) -> None:
     sweep.assert_scheduled()
 
 
+def assert_one_poisoned_identity_does_not_stall_the_tick(sweep: DueWorkSweep) -> None:
+    """
+    INVARIANT 12: a single poisoned identity must not block the identities behind it.
+
+    A tick that runs application code per identity in a loop and lets one
+    exception escape abandons everything after it. Because selection is
+    deterministic and oldest-first (invariants 6 and 7), the *same* identity
+    leads every tick, so a permanently failing one blocks the queue forever
+    rather than being overtaken. The ordering guarantees that make the sweep
+    fair are exactly what make head-of-line blocking permanent: one ``file=''``
+    picture stopped all rendition recovery on dev for three days.
+
+    The proof creates two owed rows, the poisoned one older so it leads the
+    selection, enters ``sweep.poison`` for it and runs one production tick.
+    The shared oracle (:func:`~pytest_obligation.poison.assert_poison_is_isolated`)
+    then requires the poison to have fired, the healthy row to have been
+    dispatched, the tick to have reported the injected failure (a tick that
+    logs and moves on reports success), and the poisoned row to still be owed.
+
+    Part of profile A because every recovery loop runs per-identity code; a
+    legacy contract whose production loop is known not to isolate declares it
+    as a gap. Runtime-specific integrations can add per-phase histories using
+    the same oracle.
+    """
+    history = _poisoned_history(sweep, "does not stall the identities behind it")
+    assert_poison_is_isolated(name=sweep.name, run_tick=sweep.run_tick, **history)
+
+
+def assert_a_soft_time_limit_ends_the_tick(sweep: DueWorkSweep) -> None:
+    """
+    INVARIANT 12b: a cooperative stop request raised in one identity's step ends the tick there.
+
+    Celery raises ``SoftTimeLimitExceeded`` so a task can stop before the hard
+    kill. A loop that isolates it as one identity's failure, or catches it with
+    ``except Exception``, runs on until the kill takes the worker mid-write,
+    which is the opposite of what invariant 12 asks of an ordinary failure.
+    The proof reuses invariant 12's history and ``poison=`` seam under
+    :func:`~pytest_obligation.poison.stop_requests`,
+    so the armed seam raises the soft limit instead, and requires
+    (:func:`~pytest_obligation.poison.assert_a_stop_request_ends_the_tick`)
+    the limit to escape the tick, the identity behind not to have run, and the
+    interrupted identity to still be owed. ``recovery_tick``'s ``isolate()``
+    does this for any step that lets the limit reach it.
+    """
+    history = _poisoned_history(sweep, "ends the tick on a cooperative stop request raised in one identity's step")
+    assert_a_stop_request_ends_the_tick(name=sweep.name, run_tick=sweep.run_tick, **history)
+
+
+def _poisoned_history(sweep: DueWorkSweep, proves: str) -> PoisonedHistory:
+    """Two owed rows, the poisoned one older so it leads the selection; invariants 12 and 12b share it."""
+    poison = sweep.poison
+    assert poison is not None, (
+        f"{sweep.name}: no poison binding, so the contract cannot prove that a tick {proves}. Bind `poison=` "
+        f"with a `PoisonSwitch` the production per-identity seam consults — "
+        f"or, for a legacy contract whose loop does not isolate, declare this proof as a gap"
+    )
+    dispatched_ids = sweep.dispatched_ids
+    assert dispatched_ids is not None, (
+        f"{sweep.name}: no dispatched_ids supplied, so the contract cannot observe whether the "
+        f"identity behind a poisoned one ran. Pass `dispatched_ids=` — a recorder of what the tick dispatched"
+    )
+    recovery_delay = declared_recovery_delay(sweep)
+    # Older first: the poisoned row leads the oldest-first selection (invariant 6).
+    poisoned = sweep.make_owed(age=recovery_delay + timedelta(days=2))
+    healthy = sweep.make_owed(age=recovery_delay + timedelta(minutes=1))
+    progressed = sweep.progressed
+    return PoisonedHistory(
+        poison=poison(poisoned),
+        progressed=(
+            (lambda: progressed(healthy))
+            if progressed is not None
+            else (lambda: sweep.identity_of(healthy) in dispatched_ids())
+        ),
+        still_owed=lambda: (
+            sweep.still_owed(poisoned)
+            if sweep.still_owed is not None
+            else sweep.identity_of(poisoned) in _selected_identities(sweep)
+        ),
+    )
+
+
 def assert_one_failing_row_does_not_stall_the_tick(
     *,
     name: str,
     make_owed: Callable[[], Any],
     run_tick: Callable[[], Any],
-    fail_dispatch_for: Callable[[Any], Any],
+    switch: PoisonSwitch,
     dispatched_ids: Callable[[], Any],
+    still_owed: Callable[[Any], bool],
 ) -> None:
-    """
-    A single poisoned row must not block the rows behind it.
+    """The shared isolation proof for a loop without a DueWorkSweep.
 
-    A tick that dispatches in a loop and lets one exception escape abandons
-    everything after it. Because selection is deterministic and oldest-first —
-    invariants 6 and 7 — the *same* row leads every tick, so a permanently
-    failing one blocks the queue forever rather than being overtaken. The
-    ordering guarantees that make the sweep fair are exactly what make
-    head-of-line blocking permanent.
-
-    Standalone rather than part of :data:`DUE_WORK_PROOFS` because injecting a
-    dispatch failure is adopter-specific; an adopter that cannot express it
-    declares the rest of the profile without this one.
+    ``make_owed`` returns identities oldest first. The production per-identity
+    seam consults ``switch.check(identity)``; ``still_owed`` observes the
+    production state after failure. Prefer a generated profile-A or light
+    contract when it describes the loop.
     """
-    poison = make_owed()
+    poisoned = make_owed()
     healthy = make_owed()
-
-    fail_dispatch_for(poison)
-    try:
-        run_tick()
-    except Exception as error:  # noqa: BLE001 - the failure under test
-        raise AssertionError(
-            f"{name}: one failing dispatch aborted the whole tick "
-            f"({error!r}). Selection is deterministic and oldest-first, so the "
-            f"same row leads every tick and everything behind it is blocked "
-            f"permanently rather than overtaken"
-        ) from error
-
-    assert healthy in dispatched_ids(), (
-        f"{name}: a row behind a failing one was not dispatched, so a single "
-        f"poisoned row starves the rest of the backlog"
+    assert_poison_is_isolated(
+        name=name,
+        poison=switch.poisoned(poisoned),
+        run_tick=run_tick,
+        progressed=lambda: healthy in dispatched_ids(),
+        still_owed=lambda: still_owed(poisoned),
     )
 
 
@@ -1383,6 +1476,8 @@ DUE_WORK_PROOFS: tuple[Callable[[DueWorkSweep], None], ...] = (
     assert_tick_is_bounded,
     assert_oldest_work_is_recovered_first,
     assert_selection_is_stable,
+    assert_one_poisoned_identity_does_not_stall_the_tick,
+    assert_a_soft_time_limit_ends_the_tick,
     assert_selection_is_index_served,
     assert_the_tick_is_actually_scheduled,
     assert_outstanding_work_is_observable,

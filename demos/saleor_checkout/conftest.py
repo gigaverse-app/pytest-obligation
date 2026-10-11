@@ -3,6 +3,8 @@
 import runpy
 from pathlib import Path
 
+from celery.exceptions import SoftTimeLimitExceeded
+
 from pytest_obligation import configure
 from pytest_obligation.integrations.celery import celery_publication_breaker
 from pytest_obligation.integrations.django import django_host
@@ -22,5 +24,6 @@ configure(
         production_packages={"saleor", "django"},
         publication_breaker=celery_publication_breaker,
         lifecycle_proofs=False,
+        stop_exception=SoftTimeLimitExceeded,
     )
 )

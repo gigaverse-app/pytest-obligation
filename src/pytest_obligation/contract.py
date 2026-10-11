@@ -171,6 +171,7 @@ from pytest_obligation.host import current_host
 from pytest_obligation.interleavings.adapters import integration as interleaving_integration
 from pytest_obligation.interleavings.bindings import EvidenceConfluence, InFlightConvergence
 from pytest_obligation.models import MISSING, HarnessModel, ObligationContractDesignError, with_positional
+from pytest_obligation.poison import poison_gap, poison_gap_names, stop_gap, stop_gap_names
 from pytest_obligation.process_histories import ProcessHistory, assert_process_deaths_converge
 from pytest_obligation.profiles.automatic_recovery import (
     DUE_WORK_PROOFS,
@@ -615,6 +616,9 @@ class ObligationContract(HarnessModel):
     #: Profile A: the domain's recovery sweep.
     sweep: Callable[[], DueWorkSweep | AbstractContextManager[DueWorkSweep]] | None = None
 
+    #: ORM model selected by the sweep, interpreted only by the host integration.
+    owed_model: type | None = None
+
     #: Profile B: the domain's ownership mechanics.
     ownership: Callable[[], FencedOwnership | AbstractContextManager[FencedOwnership]] | None = None
 
@@ -834,6 +838,11 @@ def _profile_design_errors(contract: ObligationContract | SafetyContract, scope:
                 )
                 continue
             valid = {proof.__name__ for name in bound for proof in _binding_proofs(name)}
+            if profile is Profile.A:
+                if gap_names := current_host().owed_row_gap_names:
+                    valid |= gap_names(contract)
+                valid |= poison_gap_names("assert_one_poisoned_identity_does_not_stall_the_tick")
+                valid |= stop_gap_names("assert_a_soft_time_limit_ends_the_tick")
             if profile is Profile.G:
                 valid.add("assert_gate_is_recovered_by_the_contract_sweep")
             if (
@@ -1298,6 +1307,16 @@ def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[P
                     reason = disposition.gaps.get(proof.__name__)
                     if reason is not None:
                         marks.append(pytest.mark.xfail(strict=True, reason=reason))
+                    specific = (
+                        poison_gap(disposition.gaps, proof.__name__)
+                        if proof.__name__ == "assert_one_poisoned_identity_does_not_stall_the_tick"
+                        else stop_gap(disposition.gaps, proof.__name__)
+                        if proof.__name__ == "assert_a_soft_time_limit_ends_the_tick"
+                        else None
+                    )
+                    if specific is not None:
+                        why, failure = specific
+                        marks.append(pytest.mark.xfail(strict=True, reason=why, raises=failure))
                     params.append(pytest.param(case, id=case.id, marks=marks))
     return params
 
@@ -1310,6 +1329,9 @@ def safety_contract_cases(contract: SafetyContract) -> list[Any]:
 def contract_cases(contract: ObligationContract) -> list[Any]:
     """All A–J cases and cross-profile compositions, preserving legacy history identities."""
     params = _profile_cases(contract, tuple(Profile))
+    if contract.owed_model is not None:
+        assert _claims_recovery(contract), "owed_model requires a profile-A claim"
+        params.extend(current_host().require("owed_row_cases")(contract))
     if isinstance(contract.profiles[Profile.E], Claim):
         # A passing sibling must not leave an unfinished E-family assessment silent.
         for family, assessment in convergence_assessments(contract).items():
@@ -1732,6 +1754,10 @@ class ScheduledSelection(HarnessModel):
     #: one a host needs to give a replica-routing proof a distinct replica.
     fixtures: tuple[str, ...] = ()
 
+    #: Integration-owned loop and edge families (Django: OwedRows and EdgeFamily).
+    owed_rows: Callable[[], Any] | None = None
+    owed_edges: Mapping[str, Any] = Field(default_factory=dict)
+
     def model_post_init(self, _context: Any) -> None:
         errors: list[str] = []
         annotation_defect = _adopter_annotation_defect(
@@ -1740,7 +1766,16 @@ class ScheduledSelection(HarnessModel):
         )
         if annotation_defect:
             errors.append(annotation_defect)
+        if (self.owed_rows is None) != (not self.owed_edges):
+            errors.append("owed_rows and owed_edges come together")
+        if any(not name.strip() for name in self.owed_edges):
+            errors.append("owed_edges family names must be nonempty")
         valid = {proof.__name__ for proof in SELECTION_PROOFS}
+        if self.owed_rows is not None:
+            defect = _adopter_annotation_defect("scheduled selection `owed_rows` binding", self.owed_rows)
+            if defect:
+                errors.append(defect)
+            valid |= current_host().require("owed_row_gap_names")(self)
         unwaivable = sorted(set(self.gaps) & UNWAIVABLE_PROOFS)
         if unwaivable:
             errors.append(
@@ -1798,6 +1833,8 @@ def _populated_proof_runner(selection: ScheduledSelection, proof: Callable[[Any]
 def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
     """The selection-only proofs, plus schedule evidence when declared."""
     params: list[Any] = []
+    if selection.owed_rows is not None:
+        params.extend(current_host().require("owed_row_cases")(selection))
     for proof in SELECTION_PROOFS:
         marks = _database_marks(False)
         reason = selection.gaps.get(proof.__name__)

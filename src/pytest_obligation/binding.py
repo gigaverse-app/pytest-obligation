@@ -401,6 +401,26 @@ def _function_of(binding: Callable[..., Any]) -> FunctionType | None:
     return call if inspect.isfunction(call) else None
 
 
+def _filled_positionals(binding: Callable[..., Any]) -> int:
+    """
+    Positional parameters of the code behind a binding that its caller never passes.
+
+    A ``functools.partial`` fills its ``args``; a bound method, or a callable
+    instance read through its class's ``__call__``, fills ``self``. Read the
+    same way as :func:`_function_of`, so the parameter checked is the one the
+    caller's value arrives in.
+    """
+    filled = 0
+    while isinstance(binding, functools.partial):
+        filled += len(binding.args)
+        binding = binding.func
+    body = _body(binding)
+    if isinstance(body, MethodType):
+        return filled + 1
+    function = inspect.unwrap(body) if callable(body) else body
+    return filled if inspect.isfunction(function) else filled + 1
+
+
 def _body(binding: Callable[..., Any]) -> object:
     """
     What a binding runs when called, before any ``__call__`` of the object itself: a function or a bound method.
@@ -810,10 +830,13 @@ def assert_test_binding_consumes_its_first_parameter(
     )
     if is_harness_owned(code) or not is_test_code(code):
         return
-    positional = code.co_varnames[: code.co_argcount]
-    if not positional:
+    positional = code.co_varnames[_filled_positionals(binding) : code.co_argcount]
+    if positional:
+        parameter = positional[0]
+    elif code.co_flags & inspect.CO_VARARGS:
+        parameter = code.co_varnames[code.co_argcount + code.co_kwonlyargcount]
+    else:
         return
-    parameter = positional[0]
     loaded = {
         instruction.argval
         for instruction in dis.get_instructions(code)

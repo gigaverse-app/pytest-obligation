@@ -72,6 +72,7 @@ from pytest_obligation.crash_histories import (
 from pytest_obligation.exemptions import exempt_due_work_suite
 from pytest_obligation.gap_probes import (
     DisprovenCapability,
+    LossDropsOnlyANotification,
     LossIsAbsorbedElsewhere,
     MissingReclaim,
     MissingScheduledConsumer,
@@ -187,6 +188,7 @@ __all__ = [
     # Gap probes.
     "DisprovenCapability",
     "LossIsAbsorbedElsewhere",
+    "LossDropsOnlyANotification",
     "MissingReclaim",
     "MissingScheduledConsumer",
     # Crash histories.

@@ -102,8 +102,9 @@ from pytest_obligation import (
     due_work_database,
 )
 from pytest_obligation.crash_histories import assert_crash_at_every_commit_converges, assert_histories_converge
-from pytest_obligation.integrations.celery import celery_beat_evidence, held_publications
+from pytest_obligation.integrations.celery import celery_beat_evidence, held_publications, refusing_publication
 from pytest_obligation.integrations.django.selection import selection_built_by
+from pytest_obligation.poison import PoisonSwitch
 from pytest_obligation.profiles.automatic_recovery import DueWorkSweep, InFlightExecution
 
 #: Far enough ahead for every age-based task Saleor schedules to act: the longest,
@@ -699,6 +700,14 @@ def completion_in_flight(checkout: Checkout, tick: Callable[[], int]) -> Iterato
         yield
 
 
+@contextmanager
+def poison_completion(checkout: Checkout) -> Iterator[Callable[[], int]]:
+    """The real Beat loop reaches this publication for the checkout leading its selection."""
+    switch = PoisonSwitch()
+    with refusing_publication(switch, automatic_checkout_completion_task), switch.poisoned(checkout.pk) as fired:
+        yield fired
+
+
 def automatic_completion_sweep() -> DueWorkSweep:
     # ARRANGE: fully paid checkouts, aged into and past Saleor's windows (owed_completion, given_up_completion).
     # REAL PRODUCTION: Saleor's trigger_automatic_checkout_completion_task, its selection observed as it runs.
@@ -706,6 +715,7 @@ def automatic_completion_sweep() -> DueWorkSweep:
     # OBSERVE: the checkouts each tick dispatched, and every completion dispatched per checkout.
     return DueWorkSweep(
         name="saleor automatic checkout completion",
+        poison=poison_completion,
         due_work=completion_selection,
         run_tick=run_completion_tick,
         make_owed=owed_completion,
@@ -731,6 +741,10 @@ CHECKOUT_WITH_AUTOMATIC_COMPLETION = ObligationContract(
     profiles={
         Profile.A: Claim(
             gaps={
+                "assert_one_poisoned_identity_does_not_stall_the_tick[stalled]": (
+                    "Saleor's trigger_automatic_checkout_completion_task publishes in a bare for-loop; "
+                    "a broker refusal for the first checkout abandons the remaining checkouts"
+                ),
                 "assert_in_flight_work_is_not_duplicated": (
                     "the selection orders by last_automatic_completion_attempt but never excludes a recent one, "
                     "so a paid checkout whose completion is dispatched and not yet run is dispatched again by the "

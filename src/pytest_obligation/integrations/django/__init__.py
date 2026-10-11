@@ -102,6 +102,8 @@ def django_host(
     publication_breaker: PublicationBreaker | None = None,
     receiver_breaker: ReceiverBreaker | None = None,
     lifecycle_proofs: bool = True,
+    handoff_runner: Callable[[Callable[[], object]], None] | None = None,
+    stop_exception: type[Exception] | None = None,
     serialized_rollback: bool = False,
 ) -> Host:
     """
@@ -113,8 +115,11 @@ def django_host(
     them. With it, pytest-django restores the database's migrated contents after
     each such case (it needs the test database created in the session, not reused).
     """
+    from django.test import TestCase
+
     from pytest_obligation.integrations.django.callbacks import django_callback_breaker
     from pytest_obligation.integrations.django.commits import django_worker_killer
+    from pytest_obligation.integrations.django.owed_cases import owed_row_cases, owed_row_gap_names
     from pytest_obligation.integrations.django.selection import DjangoSelectionInspector
 
     sweep_proofs: tuple[Callable[[Any], None], ...] = ()
@@ -136,6 +141,11 @@ def django_host(
         receiver_breaker=receiver_breaker,
         frozen_clock=time_machine_clock,
         sweep_proofs=sweep_proofs,
+        owed_row_cases=owed_row_cases,
+        owed_row_gap_names=owed_row_gap_names,
+        handoff_runner=handoff_runner,
+        stop_exception=stop_exception,
+        commit_scope=functools.partial(TestCase.captureOnCommitCallbacks, execute=True),
     )
 
 
