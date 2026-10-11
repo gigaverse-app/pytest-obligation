@@ -4,6 +4,7 @@ from wagtail.signals import page_published
 from pytest_obligation import configure
 from pytest_obligation.integrations.django import django_host
 from pytest_obligation.integrations.django.receivers import django_receiver_breaker
+from pytest_obligation.integrations.django.selection import DjangoSelectionInspector
 
 # The system under test is Wagtail, its tasks run by django-tasks-db, on Django: bindings must
 # reach one of them. Wagtail's migrations seed its root page, default site and root collection,
@@ -15,5 +16,10 @@ configure(
         lifecycle_proofs=False,
         serialized_rollback=True,
         receiver_breaker=django_receiver_breaker(task_started, task_finished, page_published),
+    ).model_copy(
+        update={
+            # PostgreSQL verifies the index's actual predicate; a name alone is not evidence.
+            "selection_inspectors": (DjangoSelectionInspector(partial_indexes=("tasks_db_new_ordering_idx",)),),
+        }
     )
 )

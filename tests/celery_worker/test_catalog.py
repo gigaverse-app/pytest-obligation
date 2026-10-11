@@ -40,7 +40,7 @@ def celery_run(operation: Callable[[], None]) -> None:
         result.forget()
 
 
-CONTRACT = catalog_contract("catalog through Celery", celery_run).model_copy(update={"fixtures": ("catalog_worker",)})
+CONTRACT = catalog_contract("catalog through Celery", celery_run, fixtures=("catalog_worker",))
 
 
 @due_work_contract_suite(CONTRACT)

@@ -20,7 +20,7 @@ def rq_run(operation: Callable[[], None]) -> None:
         # The empty_redis fixture owns cleanup after the proof, not this worker path.
 
 
-CONTRACT = catalog_contract("catalog on RQ", rq_run).model_copy(update={"fixtures": ("empty_redis",)})
+CONTRACT = catalog_contract("catalog on RQ", rq_run, fixtures=("empty_redis",))
 
 
 @due_work_contract_suite(CONTRACT)
