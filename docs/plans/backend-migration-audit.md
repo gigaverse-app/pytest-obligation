@@ -1,5 +1,9 @@
 # Can Gigaverse replace its local harness with pytest-obligation?
 
+> Historical scope: the remaining reusable harness checks and Due integration are
+> now covered by the [complete port](../backend-harness-port.md). The ownership decisions below
+> describe the earlier extraction; application runtime/data cutover remains separate.
+
 Not completely yet. The generic recovery port and stronger adopters are useful,
 but they are not a complete replacement for the backend's current test harness.
 The principal missing integration is the work-table conformance suite. It is

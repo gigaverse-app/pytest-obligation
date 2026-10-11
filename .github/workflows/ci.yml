@@ -485,3 +485,65 @@ jobs:
             echo "::error::the check passed a project with an unaccounted handoff" >&2
             exit 1
           fi
+
+  due:
+    # The complete work-table harness lives with Due's runtime. Install this PR's
+    # wheel over its locked obligation dependency and prove the packages together.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: due
+          POSTGRES_PASSWORD: due
+          POSTGRES_DB: due
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U due"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DUE_DATABASE_URL: postgresql://due:due@localhost:5432/due
+      DUE_BROKER_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: gigaverse-app/due
+          ref: 6e0c061c3a339e96803ffa3d81fb30817f5a6bcb
+          path: .upstream/due
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: '3.14'
+      - run: uv build --wheel
+      - run: uv sync --locked --project .upstream/due
+      - name: Install the candidate wheel
+        run: uv pip install --python .upstream/due/.venv/bin/python --no-deps --reinstall dist/*.whl
+      - name: Run complete work-table and application conformance
+        working-directory: .upstream/due
+        run: >-
+          .venv/bin/python -m pytest -p due.django.conformance.reporting
+          --due-work-require-assessed --due-work-profile-report=profiles.json
+          --durable-work-report=effects.json --durable-observation-report=observations.json
+          --junitxml=results.xml
+      - name: Require executed primitive and application guarantees
+        working-directory: .upstream/due
+        run: |
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract "Due replay-safe work table" --verified A B D I J
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract publish_document --verified A B D E H I J --effect-report effects.json --effect publish_document
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: due-conformance
+          path: |
+            .upstream/due/profiles.json
+            .upstream/due/effects.json
+            .upstream/due/observations.json
+            .upstream/due/results.xml
+          if-no-files-found: error

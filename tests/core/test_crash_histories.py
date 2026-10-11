@@ -302,3 +302,34 @@ def test_scoped_arrangement_lives_through_observation_and_always_closes(ledger_h
         assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
     assert len(scopes) > 2 and all(scopes)
     assert not active
+
+
+@pytest.mark.parametrize("expected", [None, ("wrong", ())])
+def test_independent_product_outcome_rejects_consistently_wrong_histories(ledger_host: Host, expected: Any) -> None:
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"expected": expected})
+    with pytest.raises(AssertionError, match="declared product outcome") as error:
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    assert not isinstance(error.value, HistoriesDiverged)
+
+
+def test_expected_callback_is_evaluated_before_transition(ledger_host: Host) -> None:
+    def expected(handle: int) -> tuple[str, tuple[str, ...]]:
+        assert ref.attempt_and_successors(handle)[0] != ref.RETRYABLE_FAILED
+        return (ref.RETRYABLE_FAILED, ("running",))
+
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"expected": expected})
+    assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+
+
+def test_downstream_recovery_declaration_requires_delivery_support(ledger_host: Host) -> None:
+    from pytest_obligation.models import ObligationContractDesignError
+
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"recovery_ticks": (ref.reconcile,)})
+    with pytest.raises(ObligationContractDesignError, match="recover_with"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+
+
+def test_downstream_recovery_is_production_bound(ledger_host: Host) -> None:
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"recovery_ticks": (lambda: None,)})
+    with pytest.raises(AssertionError, match="recovery_ticks"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)

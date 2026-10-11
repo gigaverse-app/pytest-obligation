@@ -6,7 +6,8 @@ Due work can be delayed, retried, lost, duplicated or recovered. This package
 proves an application's real production code handles each of those histories
 without the application writing the proofs. An adopter declares a contract that
 binds its real selection, worker and state; the harness generates the proofs.
-The adopter never supplies an expected outcome.
+Adopters supply independent product observations and, where needed, expected
+outcomes. The harness owns fault histories and invariant assertions.
 
 Start here:
 
@@ -20,7 +21,7 @@ Start here:
   ``docs/what-a-green-result-means.md`` for what a pass does and does not mean.
 
 The core imports no framework. Everything re-exported here loads with only
-pytest installed.
+pytest and pydantic installed.
 """
 
 from importlib.metadata import PackageNotFoundError, version

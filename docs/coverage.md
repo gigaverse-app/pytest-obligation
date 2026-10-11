@@ -36,3 +36,7 @@ and calls inside another function are outside this lexical scan.
 
 In GitHub Actions, `gigaverse-app/pytest-obligation/check@v0` runs the static
 check and `gigaverse-app/pytest-obligation/test@v0` runs generated suites.
+
+For transitive publication paths, heartbeat schedule contracts and opt-in direct
+proof-call policy, use the [source-policy guide](source-policies.md). These share
+configuration with the coverage scan and keep reviewed exceptions in the application.

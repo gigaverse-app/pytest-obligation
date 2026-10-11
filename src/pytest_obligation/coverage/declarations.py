@@ -26,7 +26,11 @@ from pytest_obligation.coverage.project import (
 from pytest_obligation.coverage.report import Disposition
 
 HARNESS = "pytest_obligation"
-SUITES = {"due_work_contract_suite": "ObligationContract", "scheduled_selection_suite": "ScheduledSelection"}
+SUITES = {
+    "due_work_contract_suite": "ObligationContract",
+    "scheduled_selection_suite": "ScheduledSelection",
+    "effect_contract_suite": "registered capability",
+}
 EXEMPTION_SUITE = "exempt_due_work_suite"
 _MARKERS = (*SUITES, EXEMPTION_SUITE)
 #: pytest marks that stop a declared suite from running or from failing.
@@ -100,6 +104,8 @@ class Declarations:
     def _harness(self, expression: ast.expr) -> str | None:
         """The pytest_obligation name an expression refers to, or None when it is not the harness's."""
         qualified = qualified_name(expression, self.module.name, self.imported, self.defined)
+        if qualified == "due.django.conformance.suite.effect_contract_suite":
+            return "effect_contract_suite"
         if qualified is None or qualified.split(".", 1)[0] not in {HARNESS, "due_work_harness"}:
             return None
         constructor = qualified.rsplit(".", 1)[-1]
@@ -219,7 +225,14 @@ class Declarations:
         if not decorator.args or not isinstance(decorator.args[0], ast.Name):
             self.defects.append(f"{owner}: {suite} must receive a named, module-level {expected} first")
             return
-        if self._constructed(decorator.args[0].id) != expected:
+        if suite == "effect_contract_suite":
+            # Due derives the contract from a production capability; never accept a
+            # similarly named test decorator or a test-authored replacement object.
+            capability = self._qualified(decorator.args[0])
+            if capability is None or not self.project.config.is_production(capability):
+                self.defects.append(f"{owner}: effect_contract_suite must name an imported production capability")
+                return
+        elif self._constructed(decorator.args[0].id) != expected:
             self.defects.append(
                 f"{owner}: {suite} references {decorator.args[0].id}, which this module does not build as "
                 f"pytest_obligation's {expected}"
