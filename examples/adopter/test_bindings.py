@@ -31,7 +31,7 @@ from pytest_obligation import (
     Profile,
     ReplaySafeEffect,
 )
-from pytest_obligation.host import Host, hosted
+from pytest_obligation.host import Host, current_host, hosted
 from pytest_obligation.interleavings import (
     EvidenceArrival,
     EvidenceConfluence,
@@ -364,66 +364,70 @@ def recovery_failures(*, stop: bool = False) -> None:
 
 def catalog_contract(name: str, run: Runner = inline) -> ObligationContract:
     """The same application guarantees through the chosen worker executor."""
-    return ObligationContract(
-        name=name,
-        profiles={
-            Profile.A: Decline("This small example exposes reconcile explicitly; it ships no periodic scheduler."),
-            Profile.B: NotApplicable("A single serial executor runs the example; no lease changes hands."),
-            Profile.C: Decline("Remote assignments are repeatable; reconciliation compares actual remote values."),
-            Profile.D: NotApplicable("The example has no pruning command; durable owners are retained."),
-            Profile.E: Claim(),
-            Profile.F: NotApplicable(
-                "Admission creates explicit obligation rows; recovery does not derive missing rows."
+    # Declaration-time guards run before application() enters its runtime host.
+    # Enroll the same application without changing the importing executor's host.
+    host = current_host()
+    with hosted(host.model_copy(update={"production_packages": host.production_packages | {"adopter_app"}})):
+        return ObligationContract(
+            name=name,
+            profiles={
+                Profile.A: Decline("This small example exposes reconcile explicitly; it ships no periodic scheduler."),
+                Profile.B: NotApplicable("A single serial executor runs the example; no lease changes hands."),
+                Profile.C: Decline("Remote assignments are repeatable; reconciliation compares actual remote values."),
+                Profile.D: NotApplicable("The example has no pruning command; durable owners are retained."),
+                Profile.E: Claim(),
+                Profile.F: NotApplicable(
+                    "Admission creates explicit obligation rows; recovery does not derive missing rows."
+                ),
+                Profile.G: Claim(),
+                Profile.H: Claim(),
+                Profile.I: Claim(),
+                Profile.J: NotApplicable("Reconciliation has no retry limit; it retains intent until convergence."),
+            },
+            extras=(
+                ExtraProof(name="recovery-poison", run=recovery_failures),
+                ExtraProof(name="recovery-stop", run=partial(recovery_failures, stop=True)),
             ),
-            Profile.G: Claim(),
-            Profile.H: Claim(),
-            Profile.I: Claim(),
-            Profile.J: NotApplicable("Reconciliation has no retry limit; it retains intent until convergence."),
-        },
-        extras=(
-            ExtraProof(name="recovery-poison", run=recovery_failures),
-            ExtraProof(name="recovery-stop", run=partial(recovery_failures, stop=True)),
-        ),
-        eligibility=partial(gate, run),
-        replay=partial(replay, run),
-        admission={"publish": admission},
-        in_flight={
-            "catalog retirement": InFlightConvergence(
-                name="catalog retirement",
-                bind=partial(in_flight, run, retirement=True),
-                intents=("red", "green", "blue"),
-                seams=("publish",),
-                repair_seams=("publish",),
-                retirement=True,
-                independent=True,
-                transport=True,
-            ),
-            "catalog revisions": InFlightConvergence(
-                name="catalog revisions",
-                bind=partial(in_flight, run),
-                intents=("red", "green", "blue"),
-                seams=("publish",),
-                independent=True,
-                transport=True,
-            ),
-        },
-        evidence_confluence={
-            "delivery receipts": EvidenceConfluence(
-                name="delivery receipts",
-                bind=partial(evidence, run),
-                facts=("alice", "bob", "carol"),
-                batchable=True,
-                ordered_pair=("alice", "bob") if run is inline else None,
-                no_ordered_pair_because="This executor variant runs a serial worker on the main thread; the inline example tests separate actor connections.",
-                retry_turnover=True,
-            )
-        },
-        convergence_families={
-            ConvergenceFamily.STALE_SNAPSHOTS: NotApplicable(
-                "No separate snapshot merge API; in-flight revisions exercise the worker."
-            ),
-            ConvergenceFamily.MONOTONIC_RESULTS: NotApplicable(
-                "The product accepts reversible colors; receipts use evidence confluence."
-            ),
-        },
-    )
+            eligibility=partial(gate, run),
+            replay=partial(replay, run),
+            admission={"publish": admission},
+            in_flight={
+                "catalog retirement": InFlightConvergence(
+                    name="catalog retirement",
+                    bind=partial(in_flight, run, retirement=True),
+                    intents=("red", "green", "blue"),
+                    seams=("publish",),
+                    repair_seams=("publish",),
+                    retirement=True,
+                    independent=True,
+                    transport=True,
+                ),
+                "catalog revisions": InFlightConvergence(
+                    name="catalog revisions",
+                    bind=partial(in_flight, run),
+                    intents=("red", "green", "blue"),
+                    seams=("publish",),
+                    independent=True,
+                    transport=True,
+                ),
+            },
+            evidence_confluence={
+                "delivery receipts": EvidenceConfluence(
+                    name="delivery receipts",
+                    bind=partial(evidence, run),
+                    facts=("alice", "bob", "carol"),
+                    batchable=True,
+                    ordered_pair=("alice", "bob") if run is inline else None,
+                    no_ordered_pair_because="This executor variant runs a serial worker on the main thread; the inline example tests separate actor connections.",
+                    retry_turnover=True,
+                )
+            },
+            convergence_families={
+                ConvergenceFamily.STALE_SNAPSHOTS: NotApplicable(
+                    "No separate snapshot merge API; in-flight revisions exercise the worker."
+                ),
+                ConvergenceFamily.MONOTONIC_RESULTS: NotApplicable(
+                    "The product accepts reversible colors; receipts use evidence confluence."
+                ),
+            },
+        )

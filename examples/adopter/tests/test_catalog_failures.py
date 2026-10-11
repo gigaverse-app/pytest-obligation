@@ -101,3 +101,15 @@ def test_recovery_proofs_reject_broken_application_loops(
     monkeypatch.setattr(Catalog, "recover", broken_recovery)
     with pytest.raises(expected):
         recovery_failures(stop=defect == "isolate-stop")
+
+
+def test_catalog_declaration_names_its_application_under_a_framework_host() -> None:
+    from pytest_obligation.host import Host, current_host, hosted
+
+    # Framework jobs have not enrolled adopter_app when they import the shared declaration.
+    framework = Host(production_packages=frozenset({"unrelated_framework"}))
+    with hosted(framework):
+        contract = catalog_contract("catalog under framework host")
+        assert current_host() is framework
+        for proof in contract.extras:
+            proof.run()

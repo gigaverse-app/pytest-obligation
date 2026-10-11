@@ -174,6 +174,8 @@ jobs:
           path: |
             profiles-*.json
             demos/**/profiles-*.json
+            adopters-*.xml
+            demos/**/adopters-*.xml
           if-no-files-found: error
 
   mongodb:
@@ -247,6 +249,8 @@ jobs:
           path: |
             profiles-*.json
             demos/**/profiles-*.json
+            adopters-*.xml
+            demos/**/adopters-*.xml
           if-no-files-found: error
 
   demos:
@@ -341,6 +345,8 @@ jobs:
           path: |
             profiles-*.json
             demos/**/profiles-*.json
+            adopters-*.xml
+            demos/**/adopters-*.xml
           if-no-files-found: error
 
   saleor:
@@ -409,6 +415,8 @@ jobs:
           path: |
             profiles-*.json
             demos/**/profiles-*.json
+            adopters-*.xml
+            demos/**/adopters-*.xml
           if-no-files-found: error
 
   build:
@@ -466,7 +474,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: profiles-example
-          path: examples/adopter/profiles-example.json
+          path: |
+            examples/adopter/profiles-example.json
+            examples/adopter/adopters-example.xml
           if-no-files-found: error
       - name: check fails once a handoff loses its disposition
         run: |
