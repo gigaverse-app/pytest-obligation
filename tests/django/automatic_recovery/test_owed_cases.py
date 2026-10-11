@@ -173,3 +173,41 @@ def test_edge_catalog_respects_database_column_constraints() -> None:
                 assert edge.value not in dict(field.flatchoices)
             if edge.kind == "maximum":
                 assert edge.value in (32767, 9223372036854775807)
+
+
+@pytest.mark.usefixtures("isolated_primitive")
+@pytest.mark.parametrize("retire", [False, True])
+def test_related_row_edge_reaches_the_worker(retire: bool) -> None:
+    from django.utils import timezone
+
+    from pytest_obligation.integrations.django.edge_values import CandidateEdge
+    from pytest_obligation.integrations.django.owed_references import PrimitiveWork
+    from pytest_obligation.integrations.django.owed_rows import assert_database_legal_owed_row_is_handled
+
+    def make() -> PrimitiveWork:
+        return PrimitiveWork.objects.create(owner=PrimitiveOwner.objects.create(value="valid"))
+
+    def execute(identity: int) -> None:
+        work = PrimitiveWork.objects.select_related("owner").get(pk=identity)
+        if not work.owner.value and not retire:
+            raise ValueError("empty related value")
+        PrimitiveOwner.objects.filter(pk=work.owner_id).update(completed_at=timezone.now())
+
+    def prove() -> None:
+        assert_database_legal_owed_row_is_handled(
+            name="related owner",
+            edge=CandidateEdge(field="value", kind="blank", value=""),
+            make_owed=make,
+            selection=lambda: PrimitiveWork.objects.filter(owner__completed_at__isnull=True),
+            identity_of=lambda work: work.pk,
+            execute=execute,
+            run_tick=lambda: None,
+            edge_row=lambda work: work.owner,
+            edge_model=PrimitiveOwner,
+        )
+
+    if retire:
+        prove()
+    else:
+        with pytest.raises(OwedRowNotHandled, match="empty related value"):
+            prove()

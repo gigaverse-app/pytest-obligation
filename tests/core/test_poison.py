@@ -152,3 +152,21 @@ def test_gap_is_specific_and_rejects_multiple_failures() -> None:
     assert stop_gap({"proof[dropped]": "lost"}, "proof") == ("lost", StopRequestDropped)
     with pytest.raises(AssertionError, match="declare one gap"):
         poison_gap({"proof[dropped]": "lost", "proof[stalled]": "blocked"}, "proof")
+
+
+def test_rearming_a_switch_counts_only_this_scope_and_preserves_outer_scopes() -> None:
+    switch = PoisonSwitch()
+    with switch.poisoned(1) as outer:
+        with pytest.raises(PoisonedIdentity):
+            switch.check(1)
+        with switch.poisoned(1) as inner:
+            assert inner() == 0
+            with pytest.raises(PoisonedIdentity):
+                switch.check(1)
+        assert inner() == 1
+        with pytest.raises(PoisonedIdentity):
+            switch.check(1)
+    assert outer() == 3
+    with switch.poisoned(1) as again:
+        assert again() == 0
+    switch.check(1)

@@ -161,11 +161,11 @@ class PoisonSwitch(MutableHarnessModel):
     it for one identity and yields ``fired()``.
     """
 
-    _armed: set[Any] = PrivateAttr(default_factory=set)
+    _armed: Counter[Any] = PrivateAttr(default_factory=Counter)
     _fired: Counter[Any] = PrivateAttr(default_factory=Counter)
 
     def check(self, key: Any, message: str = "the per-identity seam refused this identity") -> None:
-        if key in self._armed:
+        if self._armed[key]:
             self._fired[key] += 1
             if _STOP_REQUESTED.get():
                 # The same seam, reached while the task's soft time limit fires.
@@ -174,11 +174,16 @@ class PoisonSwitch(MutableHarnessModel):
 
     @contextmanager
     def poisoned(self, key: Any) -> Iterator[Callable[[], int]]:
-        self._armed.add(key)
+        self._armed[key] += 1
+        before = self._fired[key]
+        final: int | None = None
         try:
-            yield lambda: self._fired[key]
+            yield lambda: (self._fired[key] if final is None else final) - before
         finally:
-            self._armed.discard(key)
+            final = self._fired[key]
+            self._armed[key] -= 1
+            if not self._armed[key]:
+                del self._armed[key]
 
 
 def carries_poison(error: BaseException | None) -> bool:

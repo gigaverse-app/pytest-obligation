@@ -1772,6 +1772,9 @@ class ScheduledSelection(HarnessModel):
             errors.append("owed_edges family names must be nonempty")
         valid = {proof.__name__ for proof in SELECTION_PROOFS}
         if self.owed_rows is not None:
+            defect = _adopter_annotation_defect("scheduled selection `owed_rows` binding", self.owed_rows)
+            if defect:
+                errors.append(defect)
             valid |= current_host().require("owed_row_gap_names")(self)
         unwaivable = sorted(set(self.gaps) & UNWAIVABLE_PROOFS)
         if unwaivable:

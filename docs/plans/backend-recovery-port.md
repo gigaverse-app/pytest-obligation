@@ -10,8 +10,9 @@ registrations remain in the backend.
 - [x] Port database-legal owed-row edge cases through the Django integration,
       including related rows, delayed handoffs, and commit callbacks.
 - [x] Port shared binding and handoff guard improvements where applicable.
-- [ ] Exercise core, Django/PostgreSQL, Celery, compatibility, lint and types.
-- [x] Document the source-to-public mapping and intentional backend-only exclusions.
+- [x] Exercise core, Django/PostgreSQL, Celery, compatibility, lint and types.
+- [x] Audit the entire source range, document public equivalents and backend policy,
+      and identify primitive-specific conformance that needs a future `due` adapter.
 
 No repository PR template was found. This is test-library work and requires no
 backend deployment followups.

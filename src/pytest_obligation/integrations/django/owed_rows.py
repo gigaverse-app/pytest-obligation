@@ -109,8 +109,8 @@ def _serve(execute: Callable[[Any], Any], delivery: Any, *, dispatched_ids: Call
     Commit callbacks run, as they would after the worker commits: inside a
     test's enclosing transaction they would otherwise never run, and the
     handoff they publish (the publish-after-commit pattern, AGENTS L4) would go
-    unexamined. A chain still handing off after ``_HANDOFF_LIMIT`` deliveries
-    raises ``_HandoffsNeverStop``.
+    unexamined. A chain still handing off after the host's handoff limit
+    raises ``HandoffsNeverStop``.
     """
     failure: BaseException | None = None
     with observed_effects(dispatched_ids) as effects:
@@ -294,7 +294,7 @@ class OwedRows(HarnessModel):
     #: EXTERNAL SEAM: a context manager under which the per-identity step raises
     #: for the given owed row on every attempt, yielding ``fired()`` (the same
     #: contract as ``DueWorkSweep.poison``; ``PoisonSwitch`` supplies both
-    #: halves, ``PoisonSwitch.refusing_publication`` the broker seam). Required
+    #: halves, ``integrations.celery.refusing_publication`` the broker seam). Required
     #: by the generated poison case; ``None`` fails it with the instruction to
     #: bind one or declare the case a gap.
     poison: Callable[[Any], AbstractContextManager[Callable[[], int]]] | None = None
@@ -508,7 +508,7 @@ def _poisoned_row_history(
     """Two owed rows in production order, the leading one poisoned; the poison and stop-request cases share it."""
     assert rows.poison is not None, (
         f"{name}: no `poison=` on the owed-row binding, so the suite cannot prove that a loop whose leading row's "
-        f"step raises {proves}. Bind the seam the tick calls per identity (PoisonSwitch.refusing_publication for a "
+        f"step raises {proves}. Bind the seam the tick calls per identity (integrations.celery.refusing_publication for a "
         f"broker publication), or declare `{proof}` as a gap for a loop known not to"
     )
     pair = _two_owed_in_selection_order(name, selection, rows.make_owed, rows.identity_of)

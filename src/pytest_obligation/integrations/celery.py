@@ -13,7 +13,6 @@ message with its arguments; :func:`celery_publication_breaker` is a
 would. Each imports Celery when entered.
 """
 
-import importlib
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -44,29 +43,24 @@ def celery_beat_evidence(task_path: str, *, app: Any | None = None) -> Callable[
     tick in production. That is precisely the "nothing runs it" failure profile
     A's invariant 8 exists to catch, and such a check cannot see it.
 
-    So the path must also resolve to something callable. A dotted import is the
-    portable check: Celery registers a task by importing the module that
-    decorates it, so a path that cannot be imported cannot be a registered task
-    either.
+    Check the Celery app registry: beat publishes the registered name, which
+    may differ from the Python import path. Importing a callable is not evidence
+    that a worker registered it. With no explicit app, use Celery's current app
+    and Django's schedule. Worker startup imports remain an integration concern.
     """
 
     def check() -> None:
         scheduled = {entry.get("task") for entry in _beat_schedule(app).values()}
         assert task_path in scheduled, f"{task_path!r} is not in the beat schedule, so nothing runs it"
 
-        module_path, _, attribute = task_path.rpartition(".")
-        try:
-            task = getattr(importlib.import_module(module_path), attribute)
-        except (ImportError, AttributeError) as error:
-            raise AssertionError(
-                f"{task_path!r} is in the beat schedule but does not resolve to anything ({error!r}). "
-                f"Beat will publish it and the worker will reject it as unregistered, so the sweep never "
-                f"runs — which every other invariant would still pass"
-            ) from error
+        registered_app = app
+        if registered_app is None:
+            from celery import current_app
 
-        assert callable(task) or hasattr(task, "delay"), (
-            f"{task_path!r} resolves to {task!r}, which is neither callable nor a Celery task, "
-            f"so scheduling it runs nothing"
+            registered_app = current_app
+        assert registered_app.tasks.get(task_path) is not None, (
+            f"{task_path!r} is in the beat schedule but does not resolve to a registered Celery task. "
+            f"Beat will publish it and the worker will reject it as unregistered, so the sweep never runs"
         )
 
     return check

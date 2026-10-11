@@ -19,6 +19,7 @@ Django inspector answers them from the database itself, in both directions:
 from collections.abc import Iterator
 from datetime import timedelta
 from typing import Any
+from unittest import mock
 
 import pytest
 from django.db import DatabaseError, connection, transaction
@@ -254,7 +255,10 @@ _SCHEDULED_TASK = "pytest_obligation.integrations.django.lifecycle_references.ru
 
 def test_beat_evidence_reads_the_django_schedule(settings: Any) -> None:
     settings.CELERY_BEAT_SCHEDULE = {"recovery": {"task": _SCHEDULED_TASK, "schedule": timedelta(minutes=5)}}
-    celery_beat_evidence(_SCHEDULED_TASK)()
+    from celery import current_app
+
+    with mock.patch.dict(current_app.tasks, {_SCHEDULED_TASK: lambda: None}):
+        celery_beat_evidence(_SCHEDULED_TASK)()
     assert celery_beat_interval(_SCHEDULED_TASK) == timedelta(minutes=5)
 
 

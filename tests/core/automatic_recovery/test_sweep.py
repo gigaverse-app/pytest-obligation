@@ -429,7 +429,8 @@ def test_a_poisoned_row_stalling_the_tick_is_caught_and_isolation_passes() -> No
         name="per-row isolated sweep",
         make_owed=owed_oldest_first(conforming),
         run_tick=conforming.run_tick,
-        fail_dispatch_for=conforming.poisoned.add,
+        switch=conforming.refusals,
+        still_owed=lambda identity: any(row.pk == identity for row in conforming.due_work()),
         dispatched_ids=lambda: conforming.last_dispatched,
     )
 
@@ -442,12 +443,13 @@ def test_a_poisoned_row_stalling_the_tick_is_caught_and_isolation_passes() -> No
             bare_loop.last_dispatched.append(row.pk)
         return len(bare_loop.last_dispatched)
 
-    with pytest.raises(AssertionError, match="aborted the whole tick"):
+    with pytest.raises(AssertionError, match="did not progress in the same tick"):
         assert_one_failing_row_does_not_stall_the_tick(
             name="bare-loop sweep",
             make_owed=owed_oldest_first(bare_loop),
             run_tick=tick_without_isolation,
-            fail_dispatch_for=bare_loop.poisoned.add,
+            switch=bare_loop.refusals,
+            still_owed=lambda identity: any(row.pk == identity for row in bare_loop.due_work()),
             dispatched_ids=lambda: bare_loop.last_dispatched,
         )
 
@@ -808,6 +810,37 @@ def test_a_forwarding_tick_wrapper_is_accepted(production_host: Host) -> None:
     assert_sweep_bindings_are_production_bound(binding)
 
 
+@pytest.mark.parametrize("kind", ["forwarding", "ignores-row", "test-authored"])
+def test_still_owed_observes_production_for_the_given_row(production_host: Host, kind: str) -> None:
+    sweep = _InMemorySweep()
+
+    def forwards(row: _WorkRow) -> bool:
+        production_call()
+        return row.pk in {item.pk for item in sweep.due_work()}
+
+    def ignores(row: _WorkRow) -> bool:
+        production_call()
+        return bool(sweep.due_work())
+
+    def fabricated(row: _WorkRow) -> bool:
+        return not row.terminal
+
+    callbacks = {"forwarding": forwards, "ignores-row": ignores, "test-authored": fabricated}
+    binding = sweep.binding(
+        due_work=lambda: (production_call(), sweep.due_work())[1],
+        run_tick=lambda: (production_call(), sweep.run_tick())[1],
+        observe_outstanding=None,
+        in_flight=None,
+        still_owed=callbacks[kind],
+    )
+    if kind == "forwarding":
+        assert_sweep_bindings_are_production_bound(binding)
+    else:
+        message = "still_owed never reads" if kind == "ignores-row" else "still_owed.*references no production"
+        with pytest.raises(AssertionError, match=message):
+            assert_sweep_bindings_are_production_bound(binding)
+
+
 def test_a_backlog_reading_computed_in_the_adapter_is_refused(production_host: Host) -> None:
     """
     Invariant 0d: counting the backlog here is not publishing it.
@@ -1092,16 +1125,16 @@ def test_counting_statements_needs_exactly_one_inspector_or_a_named_selection() 
 
 # --- Schedule evidence and timing helpers --------------------------------------
 
-#: A resolvable callable standing in for a scheduled task.
-_SCHEDULED_TASK = "pytest_obligation.references.in_memory.reference_apply_evidence"
+#: A registered name need not be an import path.
+_SCHEDULED_TASK = "recovery-tick"
 
 
 def _beat_app(schedule: dict[str, dict[str, Any]]) -> SimpleNamespace:
     # The only surface the evidence helpers read from a Celery app.
-    return SimpleNamespace(conf=SimpleNamespace(beat_schedule=schedule))
+    return SimpleNamespace(conf=SimpleNamespace(beat_schedule=schedule), tasks={_SCHEDULED_TASK: lambda: None})
 
 
-def test_beat_evidence_accepts_a_scheduled_resolvable_task() -> None:
+def test_beat_evidence_accepts_a_scheduled_registered_name() -> None:
     app = _beat_app({"entry": {"task": _SCHEDULED_TASK, "schedule": timedelta(hours=24)}})
     celery_beat_evidence(_SCHEDULED_TASK, app=app)()
 
@@ -1114,7 +1147,7 @@ def test_beat_evidence_rejects_an_unscheduled_task() -> None:
 def test_beat_evidence_rejects_a_dangling_schedule_entry() -> None:
     """
     A beat entry pointing at a renamed task is exactly the 'nothing runs it'
-    failure invariant 8 exists to catch, so the evidence must resolve the path.
+    failure invariant 8 exists to catch, so the evidence must check registration.
     """
     dangling = "pytest_obligation.references.in_memory.renamed_away_task"
     app = _beat_app({"entry": {"task": dangling, "schedule": timedelta(hours=24)}})
@@ -1122,10 +1155,10 @@ def test_beat_evidence_rejects_a_dangling_schedule_entry() -> None:
         celery_beat_evidence(dangling, app=app)()
 
 
-def test_beat_evidence_rejects_a_path_that_names_no_callable() -> None:
-    constant = "pytest_obligation.references.in_memory.REFERENCE_TERMINAL_STATES"
+def test_beat_evidence_rejects_an_importable_callable_that_is_not_registered() -> None:
+    constant = "pytest_obligation.references.in_memory.reference_apply_evidence"
     app = _beat_app({"entry": {"task": constant, "schedule": timedelta(hours=24)}})
-    with pytest.raises(AssertionError, match="neither callable nor a Celery task"):
+    with pytest.raises(AssertionError, match="registered Celery task"):
         celery_beat_evidence(constant, app=app)()
 
 

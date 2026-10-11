@@ -54,7 +54,7 @@ def _owed_row_runner(
 
 
 def _owed_row_cases(contract: ObligationContract) -> list[Any]:
-    """Two cases per database-legal edge value of the swept model (see :mod:`.owed_row_admissibility`)."""
+    """Two cases per database-legal edge value of the swept model (see :mod:`.owed_rows`)."""
     edges = owed_row_edges(contract)
     if not edges:
         return []
