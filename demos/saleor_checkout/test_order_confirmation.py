@@ -97,12 +97,16 @@ from pytest_obligation import (
     Profile,
     ReplaySafeEffect,
     Retention,
+    ScheduledSelection,
     assert_pinned_outcomes,
     due_work_contract_suite,
     due_work_database,
+    scheduled_selection_suite,
 )
 from pytest_obligation.crash_histories import assert_crash_at_every_commit_converges, assert_histories_converge
 from pytest_obligation.integrations.celery import celery_beat_evidence, held_publications, refusing_publication
+from pytest_obligation.integrations.django.lifecycle_states import Lifecycle
+from pytest_obligation.integrations.django.owed_rows import EdgeFamily, OwedRows, owed_rows_of_sweep
 from pytest_obligation.integrations.django.selection import selection_built_by
 from pytest_obligation.poison import PoisonSwitch
 from pytest_obligation.profiles.automatic_recovery import DueWorkSweep, InFlightExecution
@@ -658,6 +662,10 @@ COMPLETIONS: Counter[UUID] = Counter()
 
 def completion_selection() -> Any:
     """Saleor's selection, observed: the query its own tick evaluates, with the tick's dispatches held."""
+    # ARRANGE: already paid checkouts belong to the calling history.
+    # REAL PRODUCTION: the Beat task builds its own queryset.
+    # EXTERNAL SEAM: hold Celery publications while observing that query.
+    # OBSERVE: the actual query evaluated by the task, without recreating its predicates.
     with held_publications():
         return selection_built_by(trigger_automatic_checkout_completion_task, Checkout)
 
@@ -708,6 +716,16 @@ def poison_completion(checkout: Checkout) -> Iterator[Callable[[], int]]:
         yield fired
 
 
+def completion_is_still_owed(checkout: Checkout) -> bool:
+    """Read the actual recovery predicate for this checkout after a refused dispatch."""
+    return any(candidate.pk == checkout.pk for candidate in completion_selection())
+
+
+def complete_selected_checkout(identity: UUID) -> None:
+    """Run the same task the Beat sweep publishes, including Celery's task wrapper."""
+    automatic_checkout_completion_task.apply(args=(identity,), throw=True)
+
+
 def automatic_completion_sweep() -> DueWorkSweep:
     # ARRANGE: fully paid checkouts, aged into and past Saleor's windows (owed_completion, given_up_completion).
     # REAL PRODUCTION: Saleor's trigger_automatic_checkout_completion_task, its selection observed as it runs.
@@ -716,6 +734,9 @@ def automatic_completion_sweep() -> DueWorkSweep:
     return DueWorkSweep(
         name="saleor automatic checkout completion",
         poison=poison_completion,
+        still_owed=completion_is_still_owed,
+        progressed=lambda checkout: _order(checkout.pk) is not None,
+        lifecycle=Lifecycle(state_fields=("authorize_status",), execute=complete_selected_checkout),
         due_work=completion_selection,
         run_tick=run_completion_tick,
         make_owed=owed_completion,
@@ -735,12 +756,21 @@ def automatic_completion_sweep() -> DueWorkSweep:
 
 CHECKOUT_WITH_AUTOMATIC_COMPLETION = ObligationContract(
     name="saleor checkout, Transactions API with automatic completion",
+    owed_model=Checkout,
     adoption=Adoption.LEGACY,
     transactional=True,
     fixtures=("saleor_shop", "automatic_completion"),
     profiles={
         Profile.A: Claim(
             gaps={
+                "assert_database_legal_owed_row_is_handled[currency-blank]": (
+                    "The paid-checkout selection admits an empty currency; completion raises a money currency "
+                    "mismatch and leaves that checkout selected on every tick."
+                ),
+                "assert_database_legal_owed_row_is_handled[currency-max_length]": (
+                    "A database-legal three-character currency different from the channel's currency reaches "
+                    "completion, raises a money currency mismatch, and remains selected."
+                ),
                 "assert_one_poisoned_identity_does_not_stall_the_tick[stalled]": (
                     "Saleor's trigger_automatic_checkout_completion_task publishes in a bare for-loop; "
                     "a broker refusal for the first checkout abandons the remaining checkouts"
@@ -787,3 +817,40 @@ CHECKOUT_WITH_AUTOMATIC_COMPLETION = ObligationContract(
 @due_work_contract_suite(CHECKOUT_WITH_AUTOMATIC_COMPLETION)
 class TestCheckoutWithAutomaticCompletion:
     """Saleor's own design: money held as a transaction, and a beat task that completes a paid checkout."""
+
+
+def related_completion_rows() -> OwedRows:
+    # ARRANGE: each paid checkout owns independent copied billing and shipping addresses.
+    # REAL PRODUCTION: the same automatic completion worker and Beat tick as the full contract.
+    # EXTERNAL SEAM: reuse the completion publication refusal and real handoff runner.
+    # OBSERVE: actual task publications and the production recovery selection for each checkout.
+    return owed_rows_of_sweep(automatic_completion_sweep(), Checkout).model_copy(
+        update={"poison": poison_completion, "still_owed": completion_is_still_owed}
+    )
+
+
+def billing_address(checkout: Checkout) -> Address:
+    address = checkout.billing_address
+    assert address is not None, "the paid checkout has its own billing address"
+    return address
+
+
+RELATED_COMPLETION_ROWS = ScheduledSelection(
+    name="saleor automatic completion: related billing address",
+    adoption=Adoption.LEGACY,
+    due_work=completion_selection,
+    assert_scheduled=celery_beat_evidence("saleor.checkout.tasks.trigger_automatic_checkout_completion_task"),
+    fixtures=("saleor_shop", "automatic_completion"),
+    owed_rows=related_completion_rows,
+    owed_edges={"billing-address": EdgeFamily(model=Address, edge_row=billing_address)},
+    gaps={
+        "assert_one_poisoned_identity_does_not_stall_the_tick[stalled]": (
+            "The Beat publisher's bare loop abandons later checkouts when the broker refuses the first one."
+        ),
+    },
+)
+
+
+@scheduled_selection_suite(RELATED_COMPLETION_ROWS)
+class TestAutomaticCompletionRelatedRows:
+    """Related persisted values are delivered through the actual worker and its downstream tasks."""

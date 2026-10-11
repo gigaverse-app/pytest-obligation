@@ -32,9 +32,7 @@ def prefect_run(operation: Callable[[], None]) -> None:
         runner.run(catalog_turn(identity))
 
 
-CONTRACT = catalog_contract("catalog through Prefect engine", prefect_run).model_copy(
-    update={"fixtures": ("catalog_prefect_server",)}
-)
+CONTRACT = catalog_contract("catalog through Prefect engine", prefect_run, fixtures=("catalog_prefect_server",))
 
 
 @due_work_contract_suite(CONTRACT)

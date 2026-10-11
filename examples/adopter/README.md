@@ -18,8 +18,8 @@ code, independent of the harness.
 [test_bindings.py](test_bindings.py) connects it to the harness. Assertions and
 schedules come from the library. Each history creates its own SQL file, provider,
 notifications and receipt feed; cleanup happens after assertions. The same
-bindings run through RQ's real Redis queue/SimpleWorker, Celery's eager task
-tracer and Prefect's async flow-body adapter in the integration suites. Those
+bindings run through RQ's real Redis queue/SimpleWorker, a real Celery solo
+worker and Prefect's flow engine in the integration suites. Those
 variants prove application behavior through those execution paths. Separate
 existing worker suites prove process crashes and queue recovery.
 
@@ -67,3 +67,17 @@ to replay a failing JSON trace without Hypothesis.
 [summaries.py](adopter_app/summaries.py) remains the separate minimal exemption
 example: losing its cache invalidation costs nothing because reads rebuild the
 summary. Both examples run through the published check/test GitHub Actions.
+
+
+The shared catalog declaration also tests poison isolation and cooperative stop
+handling on the application loop itself. A failing provider must leave its SQL
+owner intact, allow the healthy tail to finish, and report the error. Cancellation
+ends the tick immediately. These extras do not assert executor shutdown semantics.
+Sensitivity tests deliberately break all four requirements.
+
+[announcements.py](adopter_app/announcements.py) demonstrates a different exemption:
+a published notice is complete even if its courtesy alert is lost. The generated
+`LossDropsOnlyANotification` proof reads committed state on a separate SQLite
+connection, then delivers the real worker and requires the alert without a product
+change. A mutation that makes the worker edit the notice fails. The configured
+`defer_notice` bridge identifies the injected queue port for static coverage.
