@@ -100,7 +100,7 @@ migration. No backend production code or database is changed by this port.
 ## Verification
 
 The complete Due suite ran against this obligation source with isolated
-PostgreSQL 17 and Redis: **887 passed**, including real Celery worker and
+PostgreSQL 17 and Redis: **887 passed before the final gate controls**, including real Celery worker and
 process-death histories. CI also installs the built candidate wheel into Due's
 locked environment and requires executed A–J and application reports.
 
