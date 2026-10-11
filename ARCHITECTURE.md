@@ -157,3 +157,13 @@ tests/django self-tests against PostgreSQL through the Django integration
   (`assert_scheduled=celery_beat_evidence("pkg.task")`, or
   `procrastinate_periodic_evidence("pkg.task")`); the core never reads a
   framework's settings.
+
+## Recovery edge-case extensions
+
+The [recovery guide](docs/recovery-edge-cases.md) describes poison/stop controls,
+Django owed-row generation, and handoff execution. `Host.stop_exception`,
+`handoff_runner`, and `commit_scope` keep execution details at the integration
+boundary. `owed_row_cases` and `owed_row_gap_names` let the core contract delegate
+Django case enumeration without importing Django. The typed `EdgeFamily` and
+`OwedRows` declarations belong to that integration. Core poison oracles import no
+framework; the Celery publication seam lives only in `integrations/celery.py`.

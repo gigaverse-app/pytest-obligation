@@ -284,6 +284,84 @@ class LossIsAbsorbedElsewhere(HarnessModel):
         )
 
 
+class LossDropsOnlyANotification(HarnessModel):
+    """
+    Executable evidence for a best-effort exemption: the lost dispatch owes nothing but itself.
+
+    Some after-commit work is a courtesy notification that nothing re-derives:
+    lose the message and that notification is gone, which the product accepts.
+    No absorber exists, so :class:`LossIsAbsorbedElsewhere` cannot bind it
+    honestly. The exemption's reason still makes two falsifiable claims about
+    production, and this probe runs both:
+
+    * the product state committed with the producer is complete without the
+      dispatch, so nothing waits for it;
+    * the dispatch is that notification and only that: delivering it produces
+      the notification and changes none of that product state.
+
+    The bindings:
+
+    * ``strand`` runs the real producer with the dispatch suppressed and returns
+      the identity;
+    * ``notified`` reads the notification the dispatch would have produced.
+      It must be ABSENT after ``strand``, the positive control that the dispatch
+      really was suppressed;
+    * ``product`` reads the committed state the reason says does not depend on
+      the notification, falsy when that state is incomplete. It must be present
+      without the dispatch;
+    * ``deliver`` runs the stranded dispatch through production, as a worker
+      would. Afterwards ``notified`` must be PRESENT, the positive control that
+      it observes this dispatch, and ``product`` must read exactly as before.
+
+    The probe is what turns a dispatch from "best effort" into "owed work" the
+    day either claim breaks: a task that starts writing product state, or a
+    product state that starts waiting for the task, fails it, and the callable
+    then needs a recovering disposition. ``deliver`` must reach production; a
+    test-authored deliverer proves only what the test sends.
+    """
+
+    #: Run the real producer with the dispatch suppressed; return its identity.
+    strand: Callable[[], Any]
+
+    #: Read the notification the dispatch produces. Falsy means absent.
+    notified: Callable[[Any], Any]
+
+    #: Read the committed product state the reason says is complete without the notification.
+    product: Callable[[Any], Any]
+
+    #: Run the stranded dispatch through production, as a worker would.
+    deliver: Callable[[Any], Any]
+
+    def __call__(self) -> None:
+        assert_test_binding_delegates_to_production(
+            adopter="exemption evidence",
+            field="deliver",
+            binding=self.deliver,
+            production_shape="the production task or worker entry point the lost dispatch would have run",
+        )
+        identity = self.strand()
+        assert not self.notified(identity), (
+            f"the notification was already present for {identity!r} before its dispatch was delivered, so "
+            f"this probe cannot tell 'nothing waits for it' from 'the dispatch was never actually suppressed'. "
+            f"Run the producer with its dispatch suppressed"
+        )
+        without = self.product(identity)
+        assert without, (
+            f"the committed product state for {identity!r} is incomplete without the exempted dispatch, so "
+            f"something waits for it: losing the dispatch loses product work, not only a notification"
+        )
+        self.deliver(identity)
+        assert self.notified(identity), (
+            f"delivering the stranded dispatch produced no notification for {identity!r}, so `notified` does "
+            f"not observe what this dispatch does and its absence above proved nothing"
+        )
+        after = self.product(identity)
+        assert after == without, (
+            f"delivering the exempted dispatch changed the product state for {identity!r} "
+            f"({without!r} -> {after!r}). It does more than notify, and losing it loses that work"
+        )
+
+
 class MissingReclaim(HarnessModel):
     """
     A state that marks work in flight is never re-selected once its owner dies.

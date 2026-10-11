@@ -417,11 +417,16 @@ class _Effects(MutableHarnessModel):
     def owes(self) -> bool:
         return bool(self._obligations())
 
+    @property
+    def did_work(self) -> bool:
+        """Recorder entries and scheduled messages alone do not prove work on an owed row."""
+        return bool(self.created or self.progress or self.newly_selectable or self.moved_state or self.effect_calls)
+
     def describe(self) -> str:
         return "; ".join(self._obligations()) or "nothing"
 
 
-def _new_entries(before: list[Any], after: list[Any]) -> list[Any]:
+def new_entries(before: list[Any], after: list[Any]) -> list[Any]:
     """What a recorder gained: its new tail, or everything if it was reset in between."""
     return after[len(before) :] if after[: len(before)] == before else after
 
@@ -443,7 +448,7 @@ def _newly_selectable(before: dict[timedelta, set[Any]], after: dict[timedelta, 
 
 
 @contextmanager
-def _observed_effects(sweep: "DueWorkSweep") -> Iterator[_Effects]:
+def observed_effects(dispatched_ids: Callable[[], list[Any]] | None) -> Iterator[_Effects]:
     """
     Record created rows, task publications and commit callbacks.
 
@@ -455,7 +460,7 @@ def _observed_effects(sweep: "DueWorkSweep") -> Iterator[_Effects]:
     patch a task's ``delay`` on the instance.
     """
     effects = _Effects()
-    dispatched_before = list(sweep.dispatched_ids()) if sweep.dispatched_ids is not None else []
+    dispatched_before = list(dispatched_ids()) if dispatched_ids is not None else []
     wrapper_type = type(connections[DEFAULT_DB_ALIAS])
     register_callback = wrapper_type.on_commit
 
@@ -478,8 +483,8 @@ def _observed_effects(sweep: "DueWorkSweep") -> Iterator[_Effects]:
     ):
         yield effects
     effects.published = list(published)
-    if sweep.dispatched_ids is not None:
-        effects.dispatched = _new_entries(dispatched_before, list(sweep.dispatched_ids()))
+    if dispatched_ids is not None:
+        effects.dispatched = new_entries(dispatched_before, list(dispatched_ids()))
 
 
 def _execute_observed(sweep: "DueWorkSweep", lifecycle: Lifecycle, row: Any) -> tuple[_Effects, Exception | None]:
@@ -490,7 +495,7 @@ def _execute_observed(sweep: "DueWorkSweep", lifecycle: Lifecycle, row: Any) -> 
     state_before = _persisted_states(model, [row], lifecycle.state_fields)
     selectable_before = _selectable(sweep)
     calls_before = lifecycle.effect_calls_for(row) if lifecycle.effect_calls_for is not None else 0
-    with _observed_effects(sweep) as effects:
+    with observed_effects(sweep.dispatched_ids) as effects:
         try:
             lifecycle.execute(delivery)
         except Exception as error:  # noqa: BLE001 - reported with the effects it left behind

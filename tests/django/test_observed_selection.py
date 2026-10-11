@@ -65,7 +65,10 @@ def test_held_publications_record_the_message_and_run_nothing(eager_task) -> Non
     with held_publications() as held:
         eager_task.delay(7)
         eager_task.apply_async(args=(8,), kwargs={"urgent": True}, countdown=5)
-    assert held == [Publication("self-test.work", (7,), {}), Publication("self-test.work", (8,), {"urgent": True})]
+    assert held == [
+        Publication("self-test.work", (7,), {}, {}),
+        Publication("self-test.work", (8,), {"urgent": True}, {"countdown": 5}),
+    ]
     assert eager_task.runs == []
     eager_task.delay(9)
     assert eager_task.runs == [9], "outside the block, an eager publication runs again"

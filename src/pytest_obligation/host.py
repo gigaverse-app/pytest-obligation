@@ -217,6 +217,10 @@ def race_timeout() -> float | None:
     return _RACE_TIMEOUT.get()
 
 
+class HandoffsNeverStop(Exception):
+    """A handoff chain exceeded its bounded delivery budget."""
+
+
 class Host(HarnessModel):
     """What the application's framework supplies. Every field is optional."""
 
@@ -282,6 +286,17 @@ class Host(HarnessModel):
     #: Profile A proofs only a framework can run, appended to every sweep's
     #: generated suite — the Django host adds the lifecycle-state proofs.
     sweep_proofs: tuple[Callable[[Any], None], ...] = ()
+
+    #: Exception raised by a cooperative worker stop (Celery uses SoftTimeLimitExceeded).
+    stop_exception: type[Exception] | None = None
+
+    #: Run an entry point and its downstream handoffs, including delayed work.
+    handoff_runner: Callable[[Callable[[], object]], None] | None = None
+    #: Run commit callbacks as they would after the worker commits, including under test transactions.
+    commit_scope: Callable[[], AbstractContextManager[Any]] = nullcontext
+    #: Enumerate and validate integration-owned owed-row cases without importing a framework in core.
+    owed_row_cases: Callable[[Any], list[Any]] | None = None
+    owed_row_gap_names: Callable[[Any], set[str]] | None = None
 
     #: Anything else an integration wants to carry; the core never reads it.
     extras: dict[str, Any] = Field(default_factory=dict)

@@ -14,11 +14,15 @@ would. Each imports Celery when entered.
 """
 
 import importlib
+from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any, NamedTuple
 from unittest import mock
+
+from pytest_obligation.host import HandoffsNeverStop, current_host
+from pytest_obligation.poison import PoisonSwitch
 
 
 def _beat_schedule(app: Any | None) -> Mapping[str, Mapping[str, Any]]:
@@ -86,6 +90,7 @@ class Publication(NamedTuple):
     task: str
     args: tuple[Any, ...]
     kwargs: dict[str, Any]
+    options: dict[str, Any] | None = None
 
 
 @contextmanager
@@ -103,12 +108,12 @@ def _holding(record: Callable[[Publication], object]) -> Iterator[None]:
         return AsyncResult(f"held-{count[0]}")
 
     def apply_async(task: Any, args: Any = None, kwargs: Any = None, *_rest: Any, **_options: Any) -> AsyncResult:
-        return held(Publication(task.name, tuple(args or ()), dict(kwargs or {})))
+        return held(Publication(task.name, tuple(args or ()), dict(kwargs or {}), _options))
 
     def send_task(
         _app: Any, name: str, args: Any = None, kwargs: Any = None, *_rest: Any, **_options: Any
     ) -> AsyncResult:
-        return held(Publication(name, tuple(args or ()), dict(kwargs or {})))
+        return held(Publication(name, tuple(args or ()), dict(kwargs or {}), _options))
 
     with mock.patch.object(Task, "apply_async", apply_async), mock.patch.object(Celery, "send_task", send_task):
         yield
@@ -216,3 +221,60 @@ def celery_publications() -> Iterator[list[str]]:
     names: list[str] = []
     with _holding(lambda publication: names.append(publication.task)):
         yield names
+
+
+@contextmanager
+def refusing_publication(
+    switch: PoisonSwitch,
+    task: Any,
+    key: Callable[[tuple[Any, ...], dict[str, Any]], Any] | None = None,
+) -> Iterator[None]:
+    """Poison one task's publication, preserving the innermost publication recorder."""
+    from celery import Task
+
+    def apply_async(args: Any = None, kwargs: Any = None, **options: Any) -> Any:
+        positional, keyword = tuple(args or ()), dict(kwargs or {})
+        if key is None:
+            assert positional, "keyword-only publication needs key="
+            identity = positional[0]
+        else:
+            identity = key(positional, keyword)
+        switch.check(identity, f"the broker refused {task.name}")
+        return Task.apply_async(task, args, kwargs, **options)
+
+    with mock.patch.object(task, "apply_async", apply_async):
+        yield
+
+
+def celery_handoffs(execute: Callable[[], object]) -> None:
+    """Run an entry point and up to 20 handoffs, including countdowns and commit callbacks.
+
+    A delivered task scheduling itself again is a retry; leave that for profile J.
+    Task.apply drives Celery's real retry/autoretry handling with an eager request.
+    """
+    from celery import current_app
+    from celery.exceptions import Retry
+
+    with held_publications() as published:
+        with current_host().commit_scope():
+            execute()
+        pending = deque(published)
+        published.clear()
+        delivered = 0
+        while pending:
+            if delivered == 20:
+                raise HandoffsNeverStop("still publishing after 20 deliveries")
+            message = pending.popleft()
+            task = current_app.tasks[message.task]
+            with current_host().commit_scope():
+                task.apply(args=message.args, kwargs=message.kwargs, throw=True)
+            delivered += 1
+            for followup in published:
+                options = followup.options or {}
+                if followup.task == message.task and (
+                    options.get("countdown") is not None or options.get("eta") is not None
+                ):
+                    # A retry-only chain is not evidence that the row was handled.
+                    raise Retry("the handoff only rescheduled itself")
+                pending.append(followup)
+            published.clear()

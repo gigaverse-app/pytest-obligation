@@ -34,6 +34,7 @@ from pytest_obligation.helpers import contract_params, undeclared
 from pytest_obligation.host import Host, ReadCost, ReadCosts, current_host, hosted, packages
 from pytest_obligation.integrations.celery import celery_beat_evidence, celery_beat_interval
 from pytest_obligation.models import HarnessModel
+from pytest_obligation.poison import PoisonedIdentity, PoisonSwitch, StopRequested
 from pytest_obligation.profiles.automatic_recovery import (
     AMBIENT_CONTEXT_PROOFS,
     DUE_WORK_PROOFS,
@@ -125,6 +126,7 @@ class _InMemorySweep:
         self.last_dispatched: list[int] = []
         self.dispatch_counts: dict[int, int] = {}
         self.poisoned: set[int] = set()
+        self.refusals = PoisonSwitch()
         self.claimed: set[int] = set()
         self.claim_on_dispatch = claim_on_dispatch
         #: What the in-memory "database" executed, for the statement proofs.
@@ -147,15 +149,24 @@ class _InMemorySweep:
 
     def run_tick(self) -> int:
         self.last_dispatched = []
+        failures: list[Exception] = []
         for row in self.due_work()[:_PAGE_SIZE]:
             try:
                 self._dispatch(row)
+            except StopRequested:
+                raise
+            except PoisonedIdentity as error:
+                failures.append(error)
+                continue
             except Exception:  # noqa: BLE001 - per-row isolation under test
                 continue
             self.last_dispatched.append(row.pk)
+        if failures:
+            raise ExceptionGroup("failed identities", failures)
         return len(self.last_dispatched)
 
     def _dispatch(self, row: _WorkRow) -> None:
+        self.refusals.check(row.pk)
         if row.pk in self.poisoned:
             raise RuntimeError("broker refused this message")
         self.dispatch_counts[row.pk] = self.dispatch_counts.get(row.pk, 0) + 1
@@ -175,6 +186,7 @@ class _InMemorySweep:
             assert_scheduled=lambda: None,
             observe_outstanding=lambda: float(len(self.due_work())),
             dispatched_ids=lambda: list(self.last_dispatched),
+            poison=lambda row: self.refusals.poisoned(row.pk),
             in_flight=InFlightExecution(
                 make_owed=self.make_owed,
                 start=self.hold_in_flight,
@@ -767,6 +779,7 @@ def test_a_test_authored_tick_is_rejected(production_host: Host) -> None:
         # The selection forwards (references production); only the tick is the
         # local re-implementation under test here.
         due_work=lambda: (production_call(), sweep.due_work())[1],
+        run_tick=lambda: len(sweep.rows),
         in_flight=None,
     )
     with pytest.raises(AssertionError, match="run_tick.*references no production"):
