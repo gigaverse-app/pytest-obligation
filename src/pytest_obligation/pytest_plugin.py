@@ -248,3 +248,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if excluded:
         items[:] = [item for item in items if not item.get_closest_marker("due_work_exploration")]
         config.hook.pytest_deselected(items=excluded)
+
+
+@pytest.fixture(name="due_work_selection_budget")
+def due_work_selection_budget_fixture(request: pytest.FixtureRequest):
+    """Select the deterministic search budget without importing Django in the core plugin."""
+    from pytest_obligation.integrations.django.selection_completeness import EXAMPLES, EXTENDED_EXAMPLES, PR_EXAMPLES
+
+    deep = request.config.getoption("--due-work-explore", default="off") in ("deep", "extended")
+    token = EXAMPLES.set(EXTENDED_EXAMPLES if deep else PR_EXAMPLES)
+    try:
+        yield EXAMPLES.get()
+    finally:
+        EXAMPLES.reset(token)

@@ -33,7 +33,10 @@ def database_legal_edges(field: models.Field[Any, Any]) -> tuple[CandidateEdge, 
         return ()
     if isinstance(field, (models.CharField, models.TextField, models.FileField)):
         # FileField is not a CharField, but stores its name in a varchar column.
-        edges = [CandidateEdge(field=field.attname, kind="blank", value="")]
+        edges = [
+            CandidateEdge(field=field.attname, kind="blank", value=""),
+            CandidateEdge(field=field.attname, kind="whitespace", value=" "),
+        ]
         if field.max_length:
             edges.append(CandidateEdge(field=field.attname, kind="max_length", value="x" * field.max_length))
         if field.choices:

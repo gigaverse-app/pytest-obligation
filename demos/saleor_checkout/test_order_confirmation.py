@@ -767,6 +767,10 @@ CHECKOUT_WITH_AUTOMATIC_COMPLETION = ObligationContract(
                     "The paid-checkout selection admits an empty currency; completion raises a money currency "
                     "mismatch and leaves that checkout selected on every tick."
                 ),
+                "assert_database_legal_owed_row_is_handled[currency-whitespace]": (
+                    "The paid-checkout selection admits a whitespace currency; completion raises a money "
+                    "currency mismatch and leaves the checkout selected on every tick."
+                ),
                 "assert_database_legal_owed_row_is_handled[currency-max_length]": (
                     "A database-legal three-character currency different from the channel's currency reaches "
                     "completion, raises a money currency mismatch, and remains selected."

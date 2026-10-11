@@ -298,6 +298,9 @@ class Host(HarnessModel):
     #: Optional framework check for a claimed absence of a retry budget in the recovery selection.
     assert_no_retry_budget: Callable[[str, Callable[[], Any]], None] | None = None
 
+    #: Generate integration-owned completeness proofs when the contract opts in.
+    selection_completeness_cases: Callable[[Any], list[Any]] | None = None
+
     owed_row_cases: Callable[[Any], list[Any]] | None = None
     owed_row_gap_names: Callable[[Any], set[str]] | None = None
 

@@ -93,6 +93,17 @@ def _connection_scope() -> Iterator[None]:
         connections.close_all()
 
 
+@contextmanager
+def _commit_scope() -> Iterator[None]:
+    """Deliver one task and its commit callbacks without poisoning an enclosing proof transaction."""
+    from django.test import TestCase
+
+    from pytest_obligation.integrations.django.owed_rows import worker_transaction
+
+    with TestCase.captureOnCommitCallbacks(execute=True), worker_transaction():
+        yield
+
+
 def django_host(
     production_packages: Collection[str],
     *,
@@ -115,13 +126,12 @@ def django_host(
     them. With it, pytest-django restores the database's migrated contents after
     each such case (it needs the test database created in the session, not reused).
     """
-    from django.test import TestCase
-
     from pytest_obligation.integrations.django.callbacks import django_callback_breaker
     from pytest_obligation.integrations.django.commits import django_worker_killer
     from pytest_obligation.integrations.django.owed_cases import owed_row_cases, owed_row_gap_names
     from pytest_obligation.integrations.django.retry_budget import assert_selection_has_no_retry_budget
     from pytest_obligation.integrations.django.selection import DjangoSelectionInspector
+    from pytest_obligation.integrations.django.selection_cases import selection_completeness_cases
 
     sweep_proofs: tuple[Callable[[Any], None], ...] = ()
     if lifecycle_proofs:
@@ -148,11 +158,12 @@ def django_host(
         frozen_clock=time_machine_clock,
         sweep_proofs=sweep_proofs,
         owed_row_cases=owed_row_cases,
+        selection_completeness_cases=selection_completeness_cases,
         assert_no_retry_budget=assert_selection_has_no_retry_budget,
         owed_row_gap_names=owed_row_gap_names,
         handoff_runner=handoff_runner,
         stop_exception=stop_exception,
-        commit_scope=functools.partial(TestCase.captureOnCommitCallbacks, execute=True),
+        commit_scope=_commit_scope,
     )
 
 

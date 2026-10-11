@@ -185,3 +185,5 @@ Alpha; the public API may change before 1.0. [Architecture](ARCHITECTURE.md) ·
 [Contributing](CONTRIBUTING.md) · [Apache-2.0 license](LICENSE)
 
 Generated expected failures can be enforced with an application-owned [debt baseline](docs/debt-baseline.md).
+
+Recovery contracts can also [prove selection completeness](docs/selection-completeness.md), including related lifecycle states and strict per-combination debt.

@@ -171,3 +171,7 @@ Direct plan consumers must use
 attach equivalent `CATALOG_INDEX` facts. Bare EXPLAIN JSON cannot establish key
 order. `integrations.django.indexes.installed_indexes` exposes the same canonical
 catalog records for schema proofs, so downstream adapters need no duplicate SQL.
+
+## Selection completeness
+
+Use the [selection completeness guide](selection-completeness.md) to test both selected and skipped rows. `ObligationContract.prove_selection_complete` and `ScheduledSelection.state_fields` enable the generated proof; related lifecycle paths, whitespace edges and per-combination gaps retain the latest backend behavior.

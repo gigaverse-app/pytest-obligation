@@ -84,7 +84,14 @@ def test_each_legal_edge_has_both_generated_proofs() -> None:
     for edge in model_edges(PrimitiveOwner):
         assert f"assert_database_legal_owed_row_is_handled[owner-{edge.id}]" in names
         assert f"assert_inadmissible_owed_row_does_not_block_the_next[owner-{edge.id}]" in names
-    assert {edge.kind for edge in model_edges(PrimitiveOwner)} == {"blank", "max_length", "zero", "negative", "maximum"}
+    assert {edge.kind for edge in model_edges(PrimitiveOwner)} == {
+        "blank",
+        "whitespace",
+        "max_length",
+        "zero",
+        "negative",
+        "maximum",
+    }
 
 
 def test_light_contract_gap_types_cannot_absorb_a_broken_control() -> None:
@@ -156,7 +163,7 @@ def test_edge_catalog_respects_database_column_constraints() -> None:
     cases = [
         (
             models.CharField(max_length=5, choices=[("~", "tilde"), ("plain", "plain")]),
-            {"blank", "max_length", "unknown_choice"},
+            {"blank", "whitespace", "max_length", "unknown_choice"},
         ),
         (models.PositiveSmallIntegerField(), {"zero", "maximum"}),
         (models.BigIntegerField(), {"zero", "negative", "maximum"}),
@@ -211,3 +218,37 @@ def test_related_row_edge_reaches_the_worker(retire: bool) -> None:
     else:
         with pytest.raises(OwedRowNotHandled, match="empty related value"):
             prove()
+
+
+_COMBINATION_GAP = "assert_selection_is_complete[value:ready]"
+
+
+def test_generated_selection_completeness_is_opt_in_and_gap_is_narrow() -> None:
+    from pytest_obligation.integrations.django.selection_completeness import GAP_FAILURES
+
+    assert not any(p.id == "A-assert_selection_is_complete" for p in contract_cases(native()))
+    contract = native().model_copy(update={"prove_selection_complete": True})
+    cases = {p.id: p for p in contract_cases(contract)}
+    assert cases["A-assert_selection_is_complete"].values[0].fixtures[-1] == "due_work_selection_budget"
+    declared = selection(
+        state_fields=("value",),
+        adoption=Adoption.LEGACY,
+        gaps={_COMBINATION_GAP: "legacy branch requires a production repair"},
+    )
+    cases = {p.id: p for p in scheduled_selection_cases(declared)}
+    mark = next(m for m in cases[_COMBINATION_GAP].marks if m.name == "xfail")
+    assert mark.kwargs["strict"] and mark.kwargs["raises"] == GAP_FAILURES
+    assert not any(m.name == "xfail" for m in cases["assert_selection_is_complete"].marks)
+
+
+@pytest.mark.parametrize(
+    "gap",
+    [
+        "assert_selection_is_complete",
+        "assert_selection_is_complete[value:ready|done]",
+        "assert_selection_is_complete[value:ready",
+    ],
+)
+def test_selection_completeness_rejects_broad_or_malformed_gaps(gap: str) -> None:
+    with pytest.raises(ObligationContractDesignError):
+        selection(state_fields=("value",), adoption=Adoption.LEGACY, gaps={gap: "legacy branch requires repair"})
