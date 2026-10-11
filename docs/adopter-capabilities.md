@@ -1,6 +1,6 @@
 # Where the shipped adopters exercise the capabilities
 
-This is the adoption map for the generated capabilities ported in #34. CI runs
+This is the adoption map for the generated capabilities ported in #34 and strengthened in #46. CI runs
 these contracts with `--due-work-require-assessed` and uploads executed JSON
 profile reports. CI also checks required adopter names and executed profiles
 against those reports, so deleting a suite cannot leave an empty green report. The option rejects assessment debt before `-k`/marker filtering;
@@ -62,3 +62,43 @@ against the pinned upstream versions, not claims that the applications pass.
 Named `replay` and `retry` bindings run every independent effect through the same
 profile proofs. A passing image-delete test cannot stand in for document deletion
 or automatic crop calculation. The existing singular factory form remains supported.
+
+
+## Stronger bindings from #46
+
+The stacked adopter change exercises the new surfaces where the application's
+actual execution model supplies them:
+
+| Adopter | Binding and observation | Result and limits |
+| --- | --- | --- |
+| Saleor automatic completion | `owed_model=Checkout`, the real completion task in `Lifecycle.execute`, captured Celery publications and bounded delivery of their follow-up tasks | Every database-legal checkout edge is delivered to the worker. Empty currency and an arbitrary three-character currency remain selected after a money mismatch: two precise strict gaps. Other existing A findings remain. |
+| Saleor related billing addresses | `ScheduledSelection` + `OwedRows` + `EdgeFamily(Address, edge_row=...)`, projected from the same sweep | Addresses are separate copies per checkout, so poisoning one cannot alter the healthy tail's address. Generated controls require successful service of the unmodified row and real dispatch order. |
+| Saleor poison/stop | `still_owed` consumes the checkout identity and reads the actual production selection; `progressed` observes an order | A publication counter cannot substitute for completion in the native poison proof. The Beat publisher still abandons the tail on refusal; its soft time limit propagates. |
+| Wagtail database worker | The real `Worker.run` selection at its claim boundary; `Worker.run_task`; task model edges; successful completion signals normalized to model UUIDs | Its READY partial index is verified against PostgreSQL's catalog. Ordinary receiver failure and an injected cooperative stop both make the task FAILED, outside recovery. Both are specific `[dropped]` gaps. Blank and maximum-length unconfigured queue names raise again during error reporting and abandon the healthy tail: two further edge-specific gaps. |
+| SQLite catalog, including shared RQ/Celery/Prefect declarations | Standalone poison and stop oracles, provider faults, remote progress, SQL retention | These extras run the application recovery loop directly. They do not claim transport cancellation behavior. The stronger poison proof exposed an aborting loop; the example now isolates ordinary errors, reports an ExceptionGroup, and propagates cancellation immediately. |
+| Optional noticeboard alert example | `LossDropsOnlyANotification` on a real SQLite producer and worker; a separate connection observes committed product state | The alert can be absent while the notice is complete; delivering it must send the alert and leave the notice unchanged. A worker that edits the notice fails the exemption. This policy does not exempt Saleor confirmations or DBOS notifications. |
+
+The Wagtail query observer temporarily suppresses connection cleanup while
+observing the query, because Django's plan tests hold an enclosing transaction.
+Its executing worker keeps the production connection management, claim, and
+signal behavior. The cooperative-stop case exercises exception handling; it is
+not a test of the command's SIGINT/SIGTERM shutdown handler.
+
+The existing Saleor host keeps general lifecycle-state proofs disabled. Its
+`Lifecycle` binding supplies the real worker for owed-row checks; declaring it
+here does not certify a complete checkout state machine.
+
+Procrastinate's claim is a SQL procedure combining selection and acquisition;
+it has no Django ORM job selector to bind to `EdgeFamily`. DBOS similarly owns
+native workflow recovery rather than an application row sweep. Their existing
+real-process admission, replay, retention and retry proofs remain applicable.
+MongoDB/Motor and aiokafka remain driver/offset controls, without application
+intent from which to derive row or notification contracts. None of those adapters
+is made to invent product semantics merely to fill a capability column.
+
+CI checks JUnit execution evidence for these exact classes and proof families
+in addition to the A–J profile reports. Missing families, ordinary skips, failed
+setup/teardown and failed proofs are rejected; strict expected failures remain
+executed evidence, not passing guarantees. The catalog's mutation controls also
+reject aborting the loop, deleting failed intent, swallowing the report, and
+isolating cancellation as an ordinary failure.
