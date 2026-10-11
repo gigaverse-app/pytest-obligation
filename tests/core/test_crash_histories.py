@@ -10,6 +10,7 @@ recovery fails the positive control.
 
 import inspect
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
@@ -265,3 +266,39 @@ def test_a_group_with_a_death_raised_by_a_live_worker_is_refused(ledger_host: Ho
 def test_a_divergence_has_no_other_type_to_take() -> None:
     # A gap's xfail accepts HistoriesDiverged alone; a caller-chosen type would let it accept anything.
     assert "divergence" not in inspect.signature(assert_histories_converge).parameters
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_scoped_arrangement_lives_through_observation_and_always_closes(ledger_host: Host, broken: bool) -> None:
+    scopes: list[bool] = []
+    active = False
+
+    @contextmanager
+    def arrange() -> Iterator[int]:
+        nonlocal active
+        assert not active
+        active = True
+        scopes.append(False)
+        try:
+            yield ref.running_attempt()
+        finally:
+            active = False
+            scopes[-1] = True
+
+    def observe(handle: int) -> Any:
+        assert active, "arrangement closed before final observation"
+        return ref.attempt_and_successors(handle)
+
+    history = HandoffHistory(
+        name="scoped retry",
+        arrange=arrange,
+        transition=ref.fail_with_split_handoff if broken else ref.fail_with_atomic_handoff,
+        observe=observe,
+    )
+    if broken:
+        with pytest.raises(AssertionError, match="worker died after commit 1"):
+            assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    else:
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    assert len(scopes) > 2 and all(scopes)
+    assert not active
