@@ -36,6 +36,7 @@ classifiers = [
 dependencies = ["pytest>=8", "pydantic>=2.11"]
 
 [project.optional-dependencies]
+debt = ["PyYAML>=6"]
 exploration = ["hypothesis>=6.112"]
 django = ["django>=4.2", "pytest-django>=4.8", "psycopg[binary]>=3.1", "time-machine>=2.10"]
 celery = ["celery>=5.3"]
@@ -74,7 +75,7 @@ demos = [
 ]
 # Adopters split sessions across workers; the verify option must hold there too.
 xdist = ["pytest-xdist>=3.6"]
-dev = [{ include-group = "lint" }, { include-group = "xdist" }]
+dev = ["PyYAML>=6", { include-group = "lint" }, { include-group = "xdist" }]
 
 [tool.uv]
 default-groups = ["dev"]

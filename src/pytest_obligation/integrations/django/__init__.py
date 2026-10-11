@@ -120,6 +120,7 @@ def django_host(
     from pytest_obligation.integrations.django.callbacks import django_callback_breaker
     from pytest_obligation.integrations.django.commits import django_worker_killer
     from pytest_obligation.integrations.django.owed_cases import owed_row_cases, owed_row_gap_names
+    from pytest_obligation.integrations.django.retry_budget import assert_selection_has_no_retry_budget
     from pytest_obligation.integrations.django.selection import DjangoSelectionInspector
 
     sweep_proofs: tuple[Callable[[Any], None], ...] = ()
@@ -147,6 +148,7 @@ def django_host(
         frozen_clock=time_machine_clock,
         sweep_proofs=sweep_proofs,
         owed_row_cases=owed_row_cases,
+        assert_no_retry_budget=assert_selection_has_no_retry_budget,
         owed_row_gap_names=owed_row_gap_names,
         handoff_runner=handoff_runner,
         stop_exception=stop_exception,

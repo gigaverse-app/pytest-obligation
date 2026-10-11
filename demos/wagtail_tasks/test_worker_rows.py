@@ -99,6 +99,14 @@ READY_TASKS = ScheduledSelection(
     owed_rows=worker_rows,
     owed_edges={"task": EdgeFamily(model=DBTaskResult)},
     gaps={
+        "assert_database_legal_owed_row_is_handled[task-queue_name-blank]": (
+            "The all-queues worker claims a row with an empty queue name before InvalidTask escapes. "
+            "The row leaves ready() without this light contract proving a terminal state or retry budget."
+        ),
+        "assert_database_legal_owed_row_is_handled[task-queue_name-max_length]": (
+            "An unconfigured queue name raises InvalidTask after the worker claims the row. "
+            "Leaving ready() does not prove the obligation was handled or that a bounded retry ends it."
+        ),
         "assert_inadmissible_owed_row_does_not_block_the_next[task-queue_name-blank]": (
             "The all-queues worker selects an empty queue name. Its error handler reconstructs the invalid "
             "task and raises InvalidTask, abandoning the healthy task behind it."

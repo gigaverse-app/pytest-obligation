@@ -11,6 +11,9 @@ from collections.abc import Iterator, Mapping
 from pytest_obligation.coverage.project import dotted_parts, terminal_name
 from pytest_obligation.models import HarnessModel
 
+# Equality/reporting helpers do not exercise a generated guarantee.
+_NOT_PROOFS = frozenset({"assert_observation"})
+
 _HARNESS_PACKAGES = ("pytest_obligation", "due_work_harness", "due.django.conformance")
 
 
@@ -43,7 +46,7 @@ def _harness_names(tree: ast.Module) -> tuple[set[str], set[str]]:
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
                 bound = alias.asname or alias.name
-                if _in_harness(node.module) and alias.name.startswith("assert_"):
+                if _in_harness(node.module) and alias.name.startswith("assert_") and alias.name not in _NOT_PROOFS:
                     proofs.add(bound)
                 elif _in_harness(f"{node.module}.{alias.name}") and alias.name.islower():
                     modules.add(bound)
@@ -80,7 +83,11 @@ def _extra_proof_runners(tree: ast.Module) -> set[int]:
 def _proof_called(call: ast.Call, proofs: set[str], modules: set[str]) -> str | None:
     if isinstance(call.func, ast.Name) and call.func.id in proofs:
         return call.func.id
-    if isinstance(call.func, ast.Attribute) and call.func.attr.startswith("assert_"):
+    if (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr.startswith("assert_")
+        and call.func.attr not in _NOT_PROOFS
+    ):
         parts = dotted_parts(call.func.value)
         owner = None if parts is None else [parts[0], *parts[1]]
         if owner is not None and (owner[0] in modules or _in_harness(".".join(owner))):

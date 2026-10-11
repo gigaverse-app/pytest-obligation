@@ -39,6 +39,7 @@ from django.db.models import Model, QuerySet
 from django.test.utils import CaptureQueriesContext
 
 from pytest_obligation.host import ReadCosts
+from pytest_obligation.integrations.django.indexes import attach_catalog_facts, installed_indexes
 from pytest_obligation.integrations.django.writes import require_postgresql
 from pytest_obligation.integrations.postgres_plans import (
     bitmap_overturns_the_walk,
@@ -79,6 +80,7 @@ def explain_index_eligibility(queryset: QuerySet[Any], *, bitmap_only: bool = Fa
         plan = _plan(queryset.explain(format="json"))
         for setting, value in previous.items():
             cursor.execute("SELECT set_config(%s, %s, true)", [setting, value])
+    attach_catalog_facts(database, plan)
     return plan
 
 
@@ -89,14 +91,13 @@ def _verified_partial_indexes(alias: str, table: str, named: Collection[str]) ->
     """
     if not named:
         return {}
-    with connections[alias].cursor() as cursor:
-        cursor.execute(
-            "SELECT c.relname, pg_get_expr(i.indpred, i.indrelid) FROM pg_index i "
-            "JOIN pg_class c ON c.oid = i.indexrelid "
-            "WHERE i.indrelid = %s::regclass AND i.indisvalid AND i.indpred IS NOT NULL",
-            [connections[alias].ops.quote_name(table)],
-        )
-        predicates = dict(cursor.fetchall())
+    database = connections[alias]
+    predicates = {
+        index.name: index.predicate
+        for index in installed_indexes(database, [database.ops.quote_name(table)])
+        if index.usable and index.predicate is not None
+    }
+    with database.cursor() as cursor:
         cursor.execute(
             "SELECT attname FROM pg_attribute WHERE attrelid = %s::regclass AND attnum > 0 AND NOT attisdropped",
             [connections[alias].ops.quote_name(table)],

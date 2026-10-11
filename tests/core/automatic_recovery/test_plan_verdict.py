@@ -28,7 +28,14 @@ def _index_scan(**extra: object) -> dict[str, object]:
 
 def test_a_genuinely_pruning_index_scan_passes() -> None:
     assert_plan_is_index_served(
-        name="pruning index scan", plan=_index_scan(**{"Index Cond": "(created_at <= $1)"}), table=_TABLE
+        name="pruning index scan",
+        plan=_index_scan(
+            **{
+                "Catalog Index": {"Access Method": "btree", "Key Columns": ["created_at"], "Predicate": None},
+                "Index Cond": "(created_at <= $1)",
+            }
+        ),
+        table=_TABLE,
     )
 
 
@@ -128,7 +135,12 @@ def test_a_genuinely_pruning_bitmap_passes() -> None:
         "Relation Name": _TABLE,
         "Recheck Cond": "(created_at <= $1)",
         "Plans": [
-            {"Node Type": "Bitmap Index Scan", "Index Name": "created_at_ix", "Index Cond": "(created_at <= $1)"}
+            {
+                "Catalog Index": {"Access Method": "btree", "Key Columns": ["created_at"], "Predicate": None},
+                "Node Type": "Bitmap Index Scan",
+                "Index Name": "created_at_ix",
+                "Index Cond": "(created_at <= $1)",
+            }
         ],
     }
     assert_plan_is_index_served(name="pruning bitmap", plan=plan, table=_TABLE)
@@ -144,8 +156,18 @@ def test_a_bitmap_or_of_pruning_partial_indexes_passes() -> None:
             {
                 "Node Type": "BitmapOr",
                 "Plans": [
-                    {"Node Type": "Bitmap Index Scan", "Index Name": "partial_a_ix", "Index Cond": "(a < 5)"},
-                    {"Node Type": "Bitmap Index Scan", "Index Name": "partial_b_ix", "Index Cond": "(b <= $1)"},
+                    {
+                        "Catalog Index": {"Access Method": "btree", "Key Columns": ["a"], "Predicate": None},
+                        "Node Type": "Bitmap Index Scan",
+                        "Index Name": "partial_a_ix",
+                        "Index Cond": "(a < 5)",
+                    },
+                    {
+                        "Catalog Index": {"Access Method": "btree", "Key Columns": ["b"], "Predicate": None},
+                        "Node Type": "Bitmap Index Scan",
+                        "Index Name": "partial_b_ix",
+                        "Index Cond": "(b <= $1)",
+                    },
                 ],
             }
         ],
@@ -164,7 +186,12 @@ def test_every_bitmap_input_must_have_pruning_evidence(operator: str, verified: 
             {
                 "Node Type": operator,
                 "Plans": [
-                    {"Node Type": "Bitmap Index Scan", "Index Name": "date_ix", "Index Cond": "created_at < now()"},
+                    {
+                        "Catalog Index": {"Access Method": "btree", "Key Columns": ["created_at"], "Predicate": None},
+                        "Node Type": "Bitmap Index Scan",
+                        "Index Name": "date_ix",
+                        "Index Cond": "created_at < now()",
+                    },
                     {"Node Type": "Bitmap Index Scan", "Index Name": "ready_ix"},
                 ],
             }
@@ -189,12 +216,31 @@ def test_every_bitmap_input_must_have_pruning_evidence(operator: str, verified: 
 def test_a_plan_that_never_scans_the_table_is_unevaluable_not_green() -> None:
     with pytest.raises(AssertionError, match="no plan node scans"):
         assert_plan_is_index_served(
-            name="wrong table", plan=_index_scan(**{"Index Cond": "(x = 1)", "Relation Name": "other"}), table=_TABLE
+            name="wrong table",
+            plan=_index_scan(
+                **{
+                    "Catalog Index": {"Access Method": "btree", "Key Columns": ["x"], "Predicate": None},
+                    "Index Cond": "(x = 1)",
+                    "Relation Name": "other",
+                }
+            ),
+            table=_TABLE,
         )
 
 
 def test_the_verdict_is_none_when_served_and_carries_the_plan_when_not() -> None:
-    assert index_served_verdict(_index_scan(**{"Index Cond": "(x = 1)"}), table=_TABLE) is None
+    assert (
+        index_served_verdict(
+            _index_scan(
+                **{
+                    "Catalog Index": {"Access Method": "btree", "Key Columns": ["x"], "Predicate": None},
+                    "Index Cond": "(x = 1)",
+                }
+            ),
+            table=_TABLE,
+        )
+        is None
+    )
     verdict = index_served_verdict({"Node Type": "Seq Scan", "Relation Name": _TABLE}, table=_TABLE)
     assert verdict is not None and '"Node Type": "Seq Scan"' in verdict
 
@@ -307,6 +353,7 @@ def test_a_named_partial_index_is_trusted_with_a_filter_on_other_columns() -> No
             "Plans": [{"Node Type": "Bitmap Index Scan", "Index Name": "weak_ix"}],
         },
         {
+            "Catalog Index": {"Access Method": "btree", "Key Columns": ["updated_at"], "Predicate": None},
             "Node Type": "Index Scan",
             "Relation Name": _TABLE,
             "Index Name": "weak_ix",
@@ -328,6 +375,7 @@ def test_a_named_partial_index_whose_filter_re_tests_its_predicate_is_refused(sc
 
 def test_a_literal_in_the_filter_is_not_a_column() -> None:
     plan = {
+        "Catalog Index": {"Access Method": "btree", "Key Columns": ["updated_at"], "Predicate": None},
         "Node Type": "Index Scan",
         "Relation Name": _TABLE,
         "Index Name": "active_ix",
@@ -347,7 +395,14 @@ _WALKS_AN_UNRELATED_INDEX = _index_scan(Filter="((state = 'ready') AND (availabl
 _BITMAP_OVER_THE_DUE_INDEX = {
     "Node Type": "Bitmap Heap Scan",
     "Relation Name": _TABLE,
-    "Plans": [{"Node Type": "Bitmap Index Scan", "Index Name": "due_ix", "Index Cond": "(available_at <= $1)"}],
+    "Plans": [
+        {
+            "Catalog Index": {"Access Method": "btree", "Key Columns": ["available_at"], "Predicate": None},
+            "Node Type": "Bitmap Index Scan",
+            "Index Name": "due_ix",
+            "Index Cond": "(available_at <= $1)",
+        }
+    ],
 }
 _BITMAP_OVER_A_STATE_INDEX_READING_EVERY_STATE = {
     "Node Type": "Bitmap Heap Scan",
@@ -356,6 +411,7 @@ _BITMAP_OVER_A_STATE_INDEX_READING_EVERY_STATE = {
     "Filter": "(available_at <= $1)",
     "Plans": [
         {
+            "Catalog Index": {"Access Method": "btree", "Key Columns": ["state"], "Predicate": None},
             "Node Type": "Bitmap Index Scan",
             "Index Name": "state_ix",
             "Index Cond": "(state = ANY ('{ready,queued,claimed,retryable,unknown}'::text[]))",
@@ -396,7 +452,14 @@ def test_a_walk_that_filters_no_range_bound_is_not_overturned() -> None:
     bitmap = {
         "Node Type": "Bitmap Heap Scan",
         "Relation Name": _TABLE,
-        "Plans": [{"Node Type": "Bitmap Index Scan", "Index Name": "state_ix", "Index Cond": "(state = 'ready')"}],
+        "Plans": [
+            {
+                "Catalog Index": {"Access Method": "btree", "Key Columns": ["state"], "Predicate": None},
+                "Node Type": "Bitmap Index Scan",
+                "Index Name": "state_ix",
+                "Index Cond": "(state = 'ready')",
+            }
+        ],
     }
     assert bitmap_overturns_the_walk(walked, bitmap, table=_TABLE) is False
 
@@ -407,7 +470,12 @@ def test_the_bitmap_is_judged_with_the_named_partial_indexes() -> None:
         "Node Type": "Bitmap Heap Scan",
         "Relation Name": _TABLE,
         "Plans": [
-            {"Node Type": "Bitmap Index Scan", "Index Name": "ready_due_ix", "Index Cond": "(available_at <= $1)"}
+            {
+                "Catalog Index": {"Access Method": "btree", "Key Columns": ["available_at"], "Predicate": None},
+                "Node Type": "Bitmap Index Scan",
+                "Index Name": "ready_due_ix",
+                "Index Cond": "(available_at <= $1)",
+            }
         ],
     }
     named = {"ready_due_ix": frozenset({"state"})}
@@ -434,7 +502,20 @@ def _bitmap(*inputs: dict[str, object], combine: str | None = None, **heap: obje
 
 
 def _input(index: str, cond: str | None = None) -> dict[str, object]:
-    return {"Node Type": "Bitmap Index Scan", "Index Name": index, **({"Index Cond": cond} if cond else {})}
+    return {
+        "Catalog Index": {
+            "Access Method": "btree",
+            "Key Columns": [
+                {"due_ix": "available_at", "state_ix": "state", "due_state_ix": "state", "kind_ix": "kind"}.get(
+                    index, "id"
+                )
+            ],
+            "Predicate": None,
+        },
+        "Node Type": "Bitmap Index Scan",
+        "Index Name": index,
+        **({"Index Cond": cond} if cond else {}),
+    }
 
 
 @pytest.mark.parametrize(

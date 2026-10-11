@@ -91,6 +91,47 @@ class OwedRowNotHandled(AssertionError):
     """
 
 
+class FailureEnds(HarnessModel):
+    """
+    What ends an owed row whose delivery chain raised after moving it out of the selection.
+
+    Projected by the contract (:func:`failure_ends_of_sweep`), never bound by
+    the adopter: a field on :class:`OwedRows` would let a binding declare its
+    own failures handled. The default, nothing, is the light contract's.
+    """
+
+    #: Whether the row is in one of the sweep's own terminal states; a deleted row is ended too.
+    is_terminal: Callable[[Any], bool] | None = None
+    #: The contract claims profile J without gaps: a persistently failing row reaches a terminal state at its budget.
+    retries_bounded: bool = False
+
+    def end(self, row: Any) -> bool:
+        return self.retries_bounded or (self.is_terminal is not None and self.is_terminal(row))
+
+
+#: The light contract's ends: no terminal declaration and no profile J, so a raise that leaves the selection fails.
+NOTHING_ENDS_A_FAILURE = FailureEnds()
+
+
+def failure_ends_of_sweep(sweep: DueWorkSweep, *, retries_bounded: bool) -> FailureEnds:
+    """A profile-A sweep's ends: the lifecycle states of its ``make_terminal`` examples, and its profile J claim."""
+    assert sweep.lifecycle is not None, (
+        f"{sweep.name}: owed-row admissibility reads Lifecycle.state_fields; declare one"
+    )
+    state_fields = sweep.lifecycle.state_fields
+
+    def state_of(row: Model) -> tuple[Any, ...]:
+        return tuple(getattr(row, state_field) for state_field in state_fields)
+
+    def is_terminal(row: Any) -> bool:
+        if not type(row)._base_manager.filter(pk=row.pk).exists():
+            return True  # nothing can select a deleted row again
+        row.refresh_from_db()
+        return state_of(row) in {state_of(example) for example in sweep.make_terminal(age=timedelta(days=1))}
+
+    return FailureEnds(is_terminal=is_terminal, retries_bounded=retries_bounded)
+
+
 class _Served(HarnessModel):
     """What one production delivery, and the handoff chain it started, did to an owed row."""
 
@@ -146,6 +187,7 @@ def assert_database_legal_owed_row_is_handled(
     effect_calls_for: Callable[[Any], int] | None = None,
     edge_row: Callable[[Any], Model] | None = None,
     edge_model: type[Model] | None = None,
+    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
     """
     INVARIANT: one production delivery of a selected database-legal owed row neither raises nor idles on it.
@@ -155,7 +197,9 @@ def assert_database_legal_owed_row_is_handled(
     "unchanged" then covers both rows. ``edge_model`` is the model the edge
     was enumerated from, checked against that row. ``dispatched_ids`` is read
     for a recorder that patches a task instance, but an entry in it is not
-    work: a run that reaches a row and skips it records one too.
+    work: a run that reaches a row and skips it records one too. ``ends`` is
+    what the contract says ends a row whose chain raised after moving it out
+    of the selection.
     """
     row = make_owed()
     identity = identity_of(row)
@@ -207,6 +251,18 @@ def assert_database_legal_owed_row_is_handled(
             f"{outcome}, leaving the row {left}. The next tick hands it "
             f"the same row, so this repeats on every tick and the row holds a page slot a valid one needs. Exclude "
             f"the row in the selection, or make the worker settle, fail or retire it"
+        ) from failure
+    # INVARIANT ENFORCEMENT: a raise on a row the chain moved out of the
+    # selection repeats once what moved it expires, or strands the row unfinished.
+    if failure is not None and not ends.end(row):
+        raise OwedRowNotHandled(
+            f"{name}: {served.ran_in} raised {failure!r} on a database-legal owed row with {edge.id} "
+            f"({edge.value!r}) after moving it out of the selection, and nothing ends it there: the row is in no "
+            f"terminal state {'of the sweep' if ends.is_terminal is not None else '(this contract declares none)'} "
+            f"and the contract claims no profile J to bound a repeat. Either what moved it expires (a claim, a lease, "
+            f"a backoff) and recovery hands the same row to the same raise, or no selection looks at it again and it "
+            f"stays unfinished. Exclude the row in the selection, end it in a terminal state instead of raising, or "
+            f"bound the retry with profile J"
         ) from failure
 
 
@@ -303,7 +359,9 @@ class OwedRows(HarnessModel):
     #: again; bind this when the step hands the obligation to another
     #: production selection before the call that failed (email unpark makes the
     #: campaign RUNNING, and the reaper's selection owns its READY chunks). It
-    #: must read that production selection, which the binding guard checks.
+    #: must read that production selection, which the binding guard checks,
+    #: and answer for this row: in the state the poison tick leaves, a row the
+    #: step and its handoffs served to completion must read False.
     still_owed: Callable[[Any], bool] | None = None
 
 
@@ -374,6 +432,11 @@ def assert_valid_owed_row_leaves_the_selection(
     raise or retry anywhere in the chain. A sweep that legitimately re-reads a
     served row (polling) does not fit the light contract's owed-row proofs.
     """
+    _served_to_completion(name, selection, rows)
+
+
+def _served_to_completion(name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows) -> Any:
+    """One fresh owed row, served by the production step and every task it hands off to; it leaves the selection."""
     row = rows.make_owed()
     identity = rows.identity_of(row)
     assert identity in _selected(selection, rows.identity_of), (
@@ -390,6 +453,7 @@ def assert_valid_owed_row_leaves_the_selection(
         f"{name}: a valid owed row is still selected after the production step and its handoffs ran. Either "
         f"`execute` is not what serves the row, or the sweep re-reads served rows and does not fit these proofs"
     )
+    return row
 
 
 def assert_the_tick_dispatches_owed_rows_in_selection_order(
@@ -424,7 +488,12 @@ def assert_the_tick_dispatches_owed_rows_in_selection_order(
 
 
 def _owed_row_is_handled(
-    name: str, selection: Callable[[], Iterable[Any]], family: EdgeFamily, edge: CandidateEdge, rows: OwedRows
+    name: str,
+    selection: Callable[[], Iterable[Any]],
+    family: EdgeFamily,
+    edge: CandidateEdge,
+    rows: OwedRows,
+    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
     """Invariant 1 bound to an owed-row binding."""
     assert_database_legal_owed_row_is_handled(
@@ -440,13 +509,19 @@ def _owed_row_is_handled(
         effect_calls_for=rows.effect_calls_for,
         edge_row=family.edge_row,
         edge_model=family.model,
+        ends=ends,
     )
 
 
 def _owed_row_does_not_block_the_next(
-    name: str, selection: Callable[[], Iterable[Any]], family: EdgeFamily, edge: CandidateEdge, rows: OwedRows
+    name: str,
+    selection: Callable[[], Iterable[Any]],
+    family: EdgeFamily,
+    edge: CandidateEdge,
+    rows: OwedRows,
+    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
-    """Invariant 2 bound to an owed-row binding."""
+    """Invariant 2 bound to an owed-row binding; a stalled tick is not ended by anything, so ``ends`` is unread."""
     assert_inadmissible_owed_row_does_not_block_the_next(
         name=name,
         edge=edge,
@@ -472,6 +547,13 @@ def assert_the_loop_isolates_a_poisoned_row(name: str, selection: Callable[[], I
     the injected failure, and the poisoned row is still selected. Only an
     isolation failure is a :class:`~pytest_obligation.poison.PoisonNotIsolated`,
     and a declared gap names which one it expects (``"<proof>[unreported]"``).
+
+    A bound ``still_owed`` is checked against a row production served to
+    completion before the tick, in the state that tick leaves: it must say
+    that row is owed nowhere while it says the poisoned one is. One that
+    answers "is anything owed" instead (email unpark's reaper selection is
+    never empty while the healthy campaign's dispatcher is in flight) passes
+    every dropped row; that is a binding failure, which no poison gap absorbs.
     """
     history = _poisoned_row_history(
         name, selection, rows, proof="assert_one_poisoned_identity_does_not_stall_the_tick", proves="does not stall"
@@ -511,8 +593,10 @@ def _poisoned_row_history(
         f"step raises {proves}. Bind the seam the tick calls per identity (integrations.celery.refusing_publication for a "
         f"broker publication), or declare `{proof}` as a gap for a loop known not to"
     )
+    owned_next = rows.still_owed
+    settled = _served_to_completion(name, selection, rows) if owned_next is not None else None
     pair = _two_owed_in_selection_order(name, selection, rows.make_owed, rows.identity_of)
-    poisoned_row, owned_next = pair.rows[pair.head], rows.still_owed
+    poisoned_row = pair.rows[pair.head]
     before = list(rows.dispatched_ids())
     return PoisonedHistory(
         poison=rows.poison(poisoned_row),
@@ -520,22 +604,30 @@ def _poisoned_row_history(
         progressed=lambda: pair.behind in new_entries(before, list(rows.dispatched_ids())),
         # The light contract declares no lifecycle: still selected, or owed by the selection the step handed it to.
         still_owed=(
-            (lambda: _owed_next(name, owned_next, poisoned_row))
+            (lambda: _owed_next(name, owned_next, poisoned_row, settled))
             if owned_next is not None
             else (lambda: pair.head in _selected(selection, rows.identity_of))
         ),
     )
 
 
-def _owed_next(name: str, still_owed: Callable[[Any], bool], row: Any) -> bool:
+def _owed_next(name: str, still_owed: Callable[[Any], bool], row: Any, settled: Any) -> bool:
     owed = still_owed(row)
     # A truthy object (the row itself, a queryset) would pass every dropped row.
     assert isinstance(owed, bool), f"{name}: owed_rows.still_owed returned {type(owed).__name__}, not a bool"
+    # BINDING CHECK: in the same state, a row production served to completion is owed nowhere.
+    settled_owed = still_owed(settled)
+    assert settled_owed is False, (
+        f"{name}: owed_rows.still_owed reports a row the production step and its handoffs served to completion "
+        f"as still owed (it returned {settled_owed!r}), in the same tick in which it is asked about the poisoned "
+        f"row. It must say whether this row is owed by the selection the step handed it to; one that answers "
+        f"whether anything is owed passes every dropped row"
+    )
     return owed
 
 
-#: A per-edge owed-row proof: ``(name, selection, family, edge, rows)``.
-OwedRowProof = Callable[[str, Callable[[], Iterable[Any]], EdgeFamily, CandidateEdge, OwedRows], None]
+#: A per-edge owed-row proof: ``(name, selection, family, edge, rows, ends)``.
+OwedRowProof = Callable[[str, Callable[[], Iterable[Any]], EdgeFamily, CandidateEdge, OwedRows, FailureEnds], None]
 
 #: The per-edge owed-row proofs both contracts generate, keyed by the invariant
 #: name their case ids and gap keys use.

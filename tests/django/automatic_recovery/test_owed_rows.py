@@ -14,6 +14,7 @@ import functools
 from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 
 import pytest
 from celery import shared_task
@@ -24,11 +25,14 @@ from django.utils import timezone
 
 from pytest_obligation.host import current_host, hosted
 from pytest_obligation.integrations.django.edge_values import CandidateEdge
+from pytest_obligation.integrations.django.lifecycle_states import Lifecycle
 from pytest_obligation.integrations.django.owed_references import PrimitiveOwner, PrimitiveWork, owed_owners
 from pytest_obligation.integrations.django.owed_references import isolated_primitive as isolated_primitive
 from pytest_obligation.integrations.django.owed_rows import (
+    NOTHING_ENDS_A_FAILURE,
     OWED_ROW_PROOFS,
     EdgeFamily,
+    FailureEnds,
     OwedRowNotHandled,
     OwedRows,
     assert_a_soft_time_limit_ends_the_loop,
@@ -38,10 +42,12 @@ from pytest_obligation.integrations.django.owed_rows import (
     assert_the_loop_isolates_a_poisoned_row,
     assert_the_tick_dispatches_owed_rows_in_selection_order,
     assert_valid_owed_row_leaves_the_selection,
+    failure_ends_of_sweep,
 )
 from pytest_obligation.poison import (
     PoisonDropped,
     PoisonedIdentity,
+    PoisonNotIsolated,
     PoisonStalled,
     PoisonSwitch,
     PoisonUnreported,
@@ -51,7 +57,7 @@ from pytest_obligation.poison import (
     StopRequestSwallowed,
     stop_requests,
 )
-from pytest_obligation.profiles.automatic_recovery import declared_recovery_delay
+from pytest_obligation.profiles.automatic_recovery import DueWorkSweep, declared_recovery_delay
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +84,19 @@ def _owed() -> PrimitiveOwner:
 
 def _settle(owner: PrimitiveOwner) -> None:
     PrimitiveOwner.objects.filter(pk=owner.pk).update(completed_at=timezone.now())
+
+
+#: The terminal state of these owners' lifecycle: what a worker that gives up on a row writes.
+RETIRED = "retired"
+
+
+def _retire(owner_id: int) -> None:
+    PrimitiveOwner.objects.filter(pk=owner_id).update(value=RETIRED, completed_at=timezone.now())
+
+
+def _hand_off(owner_id: int) -> None:
+    """Settles the row here and claims it for another owner, as email unpark hands a campaign to the reaper."""
+    PrimitiveOwner.objects.filter(pk=owner_id).update(completed_at=timezone.now(), claimed_at=timezone.now())
 
 
 def _rejecting_blank(owner_id: int) -> None:
@@ -207,7 +226,7 @@ class _Tick:
                 if self.honours_stop and isinstance(error, SoftTimeLimitExceeded):
                     raise
                 if self.retires_failures:
-                    _settle(PrimitiveOwner.objects.get(pk=owner_id))
+                    _hand_off(owner_id)
                 failures.append(error)
         if failures and (not self.silent):
             raise ExceptionGroup("isolated recovery failures", failures)
@@ -219,6 +238,7 @@ def _handled(
     selection: Callable[[], QuerySet[PrimitiveOwner]] = owed_owners,
     *,
     dispatched_ids: Callable[[], list[int]] | None = None,
+    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
     assert_database_legal_owed_row_is_handled(
         name="self-test sweep",
@@ -229,13 +249,16 @@ def _handled(
         execute=worker,
         run_tick=_Tick(selection, worker, isolate=True).run,
         dispatched_ids=dispatched_ids,
+        ends=ends,
     )
 
 
-def _handled_inside_a_test_transaction(worker: Worker, edge: CandidateEdge) -> None:
+def _handled_inside_a_test_transaction(
+    worker: Worker, edge: CandidateEdge, *, ends: FailureEnds = NOTHING_ENDS_A_FAILURE
+) -> None:
     """As a contract that is not `transactional` runs: inside a transaction that never commits."""
     with transaction.atomic():
-        _handled(worker, edge)
+        _handled(worker, edge, ends=ends)
         transaction.set_rollback(True)
 
 
@@ -289,9 +312,9 @@ def _registering_a_no_op_commit_callback(owner_id: int) -> None:
     name="pytest_obligation.tests.profiles.automatic_recovery.test_owed_row_admissibility.notify_owner_after_commit_task"
 )
 def notify_owner_after_commit_task(owner_id: int, retire: bool = False) -> None:
-    """A follow-up whose post-commit notification raises; with ``retire`` it settles the row first."""
+    """A follow-up whose post-commit notification raises; with ``retire`` it retires the row first."""
     if retire:
-        _settle(PrimitiveOwner.objects.get(pk=owner_id))
+        _retire(owner_id)
 
     def notify() -> None:
         raise RuntimeError("notification fake missing")
@@ -311,6 +334,50 @@ def _handing_off_to_a_retiring_task_with_a_raising_notification(owner_id: int) -
 
 def _excluding_blank() -> QuerySet[PrimitiveOwner]:
     return owed_owners().exclude(value="")
+
+
+def _unclaimed() -> QuerySet[PrimitiveOwner]:
+    """A selection that skips a claimed row, as a lease does until it expires."""
+    return owed_owners().filter(claimed_at__isnull=True)
+
+
+def _retiring_then_rejecting_blank(owner_id: int) -> None:
+    """Retires the row, then fails a notification about a blank one: the raise comes after the end."""
+    blank = PrimitiveOwner.objects.get(pk=owner_id).value == ""
+    _retire(owner_id)
+    if blank:
+        raise ValueError("the notification about a retired blank row failed")
+
+
+def _deleting_then_rejecting_blank(owner_id: int) -> None:
+    """Deletes the row, then raises on blank: nothing can select it again."""
+    blank = PrimitiveOwner.objects.get(pk=owner_id).value == ""
+    PrimitiveOwner.objects.filter(pk=owner_id).delete()
+    if blank:
+        raise ValueError("cleanup after deleting a blank row failed")
+
+
+def _retired_examples(*, age: timedelta) -> list[PrimitiveOwner]:
+    return [PrimitiveOwner.objects.create(value=RETIRED, completed_at=timezone.now() - age)]
+
+
+def _terminal_ends() -> FailureEnds:
+    """What a profile-A contract over these owners projects: the state of its terminal examples, ``value``."""
+    sweep = DueWorkSweep(
+        name="self-test sweep",
+        due_work=owed_owners,
+        run_tick=lambda: 0,
+        make_owed=lambda *, age: _owed(),
+        make_terminal=_retired_examples,
+        recovery_delay=timedelta(0),
+        page_size=None,
+        lifecycle=Lifecycle(state_fields=("value",), execute=_retiring_blank),
+    )
+    return failure_ends_of_sweep(sweep, retries_bounded=False)
+
+
+#: A contract that claims profile J: its generated history ends a persistently failing row at the budget.
+RETRIES_BOUNDED = FailureEnds(retries_bounded=True)
 
 
 @pytest.mark.usefixtures("isolated_primitive")
@@ -401,11 +468,47 @@ class TestDatabaseLegalOwedRowIsHandled:
             _handled_inside_a_test_transaction(_handing_off_to_a_raising_notification, BLANK)
 
     def test_accepts_a_handed_off_task_that_retires_the_row_before_its_notification_raises(self):
-        _handled_inside_a_test_transaction(_handing_off_to_a_retiring_task_with_a_raising_notification, BLANK)
+        _handled_inside_a_test_transaction(
+            _handing_off_to_a_retiring_task_with_a_raising_notification, BLANK, ends=_terminal_ends()
+        )
 
     def test_rejects_a_handoff_chain_longer_than_it_judges(self):
         with pytest.raises(OwedRowNotHandled, match="still publishing after 20 deliveries"):
             _handled(_fanning_out, BLANK)
+
+
+@pytest.mark.usefixtures("isolated_primitive")
+class TestARaiseThatLeavesTheSelectionNeedsAnEnd:
+    """A raise after the chain moved the row out of the selection repeats later, unless something ends it."""
+
+    def test_rejects_a_raise_after_a_claim_hides_the_row(self):
+        # The email engine's shape: the claim takes the row out of the selection, the raise follows,
+        # and the expired lease hands the same row to the same raise.
+        with pytest.raises(
+            OwedRowNotHandled, match=r"value-blank .* after moving it out of the selection.*declares none"
+        ):
+            _handled(_stamping_then_rejecting_blank, BLANK, selection=_unclaimed)
+
+    def test_accepts_the_claiming_worker_for_a_value_it_handles(self):
+        _handled(_stamping_then_rejecting_blank, LONGEST, selection=_unclaimed)
+
+    def test_rejects_the_raise_when_the_row_is_in_no_terminal_state_of_the_sweep(self):
+        with pytest.raises(OwedRowNotHandled, match="in no terminal state of the sweep"):
+            _handled(_stamping_then_rejecting_blank, BLANK, selection=_unclaimed, ends=_terminal_ends())
+
+    def test_accepts_the_raise_when_profile_j_bounds_the_retry(self):
+        _handled(_stamping_then_rejecting_blank, BLANK, selection=_unclaimed, ends=RETRIES_BOUNDED)
+
+    def test_accepts_a_raise_after_the_row_ends_in_a_terminal_state(self):
+        _handled(_retiring_then_rejecting_blank, BLANK, ends=_terminal_ends())
+
+    def test_rejects_the_same_raise_where_the_contract_declares_no_terminal_state(self):
+        # A light contract has no terminal declaration: the end must be a fix or a declared gap.
+        with pytest.raises(OwedRowNotHandled, match="declares none"):
+            _handled(_retiring_then_rejecting_blank, BLANK)
+
+    def test_accepts_a_raise_after_the_row_is_deleted(self):
+        _handled(_deleting_then_rejecting_blank, BLANK, ends=_terminal_ends())
 
 
 @pytest.mark.usefixtures("isolated_primitive")
@@ -458,12 +561,27 @@ class TestValidOwedRowLeavesTheSelection:
 def test_an_edge_family_declared_on_another_model_is_rejected():
     proof = OWED_ROW_PROOFS["assert_database_legal_owed_row_is_handled"]
     with pytest.raises(AssertionError, match="are PrimitiveWork fields, but they would be written into PrimitiveOwner"):
-        proof("self-test sweep", owed_owners, EdgeFamily(model=PrimitiveWork), BLANK, _loop(_retiring_blank))
+        proof(
+            "self-test sweep",
+            owed_owners,
+            EdgeFamily(model=PrimitiveWork),
+            BLANK,
+            _loop(_retiring_blank),
+            NOTHING_ENDS_A_FAILURE,
+        )
 
 
 def test_the_binding_guard_rejects_a_step_written_in_the_test():
     with pytest.raises(AssertionError, match="owed_rows.execute"):
         assert_owed_row_bindings_are_production_bound("self-test sweep", _loop(_retiring_blank))
+
+
+def _owed_to_the_next_owner(owner: PrimitiveOwner) -> bool:
+    return PrimitiveOwner.objects.filter(pk=owner.pk, claimed_at__isnull=False).exists()
+
+
+def _anything_owed_to_the_next_owner(owner: PrimitiveOwner) -> bool:
+    return PrimitiveOwner.objects.filter(claimed_at__isnull=False).exists()
 
 
 def _settled(owner: PrimitiveOwner) -> bool:
@@ -632,8 +750,15 @@ class TestTheLoopIsolatesAPoisonedRow:
             assert_the_loop_isolates_a_poisoned_row("self-test sweep", owed_owners, rows)
 
     def test_reads_a_bound_still_owed_instead_of_the_selection(self):
-        rows = _poisonable_loop(isolate=True, retires=True).model_copy(update={"still_owed": _settled})
+        rows = _poisonable_loop(isolate=True, retires=True).model_copy(update={"still_owed": _owed_to_the_next_owner})
         assert_the_loop_isolates_a_poisoned_row("self-test sweep", owed_owners, rows)
+
+    @pytest.mark.parametrize("still_owed", [_anything_owed_to_the_next_owner, _settled])
+    def test_rejects_a_still_owed_that_reports_a_served_row_as_owed(self, still_owed):
+        rows = _poisonable_loop(isolate=True, retires=True).model_copy(update={"still_owed": still_owed})
+        with pytest.raises(AssertionError, match="served to completion as still owed") as raised:
+            assert_the_loop_isolates_a_poisoned_row("self-test sweep", owed_owners, rows)
+        assert not isinstance(raised.value, PoisonNotIsolated)
 
     def test_accepts_an_isolating_loop(self):
         assert_the_loop_isolates_a_poisoned_row("self-test sweep", owed_owners, _poisonable_loop(isolate=True))
