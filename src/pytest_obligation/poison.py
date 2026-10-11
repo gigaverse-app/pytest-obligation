@@ -188,19 +188,7 @@ class PoisonSwitch(MutableHarnessModel):
 
 def carries_poison(error: BaseException | None) -> bool:
     """Whether ``error`` carries a ``PoisonedIdentity``: itself, inside an exception group, or in its cause chain."""
-    seen: set[int] = set()
-    pending = [error]
-    while pending:
-        current = pending.pop()
-        if current is None or id(current) in seen:
-            continue
-        seen.add(id(current))
-        if isinstance(current, PoisonedIdentity):
-            return True
-        if isinstance(current, BaseExceptionGroup):
-            pending.extend(current.exceptions)
-        pending.extend((current.__cause__, current.__context__))
-    return False
+    return _carries(error, PoisonedIdentity)
 
 
 def assert_poison_is_isolated(
