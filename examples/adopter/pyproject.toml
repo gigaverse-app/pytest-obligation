@@ -20,6 +20,8 @@ pytest-obligation = { path = "../..", editable = true }
 
 [tool.due-work-harness]
 production-packages = ["adopter_app"]
+# The noticeboard invokes this injected queue port only after its SQL commit.
+bridge-methods = ["defer_notice"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

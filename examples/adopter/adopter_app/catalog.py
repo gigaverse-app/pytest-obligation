@@ -9,6 +9,7 @@ rather than treating the first receipt as the complete response.
 
 import sqlite3
 from collections.abc import Callable, Iterable
+from concurrent.futures import CancelledError
 from pathlib import Path
 
 
@@ -98,11 +99,20 @@ class Catalog:
             )
 
     def recover(self) -> None:
+        failures: list[Exception] = []
         for identity in self.eligible():
-            _, value, revision = self.reserved(identity)
-            # An ack alone cannot detect an older accepted request completing late.
-            if self.acknowledged(identity) != revision or self.read(identity) != value:
-                self.execute(identity)
+            try:
+                _, value, revision = self.reserved(identity)
+                # An ack alone cannot detect an older accepted request completing late.
+                if self.acknowledged(identity) != revision or self.read(identity) != value:
+                    self.execute(identity)
+            except CancelledError:
+                raise  # Cooperative shutdown ends this tick; every SQL owner survives it.
+            except Exception as error:
+                error.add_note(f"catalog product {identity}")
+                failures.append(error)
+        if failures:
+            raise ExceptionGroup("catalog reconciliation failed for some products", failures)
 
     def ingest_receipts(self) -> None:
         """Duplicates, batches and partial responses all accumulate the same durable facts."""

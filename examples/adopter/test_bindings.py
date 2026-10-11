@@ -7,6 +7,7 @@ results and all harness-owned assertions stay identical across executors.
 import json
 import sqlite3
 from collections.abc import Callable, Iterator
+from concurrent.futures import CancelledError
 from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 from functools import partial
@@ -24,12 +25,13 @@ from pytest_obligation import (
     Claim,
     Decline,
     ExecutionGate,
+    ExtraProof,
     NotApplicable,
     ObligationContract,
     Profile,
     ReplaySafeEffect,
 )
-from pytest_obligation.host import Host, hosted
+from pytest_obligation.host import Host, current_host, hosted
 from pytest_obligation.interleavings import (
     EvidenceArrival,
     EvidenceConfluence,
@@ -42,6 +44,8 @@ from pytest_obligation.interleavings import (
     ProviderControl,
 )
 from pytest_obligation.models import HarnessModel
+from pytest_obligation.poison import PoisonSwitch, assert_a_stop_request_ends_the_tick
+from pytest_obligation.profiles.automatic_recovery import assert_one_failing_row_does_not_stall_the_tick
 from pytest_obligation.profiles.catalog import ConvergenceFamily
 
 # Executor implementations are external to the application and may queue this callable.
@@ -100,7 +104,11 @@ def application() -> Iterator[ApplicationResources]:
         )
         try:
             with hosted(
-                Host(production_packages=frozenset({"adopter_app"}), in_transaction=lambda: catalog.db.in_transaction)
+                Host(
+                    production_packages=frozenset({"adopter_app"}),
+                    in_transaction=lambda: catalog.db.in_transaction,
+                    stop_exception=CancelledError,
+                )
             ):
                 yield ApplicationResources(
                     catalog=catalog, provider=provider, remote=remote, facts=facts, publications=events
@@ -317,64 +325,110 @@ def replay(run: Runner = inline) -> Iterator[ReplaySafeEffect]:
         )
 
 
-def catalog_contract(name: str, run: Runner = inline) -> ObligationContract:
-    """The same application guarantees through the chosen worker executor."""
-    return ObligationContract(
-        name=name,
-        profiles={
-            Profile.A: Decline("This small example exposes reconcile explicitly; it ships no periodic scheduler."),
-            Profile.B: NotApplicable("A single serial executor runs the example; no lease changes hands."),
-            Profile.C: Decline("Remote assignments are repeatable; reconciliation compares actual remote values."),
-            Profile.D: NotApplicable("The example has no pruning command; durable owners are retained."),
-            Profile.E: Claim(),
-            Profile.F: NotApplicable(
-                "Admission creates explicit obligation rows; recovery does not derive missing rows."
-            ),
-            Profile.G: Claim(),
-            Profile.H: Claim(),
-            Profile.I: Claim(),
-            Profile.J: NotApplicable("Reconciliation has no retry limit; it retains intent until convergence."),
-        },
-        eligibility=partial(gate, run),
-        replay=partial(replay, run),
-        admission={"publish": admission},
-        in_flight={
-            "catalog retirement": InFlightConvergence(
-                name="catalog retirement",
-                bind=partial(in_flight, run, retirement=True),
-                intents=("red", "green", "blue"),
-                seams=("publish",),
-                repair_seams=("publish",),
-                retirement=True,
-                independent=True,
-                transport=True,
-            ),
-            "catalog revisions": InFlightConvergence(
-                name="catalog revisions",
-                bind=partial(in_flight, run),
-                intents=("red", "green", "blue"),
-                seams=("publish",),
-                independent=True,
-                transport=True,
-            ),
-        },
-        evidence_confluence={
-            "delivery receipts": EvidenceConfluence(
-                name="delivery receipts",
-                bind=partial(evidence, run),
-                facts=("alice", "bob", "carol"),
-                batchable=True,
-                ordered_pair=("alice", "bob") if run is inline else None,
-                no_ordered_pair_because="This executor variant runs a serial worker on the main thread; the inline example tests separate actor connections.",
-                retry_turnover=True,
+def recovery_failures(*, stop: bool = False) -> None:
+    # ARRANGE: two approved SQL obligations; the older one reaches the failing provider first.
+    # REAL PRODUCTION: Catalog.recover selects and executes work, preserving SQL intent on failure.
+    # EXTERNAL SEAM: the remote writer refuses only the armed identity.
+    # OBSERVE: actual remote writes for progress, durable SQL owners for retained responsibility.
+    # This proves the application loop itself; executor shutdown/transport semantics have separate tests.
+    with application() as state:
+        catalog = state.catalog
+        switch = PoisonSwitch()
+        write = catalog.write
+
+        def checked_write(identity: int, value: str) -> None:
+            switch.check(identity)
+            write(identity, value)
+
+        catalog.write = checked_write
+        if stop:
+            interrupted = catalog.admit("red")
+            healthy = catalog.admit("blue")
+            assert_a_stop_request_ends_the_tick(
+                name="catalog reconciliation",
+                poison=switch.poisoned(interrupted),
+                run_tick=catalog.recover,
+                progressed=lambda: healthy in state.remote,
+                still_owed=lambda: interrupted in catalog.owed(),
             )
-        },
-        convergence_families={
-            ConvergenceFamily.STALE_SNAPSHOTS: NotApplicable(
-                "No separate snapshot merge API; in-flight revisions exercise the worker."
+        else:
+            assert_one_failing_row_does_not_stall_the_tick(
+                name="catalog reconciliation",
+                make_owed=lambda: catalog.admit("red"),
+                run_tick=catalog.recover,
+                switch=switch,
+                dispatched_ids=lambda: list(state.remote),
+                still_owed=lambda identity: identity in catalog.owed(),
+            )
+
+
+def catalog_contract(name: str, run: Runner = inline, *, fixtures: tuple[str, ...] = ()) -> ObligationContract:
+    """The same application guarantees through the chosen worker executor."""
+    # Declaration-time guards run before application() enters its runtime host.
+    # Enroll the same application without changing the importing executor's host.
+    host = current_host()
+    with hosted(host.model_copy(update={"production_packages": host.production_packages | {"adopter_app"}})):
+        return ObligationContract(
+            name=name,
+            fixtures=fixtures,
+            profiles={
+                Profile.A: Decline("This small example exposes reconcile explicitly; it ships no periodic scheduler."),
+                Profile.B: NotApplicable("A single serial executor runs the example; no lease changes hands."),
+                Profile.C: Decline("Remote assignments are repeatable; reconciliation compares actual remote values."),
+                Profile.D: NotApplicable("The example has no pruning command; durable owners are retained."),
+                Profile.E: Claim(),
+                Profile.F: NotApplicable(
+                    "Admission creates explicit obligation rows; recovery does not derive missing rows."
+                ),
+                Profile.G: Claim(),
+                Profile.H: Claim(),
+                Profile.I: Claim(),
+                Profile.J: NotApplicable("Reconciliation has no retry limit; it retains intent until convergence."),
+            },
+            extras=(
+                ExtraProof(name="recovery-poison", run=recovery_failures),
+                ExtraProof(name="recovery-stop", run=partial(recovery_failures, stop=True)),
             ),
-            ConvergenceFamily.MONOTONIC_RESULTS: NotApplicable(
-                "The product accepts reversible colors; receipts use evidence confluence."
-            ),
-        },
-    )
+            eligibility=partial(gate, run),
+            replay=partial(replay, run),
+            admission={"publish": admission},
+            in_flight={
+                "catalog retirement": InFlightConvergence(
+                    name="catalog retirement",
+                    bind=partial(in_flight, run, retirement=True),
+                    intents=("red", "green", "blue"),
+                    seams=("publish",),
+                    repair_seams=("publish",),
+                    retirement=True,
+                    independent=True,
+                    transport=True,
+                ),
+                "catalog revisions": InFlightConvergence(
+                    name="catalog revisions",
+                    bind=partial(in_flight, run),
+                    intents=("red", "green", "blue"),
+                    seams=("publish",),
+                    independent=True,
+                    transport=True,
+                ),
+            },
+            evidence_confluence={
+                "delivery receipts": EvidenceConfluence(
+                    name="delivery receipts",
+                    bind=partial(evidence, run),
+                    facts=("alice", "bob", "carol"),
+                    batchable=True,
+                    ordered_pair=("alice", "bob") if run is inline else None,
+                    no_ordered_pair_because="This executor variant runs a serial worker on the main thread; the inline example tests separate actor connections.",
+                    retry_turnover=True,
+                )
+            },
+            convergence_families={
+                ConvergenceFamily.STALE_SNAPSHOTS: NotApplicable(
+                    "No separate snapshot merge API; in-flight revisions exercise the worker."
+                ),
+                ConvergenceFamily.MONOTONIC_RESULTS: NotApplicable(
+                    "The product accepts reversible colors; receipts use evidence confluence."
+                ),
+            },
+        )
