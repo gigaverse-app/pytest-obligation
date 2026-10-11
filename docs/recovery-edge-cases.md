@@ -1,5 +1,9 @@
 # Recovery must survive the rows normal writers never create
 
+> Historical scope: the remaining reusable harness checks and Due integration are
+> now covered by the [complete port](backend-harness-port.md). The ownership decisions below
+> describe the earlier extraction; application runtime/data cutover remains separate.
+
 A recovery query reads persisted rows, including values that model validation
 would refuse today. A green test over a valid example does not establish that an
 empty filename, retired choice, or exhausted integer counter is recoverable.

@@ -76,7 +76,8 @@ rather than guessing.
 Invariant 11 needs the host's ``ambient_context``. It is deliberately not in
 :data:`DUE_WORK_PROOFS`: a host that defines no ambient context has nothing to
 restore, and a proof that passed silently there would claim a tenancy guarantee
-nobody checked. Add :data:`AMBIENT_CONTEXT_PROOFS` when your host defines one;
+nobody checked. Django hosts add :data:`AMBIENT_CONTEXT_PROOFS` when configured
+with ``ambient_context``; custom hosts must include them explicitly. In either case,
 the proof fails, naming the capability, if it is applied to a host that does not.
 
 Usage — implement :class:`DueWorkSweep` for the domain and call

@@ -110,6 +110,7 @@ The `--due-work-*` options, `due-work-harness` command, and
 `[tool.due-work-harness]` configuration remain supported.
 [See the compatibility and migration guide](docs/package-migration.md).
 Recovery loops also have [poison isolation, cooperative-stop and database-legal row checks](docs/recovery-edge-cases.md).
+The [complete backend harness port](docs/backend-harness-port.md) includes Due work-table conformance and reusable source-policy checks.
 
 Install the Python test library **in the application you want to test** (Python
 3.11+). Choose your package manager; add an optional extra only for an

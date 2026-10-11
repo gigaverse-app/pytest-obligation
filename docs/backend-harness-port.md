@@ -94,3 +94,23 @@ The work-table gap is filled by Due #5. This completes library extraction, not
 BE's production runtime/data cutover: retained receipts, table identity, queued
 task aliases, tenant routing and all application journeys still need a separate
 migration. No backend production code or database is changed by this port.
+
+## Verification
+
+The complete Due suite ran against this obligation source with isolated
+PostgreSQL 17 and Redis: **823 passed**, including real Celery worker and
+process-death histories. CI also installs the built candidate wheel into Due's
+locked environment and requires executed A–J and application reports.
+
+Core plus the example adopter: **1,078 passed, one optional-dependency skip,
+three inventory cases deselected**; the example inventory runs separately in CI.
+The static coverage suite includes the extracted backend controls and new
+negative controls for stale/growing exceptions, broken scheduling declarations,
+unreadable production and counterfeit Due suite decorators.
+
+Against the real backend source at the extraction revision, the public engines
+matched all **78 task definitions**, validated **40 Beat entries and 24 task
+classifications**, found the identical **two transaction-held publication paths**,
+and matched the **five reviewed hand-called proofs across 932 test modules**.
+The same backend-reviewed exceptions passed unchanged. These comparisons ran in
+a disposable backend archive with dummy settings; application code was not edited.

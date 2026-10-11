@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
-from pytest_obligation.coverage.project import Project
+from pytest_obligation.coverage.project import Project, terminal_name
 from pytest_obligation.models import HarnessModel
 
 
@@ -43,14 +43,6 @@ _NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDe
 class _Callable:
     path: str
     node: _Function
-
-
-def _call_name(expression: ast.expr) -> str | None:
-    if isinstance(expression, ast.Name):
-        return expression.id
-    if isinstance(expression, ast.Attribute):
-        return expression.attr
-    return None
 
 
 def _module_source(module: str, project: Project) -> Path | None:
@@ -102,7 +94,7 @@ def _task_definitions(project: Project) -> dict[str, _Callable]:
                 continue
             for decorator in node.decorator_list:
                 target = decorator.func if isinstance(decorator, ast.Call) else decorator
-                if _call_name(target) == "shared_task":
+                if terminal_name(target) == "shared_task":
                     default = f"{module}.{node.name}"
                     name = _registered_name(decorator, default, tree, project)
                     tasks[name] = _Callable(default, node)
@@ -143,7 +135,7 @@ def _references(node: ast.AST, name: str) -> bool:
 
 
 def _opens_a_tick(node: ast.AST) -> bool:
-    return any(isinstance(child, ast.Call) and _call_name(child.func) == "recovery_tick" for child in ast.walk(node))
+    return any(isinstance(child, ast.Call) and terminal_name(child.func) == "recovery_tick" for child in ast.walk(node))
 
 
 def _tick_opener(task: _Callable, tick: RecoveryTick, project: Project) -> _Callable | str:
@@ -219,7 +211,7 @@ def _declared_stale_after(opener: _Callable, default_stale_after: timedelta) -> 
     """
     declared: set[timedelta | str] = set()
     for call in ast.walk(opener.node):
-        if not (isinstance(call, ast.Call) and _call_name(call.func) == "recovery_tick"):
+        if not (isinstance(call, ast.Call) and terminal_name(call.func) == "recovery_tick"):
             continue
         heartbeat = _keyword(call, "heartbeat")
         if isinstance(heartbeat, ast.Constant) and heartbeat.value is False:
@@ -229,7 +221,7 @@ def _declared_stale_after(opener: _Callable, default_stale_after: timedelta) -> 
             declared.add(default_stale_after)
         elif (
             isinstance(value, ast.Call)
-            and _call_name(value.func) == "timedelta"
+            and terminal_name(value.func) == "timedelta"
             and not value.args
             and all(isinstance(keyword.value, ast.Constant) for keyword in value.keywords)
         ):

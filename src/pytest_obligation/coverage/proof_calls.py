@@ -8,6 +8,7 @@ It does not resolve local proof aliases or reflective getattr calls.
 import ast
 from collections.abc import Iterator, Mapping
 
+from pytest_obligation.coverage.project import dotted_parts, terminal_name
 from pytest_obligation.models import HarnessModel
 
 _HARNESS_PACKAGES = ("pytest_obligation", "due_work_harness", "due.django.conformance")
@@ -51,26 +52,6 @@ def _harness_names(tree: ast.Module) -> tuple[set[str], set[str]]:
     return proofs, modules
 
 
-def _called_name(call: ast.Call) -> str | None:
-    """``f(...)`` -> ``f``; ``module.f(...)`` -> ``f``."""
-    if isinstance(call.func, ast.Name):
-        return call.func.id
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr
-    return None
-
-
-def _dotted(expression: ast.expr) -> list[str] | None:
-    """``a.b.c`` -> ``["a", "b", "c"]``; None for anything but a name chain."""
-    parts: list[str] = []
-    while isinstance(expression, ast.Attribute):
-        parts.append(expression.attr)
-        expression = expression.value
-    if not isinstance(expression, ast.Name):
-        return None
-    return [expression.id, *reversed(parts)]
-
-
 def _extra_proof_runners(tree: ast.Module) -> set[int]:
     """
     Node ids of the runners passed to ``ExtraProof``: the sanctioned way to apply a configured proof.
@@ -83,7 +64,7 @@ def _extra_proof_runners(tree: ast.Module) -> set[int]:
     }
     runners: set[int] = set()
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call) and _called_name(node) == "ExtraProof"):
+        if not (isinstance(node, ast.Call) and terminal_name(node.func) == "ExtraProof"):
             continue
         passed = [keyword.value for keyword in node.keywords if keyword.arg == "run"] + node.args[1:2]
         for runner in passed:
@@ -98,7 +79,8 @@ def _proof_called(call: ast.Call, proofs: set[str], modules: set[str]) -> str | 
     if isinstance(call.func, ast.Name) and call.func.id in proofs:
         return call.func.id
     if isinstance(call.func, ast.Attribute) and call.func.attr.startswith("assert_"):
-        owner = _dotted(call.func.value)
+        parts = dotted_parts(call.func.value)
+        owner = None if parts is None else [parts[0], *parts[1]]
         if owner is not None and (owner[0] in modules or _in_harness(".".join(owner))):
             return call.func.attr
     return None
