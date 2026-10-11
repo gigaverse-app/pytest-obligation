@@ -2781,6 +2781,9 @@ celery = [
 dbos = [
     { name = "dbos" },
 ]
+debt = [
+    { name = "pyyaml" },
+]
 django = [
     { name = "django", version = "5.2.17", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "django", version = "6.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -2823,6 +2826,7 @@ dev = [
     { name = "django-stubs" },
     { name = "pyrefly" },
     { name = "pytest-xdist" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 lint = [
@@ -2850,6 +2854,7 @@ requires-dist = [
     { name = "pymongo", marker = "extra == 'mongodb'", specifier = ">=4.9,<4.18" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-django", marker = "extra == 'django'", specifier = ">=4.8" },
+    { name = "pyyaml", marker = "extra == 'debt'", specifier = ">=6" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
     { name = "redis", marker = "extra == 'rq'", specifier = ">=5.0" },
     { name = "rq", marker = "extra == 'rq'", specifier = ">=2.6" },
@@ -2857,7 +2862,7 @@ requires-dist = [
     { name = "time-machine", marker = "extra == 'redis'", specifier = ">=2.10" },
     { name = "time-machine", marker = "extra == 'rq'", specifier = ">=2.10" },
 ]
-provides-extras = ["aiokafka", "celery", "dbos", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "rq"]
+provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "rq"]
 
 [package.metadata.requires-dev]
 demos = [
@@ -2871,6 +2876,7 @@ dev = [
     { name = "django-stubs", specifier = ">=5.1" },
     { name = "pyrefly", specifier = ">=1.0,<2" },
     { name = "pytest-xdist", specifier = ">=3.6" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.8" },
 ]
 lint = [

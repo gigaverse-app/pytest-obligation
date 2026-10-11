@@ -19,6 +19,7 @@ from pytest_obligation.contract import (
 from pytest_obligation.host import current_host
 from pytest_obligation.integrations.django.edge_values import CandidateEdge, model_edges
 from pytest_obligation.integrations.django.owed_rows import (
+    NOTHING_ENDS_A_FAILURE,
     OWED_ROW_PROOFS,
     EdgeFamily,
     OwedRowNotHandled,
@@ -29,6 +30,7 @@ from pytest_obligation.integrations.django.owed_rows import (
     assert_the_loop_isolates_a_poisoned_row,
     assert_the_tick_dispatches_owed_rows_in_selection_order,
     assert_valid_owed_row_leaves_the_selection,
+    failure_ends_of_sweep,
     owed_rows_of_sweep,
 )
 from pytest_obligation.models import HarnessModel
@@ -44,13 +46,25 @@ def owed_row_edges(contract: ObligationContract) -> tuple[CandidateEdge, ...]:
 
 
 def _owed_row_runner(
-    sweep_factory: Callable[[], Any], model: type[Model], proof: OwedRowProof, edge: CandidateEdge
+    sweep_factory: Callable[[], Any],
+    model: type[Model],
+    proof: OwedRowProof,
+    edge: CandidateEdge,
+    *,
+    retries_bounded: bool,
 ) -> Callable[[], None]:
     def run() -> None:
         with _entered(sweep_factory) as sweep:
-            proof(sweep.name, sweep.due_work, EdgeFamily(model=model), edge, owed_rows_of_sweep(sweep, model))
+            ends = failure_ends_of_sweep(sweep, retries_bounded=retries_bounded)
+            proof(sweep.name, sweep.due_work, EdgeFamily(model=model), edge, owed_rows_of_sweep(sweep, model), ends)
 
     return run
+
+
+def retries_are_bounded(contract: ObligationContract) -> bool:
+    """Only a gapless J claim proves persistently failing work ends at its budget."""
+    disposition = contract.profiles[Profile.J]
+    return isinstance(disposition, Claim) and not disposition.gaps
 
 
 def _owed_row_cases(contract: ObligationContract) -> list[Any]:
@@ -73,7 +87,9 @@ def _owed_row_cases(contract: ObligationContract) -> list[Any]:
                 id=f"{Profile.A.case_prefix}-{key}",
                 profile=Profile.A,
                 family="owed-row-admissibility",
-                run=_owed_row_runner(contract.sweep, contract.owed_model, proof, edge),
+                run=_owed_row_runner(
+                    contract.sweep, contract.owed_model, proof, edge, retries_bounded=retries_are_bounded(contract)
+                ),
                 fixtures=contract.fixtures,
             )
             params.append(pytest.param(case, id=case.id, marks=marks))
@@ -145,7 +161,11 @@ def _owed_row_selection_cases(selection: ScheduledSelection) -> list[Any]:
         (_LOOP_STOP_CASE, partial(assert_a_soft_time_limit_ends_the_loop, name, due_work), None),
     ]
     checks.extend(
-        (case.key, partial(case.proof, name, due_work, case.family, case.edge), OwedRowNotHandled)
+        (
+            case.key,
+            lambda rows, case=case: case.proof(name, due_work, case.family, case.edge, rows, NOTHING_ENDS_A_FAILURE),
+            OwedRowNotHandled,
+        )
         for case in _owed_row_edge_cases(selection)
     )
     params: list[Any] = []

@@ -295,6 +295,9 @@ class Host(HarnessModel):
     #: Run commit callbacks as they would after the worker commits, including under test transactions.
     commit_scope: Callable[[], AbstractContextManager[Any]] = nullcontext
     #: Enumerate and validate integration-owned owed-row cases without importing a framework in core.
+    #: Optional framework check for a claimed absence of a retry budget in the recovery selection.
+    assert_no_retry_budget: Callable[[str, Callable[[], Any]], None] | None = None
+
     owed_row_cases: Callable[[Any], list[Any]] | None = None
     owed_row_gap_names: Callable[[Any], set[str]] | None = None
 

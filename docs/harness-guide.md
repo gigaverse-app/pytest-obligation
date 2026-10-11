@@ -131,3 +131,21 @@ that a recovery tick is required to restore.
 A passing proof establishes the bound behavior over the histories it executed.
 It does not prove all schedules, all database values or exactly-once external
 execution. Keep those limits visible in the application's own adoption report.
+
+## Checked declarations and debt
+
+[The debt baseline guide](debt-baseline.md) explains how to prevent generated
+expected failures from silently accumulating.
+
+With the Django host, profile J `NotApplicable` now inspects the production
+selection for integer attempt/retry/rearm counter comparisons. It rejects a
+visible retry budget. Time comparisons such as `retry_at__lte` are not counters;
+application code and computed annotations can still contain budgets this scan
+cannot detect.
+
+Owed-row checks also reject exceptions after a claim or backoff removes a row
+from the selection. A native contract must prove a terminal state or claim J
+without gaps. A light selection has neither guarantee and must fix or explicitly
+record the defect. A `still_owed` binding must answer for the specific row: the
+harness checks that a row served to completion is no longer owed while the
+poisoned row remains owed.

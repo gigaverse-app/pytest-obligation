@@ -158,3 +158,15 @@ def test_reviewed_proof_calls_must_exist_and_have_reasons():
     assert_declared_proofs(sources, reviewed={key: "checks application-specific reporting alongside the oracle"})
     with pytest.raises(AssertionError, match="stale"):
         assert_declared_proofs({}, reviewed={key: "an old call that was subsequently removed"})
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from pytest_obligation.evidence.observation import assert_observation as check\ncheck(actual, expected)",
+        "import pytest_obligation.evidence.observation as checks\nchecks.assert_observation(actual, expected)",
+        "from due.django import conformance as checks\nchecks.assert_observation(actual, expected)",
+    ],
+)
+def test_observation_equality_is_not_a_standalone_proof(source: str) -> None:
+    assert list(proof_calls("test_product.py", source)) == []

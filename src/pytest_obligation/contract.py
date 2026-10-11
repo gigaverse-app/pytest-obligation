@@ -142,7 +142,7 @@ import inspect
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from enum import Enum
-from functools import wraps
+from functools import partial, wraps
 from typing import Any, TypeAlias
 
 import pytest
@@ -166,6 +166,7 @@ from pytest_obligation.crash_histories import (
     HistoriesDiverged,
     assert_crash_at_every_commit_converges,
 )
+from pytest_obligation.debt import DebtEntry, debt_mismatch
 from pytest_obligation.helpers import proof_context
 from pytest_obligation.host import current_host
 from pytest_obligation.interleavings.adapters import integration as interleaving_integration
@@ -1281,11 +1282,42 @@ def _assessment_case(
     return pytest.param(case, id=case.id, marks=row.marks)
 
 
+def _retry_budget_assessment(contract: ObligationContract, disposition: NotApplicable) -> Any:
+    """
+    The J ``NotApplicable`` row of a contract with a sweep, checked against that sweep's selection.
+
+    A row that runs nothing let a contract say no retry budget exists while its own sweep
+    selected ``attempts__lt=10``; the row now enters the sweep and refuses a counter comparison.
+    """
+    assert contract.sweep is not None
+
+    def no_retry_budget(sweep: DueWorkSweep) -> None:
+        current_host().require("assert_no_retry_budget")(sweep.name, sweep.due_work)
+
+    case = ContractCase(
+        id=f"{Profile.J.case_prefix}-not_applicable",
+        run=_proof_runner(contract.sweep, no_retry_budget),
+        fixtures=contract.fixtures,
+        profile=Profile.J,
+        assessment=disposition,
+    )
+    return pytest.param(case, id=case.id, marks=_database_marks(contract.transactional))
+
+
 def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[Profile, ...]) -> list[Any]:
     """Generate each declared flat proof exactly once with common fixtures and gap handling."""
     params: list[Any] = []
     for profile in scope:
         disposition = contract.profiles[profile]
+        if (
+            profile is Profile.J
+            and isinstance(disposition, NotApplicable)
+            and isinstance(contract, ObligationContract)
+            and _claims_recovery(contract)
+            and current_host().assert_no_retry_budget is not None
+        ):
+            params.append(_retry_budget_assessment(contract, disposition))
+            continue
         if not isinstance(disposition, Claim):
             params.append(_assessment_case(contract, profile, disposition))
             continue
@@ -1483,7 +1515,31 @@ def _install_suite(cls: type, params: list[Any], test_name: str, doc: str) -> ty
     run_case.__qualname__ = f"{cls.__qualname__}.{test_name}"
     run_case.__doc__ = doc
     setattr(cls, test_name, run_case)
+    suite = f"{cls.__module__}.{cls.__qualname__}"
+    cls.__due_work_debt__ = staticmethod(partial(debt_mismatch, suite, declared_debt(params)))
     return cls
+
+
+def declared_debt(params: list[Any]) -> list[DebtEntry]:
+    """
+    Every strict xfail among a suite's generated cases, as the baseline records it.
+
+    Read from the generated parameters themselves, so every gap shape — a disposition, a
+    ``gaps=`` entry, an interleaving ``KnownFailure``, a poison or handoff gap — counts the
+    moment the generator marks it, with no second list of shapes to keep in step.
+    """
+    debt: list[DebtEntry] = []
+    for parameter in params:
+        xfail = next((mark for mark in parameter.marks if mark.name == "xfail" and mark.kwargs.get("strict")), None)
+        if xfail is None:
+            continue
+        case = parameter.values[0]
+        assert isinstance(case, ContractCase), f"{parameter.id}: a generated case must carry its ContractCase"
+        if isinstance(case.assessment, NotAssessed):
+            debt.append(DebtEntry(case=case.id, kind="binding-debt", reason=case.assessment.because))
+        else:
+            debt.append(DebtEntry(case=case.id, kind="known-defect", reason=xfail.kwargs["reason"]))
+    return debt
 
 
 def safety_contract_suite(contract: SafetyContract) -> Callable[[type], type]:
