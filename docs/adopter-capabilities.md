@@ -71,7 +71,7 @@ actual execution model supplies them:
 
 | Adopter | Binding and observation | Result and limits |
 | --- | --- | --- |
-| Saleor automatic completion | `owed_model=Checkout`, the real completion task in `Lifecycle.execute`, captured Celery publications and bounded delivery of their follow-up tasks | Every database-legal checkout edge is delivered to the worker. Empty currency and an arbitrary three-character currency remain selected after a money mismatch: two precise strict gaps. Other existing A findings remain. |
+| Saleor automatic completion | `owed_model=Checkout`, the real completion task in `Lifecycle.execute`, captured Celery publications and bounded delivery of their follow-up tasks | Every database-legal checkout edge is delivered to the worker. Empty, whitespace-only and arbitrary three-character currencies remain selected after a money mismatch: three precise strict gaps. Other existing A findings remain. |
 | Saleor related billing addresses | `ScheduledSelection` + `OwedRows` + `EdgeFamily(Address, edge_row=...)`, projected from the same sweep | Addresses are separate copies per checkout, so poisoning one cannot alter the healthy tail's address. Generated controls require successful service of the unmodified row and real dispatch order. |
 | Saleor poison/stop | `still_owed` consumes the checkout identity and reads the actual production selection; `progressed` observes an order | A publication counter cannot substitute for completion in the native poison proof. The Beat publisher still abandons the tail on refusal; its soft time limit propagates. |
 | Wagtail database worker | The real `Worker.run` selection at its claim boundary; `Worker.run_task`; task model edges; successful completion signals normalized to model UUIDs | Its READY partial index is verified against PostgreSQL's catalog. Ordinary receiver failure and an injected cooperative stop both make the task FAILED, outside recovery. Both are specific `[dropped]` gaps. Blank and maximum-length unconfigured queue names raise again during error reporting and abandon the healthy tail: two further edge-specific gaps. |
@@ -102,3 +102,5 @@ setup/teardown and failed proofs are rejected; strict expected failures remain
 executed evidence, not passing guarantees. The catalog's mutation controls also
 reject aborting the loop, deleting failed intent, swallowing the report, and
 isolating cancellation as an ordinary failure.
+
+The whitespace catalog also exposes django-tasks-db’s unconfigured-queue failure: a whitespace-only queue is selected, `InvalidTask` escapes after the claim, and error reporting abandons the healthy tail. These two cases remain separate strict gaps alongside the blank and maximum-length queue findings. The upstream demo CI reproduced all three new whitespace findings before the declarations were added; no production predicate, worker or oracle was changed.
