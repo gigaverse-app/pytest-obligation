@@ -515,7 +515,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: gigaverse-app/due
-          ref: 43b88af5f92ab324f9e49c576eb3599c8bb53e32
+          ref: 286e6943afbc1efce1fb1e35c49fdf17f3deb400
           path: .upstream/due
       - uses: astral-sh/setup-uv@v7
         with:
