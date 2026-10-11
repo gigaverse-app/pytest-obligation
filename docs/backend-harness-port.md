@@ -6,9 +6,11 @@ The reusable backend harness is split between two public owners:
 work-table runtime. Install Due's `testing` extra for that integration. Do not
 copy it back into this package or bind it to a second implementation of Due.
 
-The extraction source is gigaverse-backend `04786fb2d`. Due's full integration is
-in [Due #5](https://github.com/gigaverse-app/due/pull/5), at
-`d682f93cd8c1862f0f5b49e2e6cca9957db2f742`. This repository's CI installs its
+The extraction source is gigaverse-backend `04786fb2d`. Due's core integration landed in
+[Due #5](https://github.com/gigaverse-app/due/pull/5);
+[Due #9](https://github.com/gigaverse-app/due/pull/9) completes the scheduler and
+interleaving adapters, bounded downstream handoff recovery, query-scale proof,
+and the remaining mutation controls. This repository's CI installs its
 candidate wheel over that checkout's locked obligation dependency, then runs the
 complete suite and requires both primitive and application evidence reports.
 
@@ -19,10 +21,10 @@ complete suite and requires both primitive and application evidence reports.
 | `contract`, binding guards, poison, profiles A–J, exemptions, observations, interleavings | `pytest_obligation`; `DueWorkContract` becomes `ObligationContract` |
 | Recovery sweep and poison/stop proofs | `pytest_obligation.profiles.automatic_recovery` and `.poison` |
 | Lifecycle, edge catalog, owed rows, observed writes and lock order | `pytest_obligation.integrations.django` |
-| Handoff crash histories | `pytest_obligation.crash_histories`; scoped arrangements and delivery sessions own downstream recovery |
+| Handoff crash histories | `pytest_obligation.crash_histories`; scoped arrangements, independent `expected` oracles and production-bound `recovery_ticks`; Due delivery runs bounded downstream rounds |
 | Celery schedule evidence, publications and handoffs | `pytest_obligation.integrations.celery` |
 | All 15 `work_table` modules | `due.django.conformance`: bindings, suite, scenarios, recovery isolation, discovery admissibility, observations, composition, concurrency, indexes, database, enrollment, collected effects, collection validation and reporting |
-| Full simulated broker, delayed retries, failure accounting, worker connections and registration fixtures | `due.django.conformance.background`, `.worker_connection`, `.registrations` |
+| Full simulated broker, delayed retries, failure accounting, worker connections and registration fixtures | `due.django.conformance.background`, `.worker_connection`, `.registrations`, `.background_beat`, `.interleavings` |
 | Primitive-derived enrollment/session outcomes | Due's pytest plugin and `_suite_inventory`; application source roots and registration fixture remain explicit |
 | Source/disposition coverage | `pytest_obligation.coverage`; recognizes Due's exact `effect_contract_suite` decorator as well as generic suites |
 | Transitive publication-before-commit tripwire | `pytest_obligation.coverage.transactions` |
@@ -90,7 +92,7 @@ BE's `extended` setting to the public `deep` mode deliberately.
 The earlier [migration rehearsal](plans/backend-migration-audit.md) remains
 historical evidence: native/light consumers matched 98 cases (90 passed, eight
 unchanged strict expected failures), but the work-table port did not exist then.
-The work-table gap is filled by Due #5. This completes library extraction, not
+The work-table gap is filled by Due #5 and #9. This completes library extraction, not
 BE's production runtime/data cutover: retained receipts, table identity, queued
 task aliases, tenant routing and all application journeys still need a separate
 migration. No backend production code or database is changed by this port.
@@ -98,11 +100,11 @@ migration. No backend production code or database is changed by this port.
 ## Verification
 
 The complete Due suite ran against this obligation source with isolated
-PostgreSQL 17 and Redis: **823 passed**, including real Celery worker and
+PostgreSQL 17 and Redis: **823 passed before the final mutation controls**, including real Celery worker and
 process-death histories. CI also installs the built candidate wheel into Due's
 locked environment and requires executed A–J and application reports.
 
-Core plus the example adopter: **1,078 passed, one optional-dependency skip,
+Core plus the example adopter: **1,083 passed, one optional-dependency skip,
 three inventory cases deselected**; the example inventory runs separately in CI.
 The static coverage suite includes the extracted backend controls and new
 negative controls for stale/growing exceptions, broken scheduling declarations,
@@ -114,3 +116,19 @@ classifications**, found the identical **two transaction-held publication paths*
 and matched the **five reviewed hand-called proofs across 932 test modules**.
 The same backend-reviewed exceptions passed unchanged. These comparisons ran in
 a disposable backend archive with dummy settings; application code was not edited.
+
+The migration audit also found three controls that import parity misses.
+`HandoffHistory.expected` accepts a value or pre-transition handle callback; a
+consistently wrong delivered result fails outside known-gap handling.
+`recovery_ticks` are checked as production bindings and require a delivery with
+`recover_with(ticks)` support, so unsupported adapters cannot silently omit them.
+Due advances three bounded recovery rounds beyond leases and pending ETAs, runs
+the primary and downstream ticks, lifts task-instance recorders, and rejects
+unobserved queued work. Consumers can configure the round count and delay.
+
+Due's final controls cover generated eligibility (including same-value SQL and
+writable CTE mutations), dependent wakes, receipt repair, rejection policy and
+simple-callback races. Its shared retained-history proof measures total PostgreSQL
+reads, checks equivalent renamed indexes, and rejects full-history scans and
+missing access paths. Historical BE migration schemas, alert configuration and
+application-specific evidence-boundary allowlists retain their application owner.

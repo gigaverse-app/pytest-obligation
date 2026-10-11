@@ -55,7 +55,8 @@ Seven families of histories must reach that same outcome:
   rewritten as failed, or retried and run a second time.
 
 The verdict is differential: the adopter supplies how to arrange the state, the
-real transition and an observation, never the expected value. Positive
+real transition and an observation. An optional ``expected`` value or handle callback
+pins an independent product outcome, including when every history agrees incorrectly. Positive
 controls keep agreement honest: normal operation must change the observation
 and reach the same observation when run twice (or nothing could be compared with it),
 the transition must commit, every interrupted run must actually be interrupted,
@@ -94,8 +95,8 @@ in this order (the same rule in every host, and in the Gigaverse backend's copy)
 
 What these histories do not claim:
 
-* The delivered outcome is whatever production does in normal operation;
-  whether that is the right product behaviour is for behaviour goldens.
+* Without ``expected``, the delivered outcome is whatever production does in
+  normal operation; product correctness remains the behavior goldens' job.
 * Commits are counted where the host's worker killer counts them, typically the
   calling thread's default connection. Work committed on another connection is
   neither counted nor interrupted.
@@ -111,8 +112,9 @@ import concurrent.futures
 import traceback
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
+from enum import Enum, auto
 from inspect import getattr_static, isasyncgen, isawaitable, iscoroutine, iscoroutinefunction, isgenerator
-from typing import Any, Generic, NamedTuple, Protocol, TypeAlias, TypeVar
+from typing import Any, Generic, NamedTuple, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
 from pytest_obligation.helpers import proof_context
@@ -196,6 +198,10 @@ HandleT = TypeVar("HandleT")
 ObservationT = TypeVar("ObservationT")
 
 
+class _ExpectedOutcome(Enum):
+    UNSPECIFIED = auto()
+
+
 class HandoffHistory(HarnessModel, Generic[HandleT, ObservationT]):
     """
     One production transition that commits work and hands work off.
@@ -217,6 +223,10 @@ class HandoffHistory(HarnessModel, Generic[HandleT, ObservationT]):
     transition: Callable[[HandleT], object]
     observe: Callable[[HandleT], ObservationT]
     external_calls: tuple[ExternalCall, ...] = ()
+    #: Independent product oracle; None is a valid expected observation.
+    expected: ObservationT | Callable[[HandleT], ObservationT] | _ExpectedOutcome = _ExpectedOutcome.UNSPECIFIED
+    #: Real downstream recovery entry points; the delivery must support bounded rounds.
+    recovery_ticks: tuple[Callable[[], object], ...] = ()
     #: Optional: what the histories leave, checked in the same run as the verdict.
     findings: Findings | None = None
 
@@ -282,6 +292,13 @@ class DeliverySession(Protocol):
         ...
 
 
+@runtime_checkable
+class RecoveryDeliverySession(Protocol):
+    """Optional delivery extension for bounded cross-capability recovery."""
+
+    def recover_with(self, ticks: tuple[Callable[[], object], ...]) -> None: ...
+
+
 class Delivery(Protocol):
     """How a host delivers handed-off work and recovers it."""
 
@@ -341,6 +358,7 @@ class HistoryRun(HarnessModel):
     #: After the transition and any loss or death, before delivery and recovery.
     midway: Any
     after: Any
+    expected: Any = _ExpectedOutcome.UNSPECIFIED
     commits: int = 0
     calls: int = 0
     #: Positions in ``HandoffHistory.external_calls`` of the seams the run actually called.
@@ -590,6 +608,7 @@ def _run(
         handle = (
             scope.enter_context(proof_context(arranged)) if isinstance(arranged, AbstractContextManager) else arranged
         )
+        expected = history.expected(handle) if callable(history.expected) else history.expected
         before = history.observe(handle)
         with delivery.session() as session:
             with _worker(history, crash_after, crash_after_call, inject) as worker:
@@ -623,9 +642,17 @@ def _run(
             else:
                 midway = history.observe(handle)
                 session.deliver()
-            session.recover()
+            if history.recovery_ticks:
+                if not isinstance(session, RecoveryDeliverySession):
+                    raise ObligationContractDesignError(
+                        f"{delivery.name}: delivery must support recover_with for declared recovery_ticks"
+                    )
+                session.recover_with(history.recovery_ticks)
+            else:
+                session.recover()
         return HistoryRun(
             label=label,
+            expected=expected,
             before=before,
             midway=midway,
             after=history.observe(handle),
@@ -759,6 +786,14 @@ def assert_handoff_bindings_are_production_bound(delivery: Delivery, history: Ha
         forbidden=INVOCATION_AUTHORING_OPERATIONS,
         production_shape="the production command that classifies work and hands it off",
     )
+    for index, tick in enumerate(history.recovery_ticks):
+        assert_binding_reaches_production(
+            adopter=delivery.name,
+            field=f"handoff[{history.name}].recovery_ticks[{index}]",
+            binding=tick,
+            forbidden=INVOCATION_AUTHORING_OPERATIONS,
+            production_shape="the downstream capability production recovery tick",
+        )
     if isinstance(delivery, CallableDelivery):
         assert_binding_reaches_production(
             adopter=delivery.name,
@@ -779,6 +814,11 @@ def crash_histories(delivery: Delivery, history: HandoffHistory[Any, Any]) -> li
         f"{delivery.name}: handoff {history.name!r} — positive control failed: normal operation left the "
         f"observation unchanged ({delivered.before!r}), so no history could diverge"
     )
+    if delivered.expected is not _ExpectedOutcome.UNSPECIFIED:
+        assert delivered.after == delivered.expected, (
+            f"{delivery.name}: handoff {history.name!r} — normal operation did not reach the "
+            f"declared product outcome: expected {delivered.expected!r}, observed {delivered.after!r}"
+        )
     assert_normal_operation_repeats(
         f"{delivery.name}: handoff {history.name!r}",
         delivered,
