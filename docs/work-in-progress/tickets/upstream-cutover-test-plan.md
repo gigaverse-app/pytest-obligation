@@ -10,7 +10,7 @@ into the public harness while preserving the framework-free core.
 - [x] Source audit: account for pre-cutover proofs, controls and tools that a
   subtree-only export could miss.
 - [ ] Packaging, lint, types and the optional integration CI matrix.
-- [ ] Consumer compatibility with this source and the matching Due candidate.
+- [x] Consumer compatibility with this source and the matching Due candidate.
 
 ## Validation (2026-10-12)
 
@@ -21,3 +21,6 @@ into the public harness while preserving the framework-free core.
 - The first public CI revision passed every integration, demo, Python and
   framework-free lane; final-revision CI and consumer validation follow.
 - Ownership and intentional exclusions: [cutover audit](../../backend-harness-port.md#cutover-follow-through-october-2026).
+- BE with both public candidates: **2,113 passed, 70 existing expected failures,
+  six existing collection exclusions**. This includes adopters, concrete counter
+  callers, source/debt/Beat policy, populated migration and packaging boundaries.
