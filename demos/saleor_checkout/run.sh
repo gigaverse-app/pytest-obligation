@@ -22,14 +22,14 @@ export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$saleor/.venv}"
 if ! git -C "$repo" describe --tags >/dev/null 2>&1; then
   export SETUPTOOLS_SCM_PRETEND_VERSION="${SETUPTOOLS_SCM_PRETEND_VERSION:-0.0.0}"
 fi
-uv pip install --quiet --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-deps -e "$repo"
+uv pip install --quiet --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-deps -e "$repo/package"
 
 # Exploration is opt-in. Take its exact tooling versions from the harness lock,
 # without replacing any of Saleor's pinned runtime packages.
 for argument in "$@"; do
   if [[ "$argument" == --due-work-explore* ]]; then
     exploration_requirements="$(mktemp)"
-    (cd "$repo" && uv export --frozen --no-default-groups --extra exploration --no-emit-project --no-hashes) \
+    (cd "$repo" && uv export --all-packages --frozen --no-default-groups --extra exploration --no-emit-project --no-hashes) \
       | sed -n -e '/^hypothesis==/p' -e '/^sortedcontainers==/p' > "$exploration_requirements"
     uv pip install --quiet --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-deps -r "$exploration_requirements"
     rm "$exploration_requirements"

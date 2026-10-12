@@ -1,6 +1,6 @@
 name: Release
 
-# On every push to main, release-please updates a release PR holding the next
+# After normal CI succeeds on main, release-please updates a release PR holding the next
 # SemVer version and changelog, derived from Conventional Commit messages.
 # Merging that PR tags vX.Y.Z and creates the GitHub release; this workflow
 # then builds that exact tag and publishes it to PyPI with Trusted Publishing
@@ -11,8 +11,10 @@ name: Release
 # dispatched commit's .devN version, which PyPI never receives.
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [main]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -33,7 +35,12 @@ concurrency:
 
 jobs:
   release-please:
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    environment: release-automation
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,9 +49,29 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - name: Only release the tested main head
+        id: current
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const {data: branch} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+            core.setOutput('matches', branch.commit.sha === context.payload.workflow_run.head_sha);
+      - name: Require release PR authentication
+        env:
+          HAS_RELEASE_TOKEN: ${{ secrets.GV_CI_CROSS_REPO_TOKEN != '' }}
+        run: |
+          if [[ "$HAS_RELEASE_TOKEN" != "true" ]]; then
+            echo "::error::Share the organization GV_CI_CROSS_REPO_TOKEN secret with this repository."
+            exit 1
+          fi
       - id: release
+        if: steps.current.outputs.matches == 'true'
         uses: googleapis/release-please-action@v4
         with:
+          # The shared organization credential triggers ordinary PR CI.
+          # The release-automation environment restricts this job to main.
+          token: ${{ secrets.GV_CI_CROSS_REPO_TOKEN }}
+          target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
@@ -52,12 +79,13 @@ jobs:
     needs: release-please
     if: >-
       always() && (
-        (github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true')
+        (github.event_name == 'workflow_run' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true')
         || github.event_name == 'workflow_dispatch'
       )
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.built.outputs.version }}
@@ -88,8 +116,25 @@ jobs:
           ref: ${{ steps.tag.outputs.tag || github.sha }}
           # The version is read from the tag, so the tag must be present.
           fetch-depth: 0
+      # Check the resolved tag, including on manual retries: a green run for a
+      # different commit (or a PR) must never authorize a production release.
+      - name: Require normal CI on the exact release commit
+        if: inputs.index != 'testpypi'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source_sha=$(git rev-parse HEAD)
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&head_sha=$source_sha" --jq '.total_count')
+          if [[ "$count" -lt 1 ]]; then
+            echo "::error::No successful main CI run for release commit $source_sha. Re-run its CI before publishing."
+            exit 1
+          fi
       - uses: astral-sh/setup-uv@v7
-      - run: uv build
+      - name: Build the package using the public repository release version
+        run: |
+          version=$(uvx --from 'setuptools-scm>=8,<10' python -c 'from setuptools_scm import get_version; print(get_version(root=".", local_scheme="no-local-version", git_describe_command="git describe --dirty --tags --long --match v[0-9]*.[0-9]*.[0-9]*"))')
+          SETUPTOOLS_SCM_PRETEND_VERSION="$version" uv build --project package --out-dir dist
+      - run: uvx --from twine twine check --strict dist/*
       - name: The built version is the tag
         if: steps.tag.outputs.tag != ''
         env:
@@ -124,7 +169,7 @@ jobs:
     needs: build
     if: >-
       always() && needs.build.result == 'success'
-      && (github.event_name == 'push' || inputs.index == 'pypi')
+      && (github.event_name == 'workflow_run' || inputs.index == 'pypi')
     runs-on: ubuntu-latest
     environment:
       name: pypi
