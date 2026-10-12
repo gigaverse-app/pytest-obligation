@@ -246,3 +246,11 @@ Due's model-defining conformance module into the model-free Django transaction
 module here, with real-connection success/failure cleanup controls. Due retains
 an import alias for its existing callers. This distinguishes a missing upstream
 capability from incomplete consumer consolidation; both need to be closed.
+
+The consumer cleanup also recovered eleven standalone controls previously left
+in BE: wait/no-wait SQL classification, documented lock-reader limits, bare SQL
+identifier masking, repeated worker-scope option restoration and refusal to close
+the main test thread's connection. They now run beside their public owners; BE's
+copied mechanism tests are removed. The expanded Django suite passes 390 tests
+with its existing strict finding. Actual BE Beat, cancellation and migration
+visibility adopters additionally exercise the shared implementation.
