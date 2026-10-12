@@ -132,3 +132,48 @@ simple-callback races. Its shared retained-history proof measures total PostgreS
 reads, checks equivalent renamed indexes, and rejects full-history scans and
 missing access paths. Historical BE migration schemas, alert configuration and
 application-specific evidence-boundary allowlists retain their application owner.
+
+## Cutover follow-through (October 2026)
+
+A second audit compared the pre-cutover runtime and harness with both public
+packages, including controls that remained outside the exported subtrees. The
+combined inventory examined 85 implementation modules (803 top-level definitions)
+and 998 named test functions. Name matches were only a starting point: renamed
+proofs were checked against their new owners and negative controls.
+
+The reusable cutover changes in this package are:
+
+- A configured `Host` factory resolves on the first proof, after application
+  setup; sessions that never request a proof do not initialize it. Invalid
+  factories and import errors still fail loudly. See
+  [host configuration](pytest-plugin.md#host-configuration).
+- Static coverage accepts explicitly reviewed suite wrappers through
+  `CoverageConfig.suite_aliases`. It never guesses that an arbitrary decorator
+  creates a contract. See [plugin configuration](pytest-plugin.md).
+- `assert_schedule_contract(..., task_names={"myapp.tasks.sweep": sweep.name})`
+  binds a computed Celery name to its actual installed task. Unbound computed
+  names still fail the production-task check.
+- Owed-row and selection-completeness proofs share
+  [one delivery contract and observer](selection-completeness.md#one-delivery-binding-for-both-checks).
+- Source archives and embedded subtrees build with an explicit development
+  version fallback when Git tags are unavailable.
+
+The audit also recovered Due-specific database, discovery and enrollment
+controls. Their owner is [Due's cutover audit](https://github.com/gigaverse-app/due/blob/codex/upstream-cutover-improvements/docs/cutover-audit.md).
+
+| Original behavior | Current executable controls |
+| --- | --- |
+| Profiles, binding provenance, narrow known gaps, generated cases | `tests/core/contract`, `tests/core/profiles`, `tests/core/safety` |
+| Crash/error chains, scoped arrangements, independent outcomes, seam restoration | `tests/core/test_crash_histories.py`, `test_external_call_seams.py`; `tests/django/test_commit_observer.py` |
+| SQL-managed commits, function writes, anonymous blocks, dead-session cleanup | `tests/django/test_commit_observer.py` |
+| Legal edges, terminal states, selected/skipped branches, poison and stop requests | `tests/django/automatic_recovery`, `tests/core/automatic_recovery`, `tests/core/test_poison.py` |
+| Bounded ownership and real lock races | `tests/core/profiles/test_bounded_ownership.py`, `tests/django/test_claim_race.py` |
+| Index eligibility and retained-history scans | `tests/core/automatic_recovery/test_plan_verdict.py`, `test_leading_index_key.py`; `tests/django/automatic_recovery/test_selection_inspector.py` |
+| Source coverage, exemptions, publication ordering, Beat inventories, declaration policy | `tests/core/coverage` |
+| Debt baselines, subsets, node selection and parallel collection | `tests/core/contract/test_debt_collection.py` |
+
+Application schedules, alert destinations, migration history, provider fixtures,
+tenant values, reviewed exceptions and historical debt remain consumer-owned.
+The generic scanners and proofs consume those declarations. Due's unused native
+lifecycle convenience API is intentionally excluded; generic proofs for
+application-owned ORM lifecycles remain supported.

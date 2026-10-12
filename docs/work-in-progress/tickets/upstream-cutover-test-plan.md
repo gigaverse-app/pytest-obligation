@@ -3,11 +3,21 @@
 Bring the consumer's reusable scanner, host and Django delivery improvements
 into the public harness while preserving the framework-free core.
 
-- [ ] Core controls: lazy application host initialization, invalid factories,
+- [x] Core controls: lazy application host initialization, invalid factories,
   reviewed suite wrappers and configured task names.
-- [ ] Django controls: selection completeness and owed-row proofs both use one
+- [x] Django controls: selection completeness and owed-row proofs both use one
   production-delivery owner, including commit callbacks and delayed handoffs.
-- [ ] Source audit: account for pre-cutover proofs, controls and tools that a
+- [x] Source audit: account for pre-cutover proofs, controls and tools that a
   subtree-only export could miss.
 - [ ] Packaging, lint, types and the optional integration CI matrix.
 - [ ] Consumer compatibility with this source and the matching Due candidate.
+
+## Validation (2026-10-12)
+
+- Core: **936 passed, one optional-dependency skip**.
+- PostgreSQL/Django: **364 passed, one existing strict expected failure**.
+- Paired Due candidate: **1,355 passed, four existing expected failures**.
+- Ruff and changed-module Pyrefly pass; wheel and source archive build.
+- The first public CI revision passed every integration, demo, Python and
+  framework-free lane; final-revision CI and consumer validation follow.
+- Ownership and intentional exclusions: [cutover audit](../../backend-harness-port.md#cutover-follow-through-october-2026).

@@ -79,3 +79,18 @@ invisible. Supply independent provider counters and outcome observations.
 An inline tick used as the worker cannot independently reveal its own skipped
 query branches. Due adds the same proof automatically for unbounded discovery;
 a declared discovery horizon deliberately covers a narrower population.
+
+## One delivery binding for both checks
+
+`OwedRows` and `CompletenessBinding` inherit the public `RowExecution` contract
+from `integrations.django.owed_rows`. Their existing flat keyword constructors
+remain valid. `make_owed` arranges a fresh row; `execute` is its production worker;
+`deliver` optionally maps that row to worker input; `identity_of` compares stable
+identities; `effect_calls_for` observes effects outside SQL.
+
+Both proofs use `serve_row` to run that worker, flush commit callbacks and follow
+its handoffs. Its `ServedRow` result records the failure, where it occurred,
+whether work happened and which obligations were created. A delivery failure
+cannot make selection completeness silently use different evidence from the
+owed-row proof. Integrations can reuse this owner; ordinary adopters should keep
+using the generated contract declarations above.

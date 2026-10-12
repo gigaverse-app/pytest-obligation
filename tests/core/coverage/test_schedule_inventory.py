@@ -5,6 +5,8 @@ from pathlib import Path
 from textwrap import dedent, indent
 from typing import NotRequired, TypedDict
 
+import pytest
+
 from pytest_obligation.coverage._internal.schedules import (
     _Callable,
     _declared_stale_after,
@@ -28,6 +30,7 @@ class ScheduleArguments(TypedDict):
     intervals: Mapping[str, timedelta]
     default_stale_after: timedelta
     reviewed_grandfathered: NotRequired[frozenset[str]]
+    task_names: NotRequired[Mapping[str, str]]
 
 
 DEFAULT_STALE_AFTER = timedelta(minutes=10)
@@ -78,6 +81,37 @@ def test_task_names_resolve_pinned_names_and_imported_constants(tmp_path: Path) 
         "shop.app.tasks.pinned_sweep": "shop.app.tasks.sweeps.pinned_sweep",
         "shop.app.legacy.probe": "shop.app.tasks.sweeps.probe",
     }
+
+
+@pytest.mark.parametrize("bind_name", [False, True])
+def test_configured_task_name_requires_an_explicit_production_binding(tmp_path: Path, bind_name: bool) -> None:
+    from pytest_obligation.coverage.schedules import NoPerRowLoop, assert_schedule_contract
+
+    _write(
+        tmp_path,
+        "shop/tasks.py",
+        """
+        from celery import shared_task
+        from django.conf import settings
+
+        @shared_task(name=settings.WORK_TASK_NAME)
+        def run():
+            pass
+        """,
+    )
+    arguments: ScheduleArguments = dict(
+        project=project(tmp_path),
+        schedule={"daily": "legacy.work"},
+        sweeps={"legacy.work": NoPerRowLoop(reason="One operation; no per-row recovery loop.")},
+        intervals={"legacy.work": timedelta(days=1)},
+        default_stale_after=DEFAULT_STALE_AFTER,
+        task_names={"shop.tasks.run": "legacy.work"} if bind_name else {},
+    )
+    if bind_name:
+        assert_schedule_contract(**arguments)
+    else:
+        with pytest.raises(AssertionError, match="a task name must be a literal or a named constant"):
+            assert_schedule_contract(**arguments)
 
 
 def _sweep_tree(base: Path, sweep_body: str) -> dict[str, _Callable]:

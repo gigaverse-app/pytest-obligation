@@ -145,6 +145,7 @@ class ServedRow(HarnessModel):
     ran_in: str
     #: Whether anything besides publishing and recording the dispatch happened.
     worked: bool
+    #: Database tables receiving new rows during the worker and its handoffs.
     created: tuple[str, ...]
 
 
@@ -312,7 +313,27 @@ class EdgeFamily(HarnessModel):
     edge_row: Callable[[Any], Model] | None = None
 
 
-class OwedRows(HarnessModel):
+class RowExecution(HarnessModel):
+    """One fresh owed row and its real worker, shared by discovery and sweep proofs.
+
+    This binding owns the delivery shape; a scheduled loop adds its tick and
+    recorder through :class:`OwedRows`. Selection completeness uses the same
+    fields so a change to worker observation cannot drift between the proofs.
+    """
+
+    #: ARRANGE: one more row the production selection returns, each call.
+    make_owed: Callable[[], Any]
+    #: REAL PRODUCTION: the per-identity step, called with what ``deliver`` builds.
+    execute: Callable[[Any], Any]
+    #: Stable identity used to compare selections and delivered work; defaults to the primary key.
+    identity_of: Callable[[Any], Any] = _pk
+    #: Map the arranged row to worker input; None passes its ``identity_of`` value.
+    deliver: Callable[[Any], Any] | None = None
+    #: OBSERVE: the number of external effects for this row, when SQL alone cannot show work.
+    effect_calls_for: Callable[[Any], int] | None = None
+
+
+class OwedRows(RowExecution):
     """
     The per-row recovery loop behind a selection: what every owed-row proof reads.
 
@@ -322,19 +343,12 @@ class OwedRows(HarnessModel):
     ``DueWorkSweep`` and ``Lifecycle`` (:func:`owed_rows_of_sweep`).
     """
 
-    #: ARRANGE: one more row the production selection returns, each call.
-    make_owed: Callable[[], Any]
-    #: REAL PRODUCTION: the per-identity step the tick runs, on what ``deliver`` builds.
-    execute: Callable[[Any], Any]
     #: REAL PRODUCTION: one tick of the scheduled task.
     run_tick: Callable[[], Any]
     #: OBSERVE: identities the ticks dispatched or ran, in the order they did,
     #: recorded at the broker or a production audit record; never read from the
     #: selection. The generated order control proves it is such a recorder.
     dispatched_ids: Callable[[], list[Any]]
-    identity_of: Callable[[Any], Any] = _pk
-    deliver: Callable[[Any], Any] | None = None
-    effect_calls_for: Callable[[Any], int] | None = None
     #: EXTERNAL SEAM: a context manager under which the per-identity step raises
     #: for the given owed row on every attempt, yielding ``fired()`` (the same
     #: contract as ``DueWorkSweep.poison``; ``PoisonSwitch`` supplies both

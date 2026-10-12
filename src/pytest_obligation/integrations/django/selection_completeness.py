@@ -95,7 +95,6 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from itertools import product
-from operator import attrgetter
 from typing import Any
 
 from django.db import DataError, IntegrityError, models, transaction
@@ -123,13 +122,13 @@ from pytest_obligation.integrations.django.owed_rows import (
     FailureEnds,
     OwedRowNotHandled,
     OwedRows,
+    RowExecution,
     assert_selected_owed_row_is_handled,
     failure_ends_of_sweep,
     owed_rows_of_sweep,
     serve_row,
     worker_transaction,
 )
-from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.automatic_recovery import DueWorkSweep
 
 #: The case id, and the prefix of a declared per-combination gap.
@@ -163,7 +162,7 @@ class SelectionIncomplete(AssertionError):
     """
 
 
-class CompletenessBinding(HarnessModel):
+class CompletenessBinding(RowExecution):
     """
     What one example reads: the production selection, the loop behind it, and the declared states.
 
@@ -176,13 +175,6 @@ class CompletenessBinding(HarnessModel):
     name: str
     #: REAL PRODUCTION: the unbounded selection the tick pages through.
     selection: Callable[[], Iterable[Any]]
-    #: ARRANGE: one more row the selection returns, each call.
-    make_owed: Callable[[], Any]
-    #: REAL PRODUCTION: the per-identity step the tick runs, on what ``deliver`` builds.
-    execute: Callable[[Any], Any]
-    identity_of: Callable[[Any], Any] = attrgetter("pk")
-    deliver: Callable[[Any], Any] | None = None
-    effect_calls_for: Callable[[Any], int] | None = None
     #: OBSERVE: identities the ticks dispatched, recorded at the broker or a production record.
     dispatched_ids: Callable[[], list[Any]] | None = None
     #: REAL PRODUCTION: one tick; with ``dispatched_ids``, a selected row must be one the tick dispatches.
