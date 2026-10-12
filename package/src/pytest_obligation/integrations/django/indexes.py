@@ -26,6 +26,8 @@ class InstalledIndex(HarnessModel):
     predicate: str | None
     #: ``indisvalid AND indisready``: an interrupted concurrent build is neither.
     usable: bool
+    #: ``indisunique``: no two rows share the key (rows with a NULL key column excepted).
+    unique: bool = False
 
 
 def installed_indexes(database: BaseDatabaseWrapper, tables: Sequence[str]) -> list[InstalledIndex]:
@@ -36,7 +38,7 @@ def installed_indexes(database: BaseDatabaseWrapper, tables: Sequence[str]) -> l
             SELECT t.relname, c.relname, am.amname, i.indnkeyatts,
                    ARRAY(SELECT pg_get_indexdef(i.indexrelid, n, true)
                          FROM generate_series(1, i.indnatts) n),
-                   pg_get_expr(i.indpred, i.indrelid), i.indisvalid AND i.indisready
+                   pg_get_expr(i.indpred, i.indrelid), i.indisvalid AND i.indisready, i.indisunique
             FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
             JOIN pg_class t ON t.oid = i.indrelid
             JOIN pg_am am ON am.oid = c.relam
@@ -55,8 +57,9 @@ def installed_indexes(database: BaseDatabaseWrapper, tables: Sequence[str]) -> l
             included_columns=tuple(columns[key_count:]),
             predicate=predicate,
             usable=usable,
+            unique=unique,
         )
-        for table, name, method, key_count, columns, predicate, usable in rows
+        for table, name, method, key_count, columns, predicate, usable, unique in rows
     ]
 
 
@@ -73,4 +76,5 @@ def attach_catalog_facts(database: BaseDatabaseWrapper, plan: dict[str, Any]) ->
                 "Access Method": index.access_method,
                 "Key Columns": list(index.key_columns),
                 "Predicate": index.predicate,
+                "Unique": index.unique,
             }
