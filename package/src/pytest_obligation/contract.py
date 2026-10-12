@@ -1898,8 +1898,13 @@ class ScheduledSelection(HarnessModel):
     #: primary-key walk can "win" merely because it satisfies an ordering
     #: without a sort, which makes the verdict order-dependent. Seeding the
     #: production shape (most rows match nothing, slivers match each branch)
-    #: makes the plan verdict a statement about the real trade-off. Run only
-    #: before
+    #: makes the plan verdict a statement about the real trade-off. Seed every
+    #: table the selection joins, run ``ANALYZE`` on each, and start from
+    #: ``TRUNCATE`` rather than ``DELETE``: deleted rows leave dead tuples (and
+    #: heap-only-tuple chains) behind, and PostgreSQL will not plan with an
+    #: index built later in the same transaction while such a chain is older
+    #: than the index, so the verdict would judge a plan the production schema
+    #: never produces. Run only before
     #: :func:`~pytest_obligation.profiles.automatic_recovery.assert_selection_is_index_served`.
     populate: Callable[[], None] | None = None
 

@@ -102,7 +102,112 @@ def test_false_positive_4_a_partial_index_scan_with_no_filter_passes() -> None:
     Index Cond nor a Filter — the narrowing lives in the index's own WHERE
     clause. A scan that discards nothing must be accepted.
     """
-    assert_plan_is_index_served(name="partial index scan", plan=_index_scan(), table=_TABLE)
+    assert_plan_is_index_served(
+        name="partial index scan",
+        plan=_index_scan(**{"Catalog Index": _catalog(predicate="(state = 'ready')")}),
+        table=_TABLE,
+    )
+
+
+def _catalog(*keys: str, predicate: str | None = None) -> dict[str, object]:
+    return {"Access Method": "btree", "Key Columns": list(keys or ("id",)), "Predicate": predicate}
+
+
+def _parent(**extra: object) -> dict[str, object]:
+    return {
+        "Node Type": "Index Scan",
+        "Relation Name": "shop_parent",
+        "Alias": "p",
+        "Index Name": "shop_parent_pkey",
+        "Catalog Index": _catalog(),
+        **extra,
+    }
+
+
+def _driven_by_the_parent(child: dict[str, object]) -> dict[str, object]:
+    """The parent drives a nested loop that reaches the selection's table through the foreign-key index."""
+    return {"Node Type": "Nested Loop", "Join Type": "Inner", "Plans": [_parent(Filter="(scope = 's1'::text)"), child]}
+
+
+def _child(cond: str, keys: tuple[str, ...], **extra: object) -> dict[str, object]:
+    return _index_scan(
+        **{"Alias": "c", "Index Name": "child_ix", "Index Cond": cond, "Catalog Index": _catalog(*keys), **extra}
+    )
+
+
+def test_false_negative_6_a_join_key_does_not_narrow_the_selections_own_filter() -> None:
+    """The foreign-key index positions the scan once per parent; the time condition is only filtered."""
+    walked = _child("(parent_id = p.id)", ("parent_id",), Filter="(due_at <= now())")
+    verdict = index_served_verdict(_driven_by_the_parent(walked), table=_TABLE)
+    assert verdict is not None and "only a join key" in verdict
+    # Django prints the outer column with the table name it aliases nothing to.
+    unaliased = _child("(parent_id = shop_parent.id)", ("parent_id",), Filter="(due_at <= now())")
+    assert "only a join key" in (index_served_verdict(_driven_by_the_parent(unaliased), table=_TABLE) or "")
+
+
+@pytest.mark.parametrize(
+    "child",
+    [
+        # POSITIVE CONTROL: the selection's own condition beside the join key, in one index.
+        _child("((parent_id = p.id) AND (due_at <= now()))", ("parent_id", "due_at")),
+        # The join key drives the scan and nothing is filtered here: no row of the table is read to be discarded.
+        _child("(parent_id = p.id)", ("parent_id",)),
+        # A named partial index whose predicate holds the selection's state: the Filter drops backlog only.
+        _child("(parent_id = p.id)", ("parent_id",), **{"Index Name": "owed_ix", "Filter": "(due_at <= now())"}),
+        # A literal compared with a qualified-looking cast is the selection's own clause, not a join key.
+        _child("(due_at <= '2026-01-01'::pg_catalog.timestamptz)", ("due_at",), Filter="(parent_id > 0)"),
+    ],
+    ids=["own-clause-beside-the-join-key", "join-key-with-nothing-filtered", "named-partial", "cast-literal"],
+)
+def test_a_join_key_with_the_selections_own_narrowing_passes(child: dict[str, object]) -> None:
+    named = {"owed_ix": frozenset({"status"})}
+    assert index_served_verdict(_driven_by_the_parent(child), table=_TABLE, predicate_indexes=named) is None
+
+
+def test_false_negative_6_holds_for_a_parameterized_bitmap_too() -> None:
+    """The bitmap-only re-plan of the same selection must not overturn the refusal."""
+    arm: dict[str, object] = {
+        "Node Type": "Bitmap Index Scan",
+        "Index Name": "child_parent_ix",
+        "Index Cond": "(parent_id = p.id)",
+        "Catalog Index": _catalog("parent_id"),
+    }
+    heap = _bitmap(arm, Alias="c", Filter="(due_at <= now())")
+    assert "only a join key" in (index_served_verdict(_driven_by_the_parent(heap), table=_TABLE) or "")
+    unfiltered = _bitmap(arm, Alias="c")
+    assert index_served_verdict(_driven_by_the_parent(unfiltered), table=_TABLE) is None
+
+
+def _hash_join(child: dict[str, object]) -> dict[str, object]:
+    """A hash join on a filtered parent: it discards whatever child rows belong to the parents it drops."""
+    return {
+        "Node Type": "Hash Join",
+        "Join Type": "Inner",
+        "Hash Cond": "(c.parent_id = p.id)",
+        "Plans": [child, {"Node Type": "Hash", "Plans": [_parent(Filter="active")]}],
+    }
+
+
+def test_false_negative_7_a_partial_index_read_whole_is_not_narrowed_when_a_join_discards() -> None:
+    partial = _index_scan(**{"Alias": "c", "Index Name": "pending_ix", "Catalog Index": _catalog(predicate="x")})
+    verdict = index_served_verdict(_hash_join(partial), table=_TABLE)
+    assert verdict is not None and "narrowing is in the join" in verdict
+    # POSITIVE CONTROLS: alone, the predicate is the whole narrowing; named, the join's discards are declared backlog.
+    assert index_served_verdict(partial, table=_TABLE) is None
+    named = {"pending_ix": frozenset({"status"})}
+    assert index_served_verdict(_hash_join(partial), table=_TABLE, predicate_indexes=named) is None
+
+
+@pytest.mark.parametrize("joined", [False, True], ids=["alone", "joined"])
+def test_false_negative_8_a_full_index_read_with_no_condition_fails(joined: bool) -> None:
+    walk = _index_scan(**{"Alias": "c", "Index Name": "shop_examplework_pkey", "Catalog Index": _catalog()})
+    verdict = index_served_verdict(_hash_join(walk) if joined else walk, table=_TABLE)
+    assert verdict is not None and "not a partial index" in verdict
+
+
+def test_a_scan_with_no_condition_and_no_catalog_is_unevaluable() -> None:
+    verdict = index_served_verdict(_index_scan(), table=_TABLE)
+    assert verdict is not None and "no catalog definition" in verdict
 
 
 @pytest.mark.parametrize("verified", [True, False])
@@ -577,3 +682,9 @@ def test_a_bitmap_only_of_named_partial_indexes_overturns_the_walk() -> None:
     assert index_served_verdict(bitmap, table=_TABLE, predicate_indexes=named) is None
     assert bitmap_overturns_the_walk(_WALKS_AN_UNRELATED_INDEX, bitmap, table=_TABLE, predicate_indexes=named)
     assert not bitmap_overturns_the_walk(_WALKS_AN_UNRELATED_INDEX, bitmap, table=_TABLE)
+
+
+@pytest.mark.parametrize("clock", ["tenant.clock()", '"tenant"."clock"()', "tenant.clock ()", "tenant.clock_9()"])
+def test_a_qualified_clock_is_not_a_join_column(clock: str) -> None:
+    scan = _child(f"(due_at <= {clock})", ("due_at",), Filter="(status = 'pending'::text)")
+    assert index_served_verdict(scan, table=_TABLE) is None
