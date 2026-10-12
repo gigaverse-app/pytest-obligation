@@ -346,11 +346,22 @@ def order_confirmation_and_money(handle: Handle) -> Outcome:
     )
 
 
+PLACED = Outcome(
+    order=True,
+    events=("confirmed", "order_fully_paid", "payment_captured", "placed"),
+    confirmations=1,
+    webhooks=tuple(sorted(ORDER_WEBHOOKS)),
+    charged=True,
+    money_on="order",
+)
+
+
 COMPLETE_CHECKOUT = HandoffHistory(
     name="complete checkout",
     arrange=pay_with_the_payments_api,
     transition=complete,
     observe=order_confirmation_and_money,
+    expected=PLACED,
 )
 
 #: Past USER_CHECKOUTS_TIMEDELTA (90 days), after which Saleor deletes a user's checkout.
@@ -514,16 +525,6 @@ class TestCheckoutAsShipped:
     pass
 
 
-PLACED = Outcome(
-    order=True,
-    events=("confirmed", "order_fully_paid", "payment_captured", "placed"),
-    confirmations=1,
-    webhooks=tuple(sorted(ORDER_WEBHOOKS)),
-    charged=True,
-    money_on="order",
-)
-
-
 def _outcome(**changes: object) -> Outcome:
     return PLACED.model_copy(update=changes)
 
@@ -642,6 +643,7 @@ COMPLETE_PAID_CHECKOUT = HandoffHistory(
     arrange=pay_with_transactions,
     transition=complete,
     observe=order_and_money,
+    expected=Paid(order=True, charged=True, money_on="order"),
 )
 
 
@@ -652,7 +654,9 @@ def paid_order_confirmation(handle: Handle) -> tuple[bool, int]:
     return order is not None, current_shop().confirmations[identity] if identity else 0
 
 
-PAID_CONFIRMATION = COMPLETE_PAID_CHECKOUT.model_copy(update={"observe": paid_order_confirmation})
+PAID_CONFIRMATION = COMPLETE_PAID_CHECKOUT.model_copy(
+    update={"observe": paid_order_confirmation, "expected": (True, 1)}
+)
 
 #: The checkouts the most recent tick dispatched for completion, in dispatch order.
 DISPATCHED: list[UUID] = []

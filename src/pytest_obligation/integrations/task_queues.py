@@ -86,6 +86,7 @@ def worker_history(
     *,
     enqueue: Callable[[], str],
     effect: Callable[[str], Any],
+    expected: TaskOutcome | Callable[[str], TaskOutcome],
     status_of: Callable[[str], str],
     run_worker: Callable[..., object],
     external_calls: Sequence[ExternalCall] = (),
@@ -108,6 +109,7 @@ def worker_history(
         arrange=enqueue,
         transition=run_worker,
         observe=observe,
+        expected=expected,
         external_calls=tuple(external_calls),
         findings=findings,
     )

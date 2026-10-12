@@ -1271,6 +1271,7 @@ def _ledger_handoff_case(transition: Any) -> Any:
         arrange=in_memory_handoffs.running_attempt,
         transition=transition,
         observe=in_memory_handoffs.attempt_and_successors,
+        expected=("retryable_failed", ("running",)),
     )
     contract = _contract(handoffs=(history,), handoff_delivery=in_memory_handoffs.RETRY_DELIVERY)
     return _params_by_id(contract_cases(contract))["handoff-retryable failure-assert_crash_at_every_commit_converges"]
@@ -1298,6 +1299,7 @@ def _split_history(findings: Findings | None) -> HandoffHistory[int, Any]:
         arrange=in_memory_handoffs.running_attempt,
         transition=in_memory_handoffs.fail_with_split_handoff,
         observe=in_memory_handoffs.attempt_and_successors,
+        expected=("retryable_failed", ("running",)),
         findings=findings,
     )
 
@@ -1354,6 +1356,7 @@ def _process_history(findings: Findings | None = None) -> ProcessHistory[int, tu
     return ProcessHistory(
         name="completion",
         initial=("absent", 0),
+        expected=("complete", 1),
         run=run,
         observe=in_memory_handoffs.status_and_notifications,
         recover=in_memory_handoffs.recover_after_death,
@@ -1398,6 +1401,7 @@ def test_a_gapped_history_whose_transition_changes_nothing_fails_as_itself(ledge
         arrange=in_memory_handoffs.running_attempt,
         transition=in_memory_handoffs.reconcile,
         observe=in_memory_handoffs.attempt_and_successors,
+        expected=("retryable_failed", ("running",)),
     )
     contract = _contract(
         handoffs=(history,),
@@ -1567,4 +1571,27 @@ def test_binding_cleanup_cannot_swallow_a_failed_generated_proof() -> None:
     contract = _contract(derivation=swallowing_binding)
     case = _params_by_id(contract_cases(contract))["F-assert_unrecorded_obligation_is_discovered"]
     with pytest.raises(AssertionError, match="not discovered"):
+        case.values[0].run()
+
+
+def test_generated_process_proof_rejects_a_missing_independent_outcome(ledger_host: Host) -> None:
+    history = ProcessHistory(**_process_history().model_dump(exclude={"expected"})).model_copy(
+        update={"death_points": ("before_send",)}
+    )
+    contract = _contract(process_handoffs=(history,))
+    case = _params_by_id(contract_cases(contract))["process-completion-assert_process_deaths_converge"]
+    with pytest.raises(ValueError, match="declare expected independently"):
+        case.values[0].run()
+
+
+def test_generated_handoff_proof_rejects_missing_outcome_even_with_a_known_gap(ledger_host: Host) -> None:
+    history = HandoffHistory(**_split_history(SPLIT_FINDINGS).model_dump(exclude={"expected"}))
+    contract = _contract(
+        handoffs=(history,),
+        handoff_delivery=in_memory_handoffs.RETRY_DELIVERY,
+        handoff_gaps={"retryable failure": WHY},
+        adoption=Adoption.LEGACY,
+    )
+    case = _params_by_id(contract_cases(contract))["handoff-retryable failure-assert_crash_at_every_commit_converges"]
+    with pytest.raises(ValueError, match="declare expected independently"):
         case.values[0].run()

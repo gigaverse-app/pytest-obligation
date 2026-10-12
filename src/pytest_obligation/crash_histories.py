@@ -112,9 +112,8 @@ import concurrent.futures
 import traceback
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
-from enum import Enum, auto
 from inspect import getattr_static, isasyncgen, isawaitable, iscoroutine, iscoroutinefunction, isgenerator
-from typing import Any, Generic, NamedTuple, Protocol, TypeAlias, TypeVar, runtime_checkable
+from typing import Any, NamedTuple, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
 from pytest_obligation.helpers import Binding, entered_binding
@@ -126,6 +125,7 @@ from pytest_obligation.models import (
     ObligationContractDesignError,
     with_positional,
 )
+from pytest_obligation.outcomes import ExpectedOutcome, _ExpectedOutcome, assert_expected_outcome
 from pytest_obligation.recording import current_recorder
 from pytest_obligation.worker_death import WorkerDied
 
@@ -198,11 +198,7 @@ HandleT = TypeVar("HandleT")
 ObservationT = TypeVar("ObservationT")
 
 
-class _ExpectedOutcome(Enum):
-    UNSPECIFIED = auto()
-
-
-class HandoffHistory(HarnessModel, Generic[HandleT, ObservationT]):
+class HandoffHistory(ExpectedOutcome[HandleT, ObservationT]):
     """
     One production transition that commits work and hands work off.
 
@@ -223,8 +219,6 @@ class HandoffHistory(HarnessModel, Generic[HandleT, ObservationT]):
     transition: Callable[[HandleT], object]
     observe: Callable[[HandleT], ObservationT]
     external_calls: tuple[ExternalCall, ...] = ()
-    #: Independent product oracle; None is a valid expected observation.
-    expected: ObservationT | Callable[[HandleT], ObservationT] | _ExpectedOutcome = _ExpectedOutcome.UNSPECIFIED
     #: Real downstream recovery entry points; the delivery must support bounded rounds.
     recovery_ticks: tuple[Callable[[], object], ...] = ()
     #: Optional: what the histories leave, checked in the same run as the verdict.
@@ -604,7 +598,7 @@ def _run(
     inject: _Injection | None = None,
 ) -> HistoryRun:
     with entered_binding(history.arrange) as handle:
-        expected = history.expected(handle) if callable(history.expected) else history.expected
+        expected = history.expected_for(handle)
         before = history.observe(handle)
         with delivery.session() as session:
             with _worker(history, crash_after, crash_after_call, inject) as worker:
@@ -800,6 +794,11 @@ def assert_handoff_bindings_are_production_bound(delivery: Delivery, history: Ha
         )
 
 
+def assert_declared_outcome(name: str, delivered: HistoryRun) -> None:
+    """Check the independent oracle before normal operation can define recovery's target."""
+    assert_expected_outcome(f"{name} — normal operation", delivered.expected, delivered.after)
+
+
 def crash_histories(delivery: Delivery, history: HandoffHistory[Any, Any]) -> list[HistoryRun]:
     """Run normal operation and every interrupted history; normal operation first."""
     assert_handoff_bindings_are_production_bound(delivery, history)
@@ -810,11 +809,7 @@ def crash_histories(delivery: Delivery, history: HandoffHistory[Any, Any]) -> li
         f"{delivery.name}: handoff {history.name!r} — positive control failed: normal operation left the "
         f"observation unchanged ({delivered.before!r}), so no history could diverge"
     )
-    if delivered.expected is not _ExpectedOutcome.UNSPECIFIED:
-        assert delivered.after == delivered.expected, (
-            f"{delivery.name}: handoff {history.name!r} — normal operation did not reach the "
-            f"declared product outcome: expected {delivered.expected!r}, observed {delivered.after!r}"
-        )
+    assert_declared_outcome(f"{delivery.name}: handoff {history.name!r}", delivered)
     assert_normal_operation_repeats(
         f"{delivery.name}: handoff {history.name!r}",
         delivered,

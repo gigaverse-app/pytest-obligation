@@ -11,7 +11,7 @@ an external call, after a commit), then start the program again the way
 production would and observe what the product ends up with.
 
 The harness owns the parts that decide the verdict — normal operation defines
-the outcome, every death must actually happen, recovery must bind production
+the convergence target (checked against ``expected`` when declared), every death must actually happen, recovery must bind production
 code, and when everything converges recovery must have changed something — and
 the adopter owns the program and its death points. The adopter's child entry
 point reads the death point it was given and dies there; the harness never
@@ -22,6 +22,7 @@ guesses where a program can die.
     ProcessHistory(
         name="place order",
         initial=(None, 0),
+        expected=("complete", 1),                 # independent product requirement
         run=place_order_in_a_child_process,     # (death_point | None) -> (handle, exit code)
         observe=order_status_and_notifications,  # handle -> observation
         recover=restart_the_application,         # handle -> None; production's own startup
@@ -30,7 +31,11 @@ guesses where a program can die.
 
 A child that exits with status 0 is taken to have run normally; any other
 status is a death. Normal operation (``None``) must exit 0, and each death
-point must not.
+point must not. Standalone proofs permit omission of ``expected`` for convergence-only checks.
+Generated contracts require it and reject a missing outcome even on known gaps.
+Integrations can also call ``history.require_expected_outcome()`` at declaration time. A
+callback receives the handle before recovery and must derive its answer from
+independent input, never from the observed result.
 
 The child and the parent speak one protocol, so an adopter writes no
 environment plumbing: the parent passes :func:`fault_environment` to the child,
@@ -49,18 +54,19 @@ histories are labelled with the point's own name, deaths with ``died at``.
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
 from pytest_obligation.crash_histories import (
     Findings,
     HistoryRun,
+    assert_declared_outcome,
     assert_findings_hold,
     assert_histories_converge,
     assert_normal_operation_repeats,
     assert_runs_match_table,
 )
-from pytest_obligation.models import HarnessModel
+from pytest_obligation.outcomes import ExpectedOutcome
 
 #: The child's environment: the point to fail at, and the marker recording that it did.
 FAULT_VARIABLE = "DUE_WORK_FAULT"
@@ -107,7 +113,7 @@ HandleT = TypeVar("HandleT")
 ObservationT = TypeVar("ObservationT")
 
 
-class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
+class ProcessHistory(ExpectedOutcome[HandleT, ObservationT]):
     """One production transition run in a child process, with the points where it may die."""
 
     name: str
@@ -139,6 +145,7 @@ class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
 
 def _run(history: ProcessHistory[Any, Any], point: str | None) -> HistoryRun:
     handle, status = history.run(point)
+    expected = history.expected_for(handle)
     midway = history.observe(handle)
     history.recover(handle)
     if point is None:
@@ -153,6 +160,7 @@ def _run(history: ProcessHistory[Any, Any], point: str | None) -> HistoryRun:
         midway=midway,
         after=history.observe(handle),
         interrupted=status != 0,
+        expected=expected,
     )
 
 
@@ -173,6 +181,7 @@ def process_histories(history: ProcessHistory[Any, Any]) -> list[HistoryRun]:
         f"{history.name}: normal operation exited abnormally, so it cannot define the outcome. Fix the child "
         f"entry point before judging its deaths"
     )
+    assert_declared_outcome(history.name, normal)
     assert_normal_operation_repeats(history.name, normal, _run(history, None))
     points = (*history.death_points, *history.failure_points)
     return [normal, *(_run(history, point) for point in points)]

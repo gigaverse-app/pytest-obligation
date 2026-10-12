@@ -71,6 +71,7 @@ SEND_MESSAGE = worker_history(
     send=send,
     observe=what_happened,
     initial=("PENDING", 0, ()),
+    expected=FINDINGS.delivered,
     settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
     findings=FINDINGS,
 )
