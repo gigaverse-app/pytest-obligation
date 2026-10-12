@@ -11,7 +11,7 @@ an external call, after a commit), then start the program again the way
 production would and observe what the product ends up with.
 
 The harness owns the parts that decide the verdict — normal operation defines
-the outcome, every death must actually happen, recovery must bind production
+the convergence target (checked against ``expected`` when declared), every death must actually happen, recovery must bind production
 code, and when everything converges recovery must have changed something — and
 the adopter owns the program and its death points. The adopter's child entry
 point reads the death point it was given and dies there; the harness never
@@ -22,6 +22,7 @@ guesses where a program can die.
     ProcessHistory(
         name="place order",
         initial=(None, 0),
+        expected=("complete", 1),                 # independent product requirement
         run=place_order_in_a_child_process,     # (death_point | None) -> (handle, exit code)
         observe=order_status_and_notifications,  # handle -> observation
         recover=restart_the_application,         # handle -> None; production's own startup
@@ -30,7 +31,11 @@ guesses where a program can die.
 
 A child that exits with status 0 is taken to have run normally; any other
 status is a death. Normal operation (``None``) must exit 0, and each death
-point must not.
+point must not. Omission of ``expected`` preserves convergence-only proofs; it
+does not establish application correctness. Application integrations can call
+``history.require_expected_outcome()`` to reject that weaker declaration. A
+callback receives the handle before recovery and must derive its answer from
+independent input, never from the observed result.
 
 The child and the parent speak one protocol, so an adopter writes no
 environment plumbing: the parent passes :func:`fault_environment` to the child,
@@ -55,6 +60,8 @@ from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_bi
 from pytest_obligation.crash_histories import (
     Findings,
     HistoryRun,
+    _ExpectedOutcome,
+    assert_declared_outcome,
     assert_findings_hold,
     assert_histories_converge,
     assert_normal_operation_repeats,
@@ -127,6 +134,10 @@ class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
     #: again and recovering, until the handle's work is settled or a bound passes.
     recover: Callable[[HandleT], object]
 
+    #: Independent product oracle; None is a valid expected observation.
+    #: Omission proves convergence only, not correctness of the normal result.
+    expected: ObservationT | Callable[[HandleT], ObservationT] | _ExpectedOutcome = _ExpectedOutcome.UNSPECIFIED
+
     #: The named points the child's entry point knows how to die at.
     death_points: tuple[str, ...]
 
@@ -136,9 +147,15 @@ class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
     #: Optional: what the histories leave, checked in the same run as the verdict.
     findings: Findings | None = None
 
+    def require_expected_outcome(self) -> None:
+        """Application bindings can require correctness as well as convergence."""
+        if self.expected is _ExpectedOutcome.UNSPECIFIED:
+            raise ValueError(f"{self.name}: declare expected independently of observe to prove application correctness")
+
 
 def _run(history: ProcessHistory[Any, Any], point: str | None) -> HistoryRun:
     handle, status = history.run(point)
+    expected = history.expected(handle) if callable(history.expected) else history.expected
     midway = history.observe(handle)
     history.recover(handle)
     if point is None:
@@ -153,6 +170,7 @@ def _run(history: ProcessHistory[Any, Any], point: str | None) -> HistoryRun:
         midway=midway,
         after=history.observe(handle),
         interrupted=status != 0,
+        expected=expected,
     )
 
 
@@ -173,6 +191,7 @@ def process_histories(history: ProcessHistory[Any, Any]) -> list[HistoryRun]:
         f"{history.name}: normal operation exited abnormally, so it cannot define the outcome. Fix the child "
         f"entry point before judging its deaths"
     )
+    assert_declared_outcome(history.name, normal)
     assert_normal_operation_repeats(history.name, normal, _run(history, None))
     points = (*history.death_points, *history.failure_points)
     return [normal, *(_run(history, point) for point in points)]

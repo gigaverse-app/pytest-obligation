@@ -804,6 +804,15 @@ def assert_handoff_bindings_are_production_bound(delivery: Delivery, history: Ha
         )
 
 
+def assert_declared_outcome(name: str, delivered: HistoryRun) -> None:
+    """Check the independent oracle before normal operation can define recovery's target."""
+    if delivered.expected is not _ExpectedOutcome.UNSPECIFIED:
+        assert delivered.after == delivered.expected, (
+            f"{name} — normal operation did not reach the declared product outcome: "
+            f"expected {delivered.expected!r}, observed {delivered.after!r}"
+        )
+
+
 def crash_histories(delivery: Delivery, history: HandoffHistory[Any, Any]) -> list[HistoryRun]:
     """Run normal operation and every interrupted history; normal operation first."""
     assert_handoff_bindings_are_production_bound(delivery, history)
@@ -814,11 +823,7 @@ def crash_histories(delivery: Delivery, history: HandoffHistory[Any, Any]) -> li
         f"{delivery.name}: handoff {history.name!r} — positive control failed: normal operation left the "
         f"observation unchanged ({delivered.before!r}), so no history could diverge"
     )
-    if delivered.expected is not _ExpectedOutcome.UNSPECIFIED:
-        assert delivered.after == delivered.expected, (
-            f"{delivery.name}: handoff {history.name!r} — normal operation did not reach the "
-            f"declared product outcome: expected {delivered.expected!r}, observed {delivered.after!r}"
-        )
+    assert_declared_outcome(f"{delivery.name}: handoff {history.name!r}", delivered)
     assert_normal_operation_repeats(
         f"{delivery.name}: handoff {history.name!r}",
         delivered,
