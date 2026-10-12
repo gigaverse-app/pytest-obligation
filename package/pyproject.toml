@@ -87,3 +87,13 @@ include = ["/src", "/shims", "/tests", "/tests_support", "/docs", "/README.md", 
 testpaths = ["tests"]
 pythonpath = [".", "tests_support"]
 addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+src = ["src", "shims", "."]
+line-length = 120
+target-version = "py311"
+extend-exclude = [".venv*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
