@@ -404,10 +404,11 @@ def terminal_publication(run: Runner = inline) -> Iterator[BoundedCompletion[str
     with application() as state:
         identity = state.catalog.admit("green")
         state.publications.clear()
+        catalog = state.catalog
         yield BoundedCompletion(
             observe=lambda: state.remote.get(identity, ""),
             expected="green",
-            recover=lambda: run(state.catalog.recover),
+            recover=lambda: run(catalog.recover),
             advance=lambda seconds: None,
             within_seconds=1,
             interval_seconds=1,

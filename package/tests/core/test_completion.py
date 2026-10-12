@@ -78,12 +78,10 @@ def test_decorated_partial_keeps_binding_annotations():
 
 
 def test_test_authored_recovery_and_delivery_are_rejected():
-    for example, proof, field in (
-        (timer(), assert_completes_within, "recover"),
-        (delivery_example(None), assert_delivery_replay, "deliver"),
-    ):
-        with pytest.raises(AssertionError, match="production"):
-            proof(example.model_copy(update={field: lambda: None}))
+    with pytest.raises(AssertionError, match="production"):
+        assert_completes_within(timer().model_copy(update={"recover": lambda: None}))
+    with pytest.raises(AssertionError, match="production"):
+        assert_delivery_replay(delivery_example(None).model_copy(update={"deliver": lambda: None}))
 
 
 def test_fractional_clock_step_reaches_exact_declared_bound():

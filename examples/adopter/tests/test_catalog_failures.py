@@ -174,7 +174,7 @@ def test_generated_replay_proofs_reject_consistently_wrong_content(monkeypatch: 
 def test_generated_terminal_completion_rejects_noop_recovery(monkeypatch):
     from pytest_obligation import contract_cases
 
-    monkeypatch.setattr(Catalog, "recover", lambda self: None)
+    monkeypatch.setattr(Catalog, "eligible", lambda self: ())
     case = next(
         row.values[0]
         for row in contract_cases(catalog_contract("completion control"))
