@@ -201,7 +201,9 @@ def test_generated_replay_requires_expected_even_for_a_known_gap(named: bool, do
         # OBSERVE: independently stored result, without a declared requirement.
         return ReplaySafeEffect(**reference_replay_safety_binding().model_dump(exclude={"expected"}))
 
-    profiles = {p: NotApplicable(_WHY) for p in (Profile if domain else (Profile.H, Profile.J))}
+    profiles: dict[Profile, Claim | NotApplicable] = {
+        p: NotApplicable(_WHY) for p in (Profile if domain else (Profile.H, Profile.J))
+    }
     profiles[Profile.H] = Claim(gaps={"assert_replay_converges": _WHY})
     declaration = ObligationContract if domain else SafetyContract
     contract = declaration(
@@ -210,7 +212,7 @@ def test_generated_replay_requires_expected_even_for_a_known_gap(named: bool, do
         profiles=profiles,
         replay={"effect": missing} if named else missing,
     )
-    rows = contract_cases(contract) if domain else safety_contract_cases(contract)
+    rows = contract_cases(contract) if isinstance(contract, ObligationContract) else safety_contract_cases(contract)
     for row in rows:
         if row.values[0].profile is not Profile.H:
             continue
@@ -227,10 +229,10 @@ def test_legacy_replay_gap_cannot_hide_an_incorrect_first_result(wrong_first: bo
     from pytest_obligation.references.in_memory import InMemoryReplayEffect
 
     class WrongContent(InMemoryReplayEffect):
-        def execute(self, identity: int) -> None:
-            super().execute(identity)
-            if wrong_first or self.effect_count_for(identity) > 1:
-                self.outputs[identity] = "wrong"
+        def execute(self, operation_id: int) -> None:
+            super().execute(operation_id)
+            if wrong_first or self.effect_count_for(operation_id) > 1:
+                self.outputs[operation_id] = "wrong"
 
     def binding():
         # ARRANGE: fresh reference input with an independent expected result.
@@ -251,3 +253,25 @@ def test_legacy_replay_gap_cannot_hide_an_incorrect_first_result(wrong_first: bo
     with pytest.raises(AssertionError, match="declared product outcome") as error:
         row.values[0].run()
     assert isinstance(error.value, ReplayDiverged) is not wrong_first
+
+
+@pytest.mark.parametrize("callback", [False, True])
+def test_generated_replay_accepts_an_explicit_none_outcome(callback: bool) -> None:
+    from pytest_obligation.references.in_memory import InMemoryReplayEffect
+
+    def binding():
+        # ARRANGE: a pending reference operation, distinguishable from completion.
+        # REAL PRODUCTION: the real reference transition publishes its result.
+        # EXTERNAL SEAM: normal reference counter/storage.
+        # OBSERVE: None is the independent completion projection, not an omitted oracle.
+        effect = InMemoryReplayEffect()
+        return reference_replay_safety_binding(effect).model_copy(
+            update={
+                "observe": lambda identity: None if effect.observe(identity) == "result" else "pending",
+                "expected": (lambda identity: None) if callback else None,
+            }
+        )
+
+    contract = SafetyContract(name="None result", profiles=_dispositions(H=Claim()), replay=binding)
+    for row in safety_contract_cases(contract):
+        row.values[0].run()
