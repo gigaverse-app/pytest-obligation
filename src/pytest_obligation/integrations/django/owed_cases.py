@@ -4,7 +4,6 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any
 
-import pytest
 from django.db.models import Model
 
 from pytest_obligation.contract import (
@@ -16,7 +15,6 @@ from pytest_obligation.contract import (
     _entered,
     _proof_runner,
 )
-from pytest_obligation.host import current_host
 from pytest_obligation.integrations.django.edge_values import CandidateEdge, model_edges
 from pytest_obligation.integrations.django.owed_rows import (
     NOTHING_ENDS_A_FAILURE,
@@ -79,10 +77,6 @@ def _owed_row_cases(contract: ObligationContract) -> list[Any]:
     for name, proof in OWED_ROW_PROOFS.items():
         for edge in edges:
             key = f"{name}[{edge.id}]"
-            marks: list[Any] = list(current_host().database_marks(True))
-            if reason := disposition.gaps.get(key):
-                # Only the invariant's own failure is the gap; a broken example still fails.
-                marks.append(pytest.mark.xfail(strict=True, reason=reason, raises=OwedRowNotHandled))
             case = ContractCase(
                 id=f"{Profile.A.case_prefix}-{key}",
                 profile=Profile.A,
@@ -92,7 +86,7 @@ def _owed_row_cases(contract: ObligationContract) -> list[Any]:
                 ),
                 fixtures=contract.fixtures,
             )
-            params.append(pytest.param(case, id=case.id, marks=marks))
+            params.append(case.parameter(transactional=True, gap=disposition.gaps.get(key), raises=OwedRowNotHandled))
     return params
 
 
@@ -171,17 +165,17 @@ def _owed_row_selection_cases(selection: ScheduledSelection) -> list[Any]:
     params: list[Any] = []
     for case_id, check, invariant_failure in checks:
         # On-commit handoffs (a dispatcher scheduled after commit) are only visible with real commits.
-        marks: list[Any] = list(current_host().database_marks(True))
+        reason, failure = None, invariant_failure
         if declared := _named_failure_gap(selection.gaps, case_id):
             # Only the one failure the gap names; another failure or a broken binding still fails.
             reason, failure = declared
-            marks.append(pytest.mark.xfail(strict=True, reason=reason, raises=failure))
+
         elif reason := selection.gaps.get(case_id):
             assert invariant_failure is not None, f"{case_id} is unwaivable; __post_init__ rejects its gap"
             # Only the invariant's own failure is the gap; a broken binding or control still fails.
-            marks.append(pytest.mark.xfail(strict=True, reason=reason, raises=invariant_failure))
+
         case = ContractCase(id=case_id, run=_proof_runner(selection.owed_rows, check), fixtures=selection.fixtures)
-        params.append(pytest.param(case, id=case.id, marks=marks))
+        params.append(case.parameter(transactional=True, gap=reason, raises=failure))
     return params
 
 

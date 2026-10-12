@@ -36,7 +36,7 @@ def validate(scenarios: Mapping[str, Scenario], *, legacy: bool) -> None:
 
 
 def cases(scenarios: Mapping[str, Scenario], fixtures: tuple[str, ...]) -> list[ParameterSet]:
-    from ...contract import ContractCase, Profile, _database_marks
+    from ...contract import ContractCase, Profile
 
     result = []
     for name, scenario in scenarios.items():
@@ -48,14 +48,12 @@ def cases(scenarios: Mapping[str, Scenario], fixtures: tuple[str, ...]) -> list[
                 profile=Profile.E,
                 family="in_flight" if isinstance(scenario, InFlightConvergence) else "evidence_confluence",
             )
-            marks = _database_marks(True)
-            if history.id in scenario.gaps:
-                marks.append(
-                    pytest.mark.xfail(
-                        strict=True, raises=KnownInterleavingFailure, reason=scenario.gaps[history.id].reason
-                    )
+            gap = scenario.gaps.get(history.id)
+            result.append(
+                case.parameter(
+                    transactional=True, gap=gap.reason if gap is not None else None, raises=KnownInterleavingFailure
                 )
-            result.append(pytest.param(case, id=case.id, marks=marks))
+            )
     return result
 
 
