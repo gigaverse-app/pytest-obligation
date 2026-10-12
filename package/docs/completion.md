@@ -1,5 +1,7 @@
 # Terminal completion and duplicate delivery
 
+Import `BoundedCompletion` and `DeliveryReplay` from `pytest_obligation`.
+
 `ObligationContract.completions` accepts named factories returning
 `BoundedCompletion`. Supply an independent `expected` product outcome, real
 recovery, a controlled scheduler clock, and a maximum elapsed time. An optional
@@ -19,3 +21,10 @@ Both families require explicit expected outcomes and generate ordinary contract
 cases, so collection reports and `--obligation-verify` include them. Keep fixture,
 production, external-seam and observation annotations beside each binding.
 Neither helper manufactures work state or implements retries for the adopter.
+
+The runnable catalog example binds terminal publication to its actual recovery
+method through the inline, Celery and RQ executor variants. Its negative control
+replaces recovery with a no-op and requires this generated case to fail. The Due
+consumer CI builds this candidate wheel and runs the Widget Store's timed stages,
+database delivery replay, real process deaths and negative controls, as well as
+books, scheduled publication and the other application contracts.
