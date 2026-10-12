@@ -1833,6 +1833,10 @@ class ScheduledSelection(HarnessModel):
     #: Combinations deliberately outside this recovery, with substantive reasons.
     excluded_states: Mapping[str, str] = Field(default_factory=dict)
 
+    #: Compared non-state routing columns held at make_owed's value, each with a reason.
+    #: Completeness is scoped to those producer values; lifecycle paths cannot be fixed.
+    fixed_fields: Mapping[str, str] = Field(default_factory=dict)
+
     def model_post_init(self, _context: Any) -> None:
         errors: list[str] = []
         annotation_defect = _adopter_annotation_defect(
@@ -1849,6 +1853,8 @@ class ScheduledSelection(HarnessModel):
             errors.append("state_fields require owed_rows for selection completeness")
         if self.excluded_states and not self.state_fields:
             errors.append("excluded_states require state_fields")
+        if self.fixed_fields and not self.state_fields:
+            errors.append("fixed_fields require state_fields")
         valid = {proof.__name__ for proof in SELECTION_PROOFS}
         if self.state_fields:
             selection_gaps, malformed = _selection_gaps(self.gaps)

@@ -115,3 +115,17 @@ named and safety contracts require the outcome before running any replay proof.
 Known duplicate-send gaps accept only a divergence after a correct first result.
 CI requires every canonical replay case for each named demo effect, so removing
 one binding or filtering a proof cannot leave a passing aggregate profile.
+
+## Integration of the upstream parity changes (#57)
+
+| Capability | Actual adopter evidence | Limits |
+| --- | --- | --- |
+| Failure-preserving binding scopes | The runnable SQLite catalog executes its generated H positive control through cleanup that swallows assertions. The real worker passes; changing `Catalog.execute` to a no-op still fails against the independent provider ledger. | The mutation control deliberately breaks application code; normal bindings still replace only external systems. |
+| Canonical lifecycle paths and selected/skipped-row exploration | Wagtail's real database worker declares `status`, terminal exclusions and its fixed backend ownership. The proof executes actual task bodies and connection cleanup. | RUNNING tasks and four exact invalid-status edges have strict findings; this is evidence of defects, not a passing recovery guarantee. |
+| Committing history isolation | Wagtail lifecycle histories run in autocommit; root controls retain an unrelated pre-existing row and require every proof-created row to disappear after both success and failure. | External effects remain owned by each binding's scope. |
+| Collection-time fixture resolution, recovered in the third BE audit | Catalog and upstream-adopter CI enable `--due-work-check-fixtures`; subprocess controls cover skipped tests, direct/indirect parameters, deselection and real xdist workers. | Dynamic fixture lookup cannot be resolved before execution. |
+
+The underlying production execution is shared with the existing provider,
+process-death, retry and replay demonstrations. CI also requires the Wagtail
+selection-completeness cases to appear in JUnit evidence; a missing or ordinary
+skipped proof cannot preserve a coverage claim.

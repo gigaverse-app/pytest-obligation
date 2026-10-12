@@ -211,3 +211,46 @@ original harness directory. It recovered these additional owners:
 The SQL reader lives under `integrations._internal` and imports no framework or
 driver; public plan and lock-order interfaces remain in their existing modules.
 This remains a lexical proof over captured plans, not an arbitrary SQL parser.
+
+## Third pass: real adopters and adjacent tooling
+
+After #57 and Due #22 merged, the comparison was repeated against backend
+`e2c88be1a`, including the nested implementation bodies and the surrounding
+session helpers. The inventory covers 86 implementation modules and 804
+module-level definitions; name matches were only an index into the behavioral
+review, not a claim of equivalence.
+
+| Remaining difference | Disposition |
+| --- | --- |
+| Fixture validation before skipped-test setup | Ported as `--due-work-check-fixtures`, with subprocess/xdist controls and adopter CI usage; backend can remove its local plugin. |
+| Native completion/route wrappers | Intentionally dropped by the owner; they were unused. Generic ORM lifecycle proofs remain. |
+| Old commit observer, broker/death helpers and selected-row helpers | Public `integrations.django.writes`, `crash_histories`, Celery handoff runner and `RowExecution` own the equivalent behavior. Driver-independent cursor handling and guarded binding scopes are stronger public behavior. |
+| Beat and ambient-universe checks | Public scheduled-source and host scope hooks own the generic proof; backend retains its actual schedule and tenant policy. |
+| Plan/index helper names | Public PostgreSQL catalog and lexical plan readers own the proof, including the SQL-literal fixes from #57. |
+| Source walkers, real-provider guards, wiring snapshots, migration round trips and optimized transactional flush | Backend-wide test infrastructure with application-specific classification, credentials, migration/deployment and isolation policies; these are not missing due-work library implementations. |
+
+Integration also exposed defects that a source comparison could not: committing
+selection histories used an artificial transaction and left initial/gap example
+rows behind. The real Wagtail worker now runs with its normal connection behavior;
+root regressions require committed histories to clean up their own rows. Exact
+edge aliases and an explicit fixed routing scope let that adopter expose precise
+lifecycle findings without disabling the proof. See the [adopter capability
+matrix](adopter-capabilities.md#integration-of-the-upstream-parity-changes-57).
+
+A coordinated consumer audit then found copies that had already been ported but
+were still used in BE: its worker connection scope, lock-order recorder and Beat
+driver. BE consumers now use the canonical public connection and lock-order
+owners (including one shared ledger); its Beat adapter only supplies the BE
+Celery application. The older-transaction visibility helper was promoted from
+Due's model-defining conformance module into the model-free Django transaction
+module here, with real-connection success/failure cleanup controls. Due retains
+an import alias for its existing callers. This distinguishes a missing upstream
+capability from incomplete consumer consolidation; both need to be closed.
+
+The consumer cleanup also recovered eleven standalone controls previously left
+in BE: wait/no-wait SQL classification, documented lock-reader limits, bare SQL
+identifier masking, repeated worker-scope option restoration and refusal to close
+the main test thread's connection. They now run beside their public owners; BE's
+copied mechanism tests are removed. The expanded Django suite passes 390 tests
+with its existing strict finding. Actual BE Beat, cancellation and migration
+visibility adopters additionally exercise the shared implementation.

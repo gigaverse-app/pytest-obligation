@@ -1,14 +1,17 @@
 """Sensitivity controls: break application behavior, then replay the generated failure."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, nullcontext, suppress
 from typing import Any
 
 import pytest
 from adopter_app.catalog import Catalog
 from test_bindings import catalog_contract, recovery_failures
 
+from pytest_obligation.contract import contract_cases
 from pytest_obligation.interleavings import HistoryTrace, InterleavingFailure, replay_history
 from pytest_obligation.poison import PoisonDropped, PoisonStalled, PoisonUnreported, StopRequestIsolated
+from pytest_obligation.profiles.harmless_replay import ReplaySafeEffect
 
 
 def forget_remote_drift(original: Callable[..., None]) -> Callable[..., None]:
@@ -114,6 +117,35 @@ def test_catalog_declaration_names_its_application_under_a_framework_host() -> N
         assert current_host() is framework
         for proof in contract.extras:
             proof.run()
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_generated_replay_verdict_survives_real_application_cleanup(
+    monkeypatch: pytest.MonkeyPatch, broken: bool
+) -> None:
+    from test_bindings import replay
+
+    @contextmanager
+    def swallowing_binding() -> Iterator[ReplaySafeEffect]:
+        # ARRANGE: the canonical binding admits a real SQL catalog obligation.
+        # REAL PRODUCTION: Catalog.execute is the same application worker.
+        # EXTERNAL SEAM: the canonical provider ledger, wrapped in defective cleanup.
+        # OBSERVE: independent provider state and call counts from replay().
+        with suppress(AssertionError), replay() as binding:
+            yield binding
+
+    contract = catalog_contract("catalog cleanup control").model_copy(update={"replay": swallowing_binding})
+    case = next(
+        parameter.values[0]
+        for parameter in contract_cases(contract)
+        if parameter.values[0].id.endswith("assert_first_execution_has_visible_effect")
+    )
+    if broken:
+        # Mutation control: the real worker becomes a no-op; the binding still
+        # observes real SQL and the independent provider ledger.
+        monkeypatch.setattr(Catalog, "execute", lambda self, identity: None)
+    with pytest.raises(AssertionError, match="boundary 0 time") if broken else nullcontext():
+        case.run()
 
 
 @pytest.mark.parametrize("proof", ["assert_first_execution_has_visible_effect", "assert_replay_converges"])

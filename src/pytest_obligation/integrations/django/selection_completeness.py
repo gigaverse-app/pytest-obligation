@@ -110,7 +110,7 @@ from pydantic import Field
 from pytest_obligation.binding import is_real_reason
 from pytest_obligation.host import HandoffsNeverStop
 from pytest_obligation.integrations.clocks import time_machine_clock as frozen_scheduler_clock
-from pytest_obligation.integrations.django.edge_values import CandidateEdge, model_edges
+from pytest_obligation.integrations.django.edge_values import CandidateEdge, database_legal_edges, model_edges
 from pytest_obligation.integrations.django.lifecycle_states import (
     StatePath,
     filtered_fields,
@@ -181,6 +181,10 @@ class CompletenessBinding(RowExecution):
     state_fields: tuple[str, ...] = ()
     #: Lifecycle key syntax; a combination joins ``path:value`` conditions with ``,`` (``|`` between values).
     excluded_states: Mapping[str, str] = Field(default_factory=dict)
+    #: Compared, non-state columns held at the producer's value, with a reason.
+    #: Use for routing ownership (for example a worker's configured backend),
+    #: never to claim completeness across values this proof does not exercise.
+    fixed_fields: Mapping[str, str] = Field(default_factory=dict)
     #: What ends a selected row whose chain raised after moving it out of the selection (owed-row
     #: admissibility's rule); projected by the contract, never declared by the adopter.
     ends: FailureEnds = NOTHING_ENDS_A_FAILURE
@@ -194,6 +198,7 @@ class CompletenessBinding(RowExecution):
         *,
         state_fields: tuple[str, ...],
         excluded_states: Mapping[str, str],
+        fixed_fields: Mapping[str, str] | None = None,
     ) -> CompletenessBinding:
         """The owed-row loop both contracts already bind, with the states its selection decides on."""
         return cls(
@@ -208,6 +213,7 @@ class CompletenessBinding(RowExecution):
             run_tick=rows.run_tick,
             state_fields=state_fields,
             excluded_states=excluded_states,
+            fixed_fields=fixed_fields or {},
         )
 
 
@@ -251,15 +257,26 @@ class StateCombination:
 
 
 def parse_combination(key: str, paths: Mapping[str, StatePath]) -> StateCombination:
-    """``"path:value|value,path:value"`` or a bare ``"value"``, checked against the declared states."""
+    """Resolve declared choices and exact ``path:@edge_kind`` catalog aliases.
+
+    Aliases name database-legal values that cannot be written literally in the
+    grammar (for example blank and whitespace). They never waive an edge family;
+    each resolves to the same single concrete value the edge catalog generates.
+    A real model choice takes precedence over an alias with the same spelling.
+    """
     conditions: list[tuple[str | None, frozenset[str]]] = []
     for part in key.split(","):
         path, _, values = part.strip().rpartition(":")
         allowed = frozenset(value.strip() for value in values.split("|"))
         if path:
             assert path in paths, f"{key!r} names {path!r}, which is not a declared state path {sorted(paths)}"
-            unknown = allowed - set(paths[path].choices)
-            assert not unknown, f"{key!r}: {sorted(unknown)} are not values of {path} {paths[path].choices}"
+            state = paths[path]
+            aliases = {f"@{edge.kind}": str(edge.value) for edge in database_legal_edges(state.field)}
+            unknown = allowed - set(state.choices) - aliases.keys()
+            assert not unknown, (
+                f"{key!r}: {sorted(unknown)} are not values of {path} {state.choices} or its edge aliases"
+            )
+            allowed = frozenset(value if value in state.choices else aliases[value] for value in allowed)
         else:
             assert len(allowed) == 1 and any(next(iter(allowed)) in state.choices for state in paths.values()), (
                 f"{key!r} names no value of any declared state path"
@@ -306,11 +323,24 @@ def _declaration(binding: CompletenessBinding) -> _Declaration:
     assert not thin, f"{binding.name}: excluded_states {thin} carry no real reason"
     compared = filtered_fields(selection.query.where, model)
     own_states = {state.field.name for state in paths.values() if not state.relations}
+    fixed = set(binding.fixed_fields)
+    valid_fixed = {
+        field.name
+        for field in model._meta.concrete_fields
+        if field.name in compared and field.name not in own_states and not field.primary_key and not field.is_relation
+    }
+    assert fixed <= valid_fixed, (
+        f"{binding.name}: fixed_fields must name compared non-state columns: {sorted(fixed - valid_fixed)}"
+    )
+    assert all(is_real_reason(reason) for reason in binding.fixed_fields.values()), (
+        f"{binding.name}: fixed_fields require substantive reasons"
+    )
     drawn = tuple(
         model_field
         for model_field in model._meta.concrete_fields
         if model_field.name in compared
         and model_field.name not in own_states
+        and model_field.name not in fixed
         and not model_field.primary_key
         and not model_field.is_relation
         and _strategy(model_field, timezone.now()) is not None
@@ -631,11 +661,12 @@ def assert_selection_is_complete(
         name = binding.name
         # POSITIVE CONTROL: the unmodified owed example is selected and served,
         # so a skipped row below is skipped by the selection, not by a broken example.
-        row = binding.make_owed()
-        assert binding.identity_of(row) in _selected(binding), (
-            f"{name}: the owed example is not selected before anything is written into it, so nothing below "
-            f"would be measured"
-        )
+        with _new_rows_deleted(declaration.model, commits=commits):
+            row = binding.make_owed()
+            assert binding.identity_of(row) in _selected(binding), (
+                f"{name}: the owed example is not selected before anything is written into it, so nothing below "
+                f"would be measured"
+            )
     gap_combinations = tuple(
         parse_combination(combination, declaration.paths)
         for combination in (gap_combination(gap) for gap in gaps)
@@ -682,11 +713,12 @@ def assert_declared_gap_still_fails(
     with _example(commits=commits), enter() as binding:
         declaration = _declaration(binding)
         assignment = parse_combination(combination, declaration.paths).assignment()
-        row = binding.make_owed()
-        assert _write(binding, declaration, row, assignment), (
-            f"{binding.name}: the database refuses {gap}, so no row can be in it; drop the gap"
-        )
-        _judge(binding, declaration, row, assignment)
+        with _new_rows_deleted(declaration.model, commits=commits):
+            row = binding.make_owed()
+            assert _write(binding, declaration, row, assignment), (
+                f"{binding.name}: the database refuses {gap}, so no row can be in it; drop the gap"
+            )
+            _judge(binding, declaration, row, assignment)
 
 
 #: What a declared per-combination gap may raise; anything else (a broken binding) still fails it.
