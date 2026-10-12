@@ -1,0 +1,335 @@
+"""
+Crash histories against the framework-free reference ledger, in both directions.
+
+The conforming shapes commit a failure together with the successor it owes, or
+notify with an idempotency key; they converge. Each broken shape diverges on
+its own history, named in the failure: a split commit, a message-only handoff,
+a commit hook, a repeated notification. Agreement alone is not a pass: an inert
+recovery fails the positive control.
+"""
+
+import inspect
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import Any
+
+import pytest
+
+from pytest_obligation.crash_histories import (
+    CallableDelivery,
+    ExternalCall,
+    HandoffHistory,
+    HistoriesDiverged,
+    assert_crash_at_every_commit_converges,
+    assert_histories_converge,
+    assert_pinned_outcomes,
+)
+from pytest_obligation.host import Host, hosted
+from pytest_obligation.references import in_memory_handoffs as ref
+
+
+def _retry(transition: Callable[[int], Any]) -> HandoffHistory[int, Any]:
+    return HandoffHistory(
+        name="retryable failure",
+        arrange=ref.running_attempt,
+        transition=transition,
+        observe=ref.attempt_and_successors,
+    )
+
+
+def test_an_atomic_handoff_converges(ledger_host: Host) -> None:
+    assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(ref.fail_with_atomic_handoff))
+
+
+@pytest.mark.parametrize(
+    ("transition", "divergence"),
+    [
+        (ref.fail_with_split_handoff, r"'worker died after commit 1': \('retryable_failed', \(\)\)"),
+        (ref.fail_with_message_handoff, r"'notifications lost': \('retryable_failed', \(\)\)"),
+        (ref.fail_with_commit_hook_handoff, r"'worker died after commit 1': \('retryable_failed', \(\)\)"),
+    ],
+    ids=["split-commits", "message-only", "commit-hook"],
+)
+def test_a_handoff_a_death_or_lost_message_strands_diverges(
+    ledger_host: Host, transition: Callable[[int], Any], divergence: str
+) -> None:
+    with pytest.raises(AssertionError, match=divergence):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(transition))
+
+
+def test_agreement_with_an_inert_recovery_fails_the_positive_control(ledger_host: Host) -> None:
+    # Nothing ever advances the successor, so every history agrees on unfinished work.
+    with pytest.raises(AssertionError, match="recovery changed the observation in none of them"):
+        assert_crash_at_every_commit_converges(ref.INERT_DELIVERY, _retry(ref.fail_with_atomic_handoff))
+
+
+def _notifying(transition: Callable[[int], Any], seam: str) -> HandoffHistory[int, Any]:
+    return HandoffHistory(
+        name="completion",
+        arrange=ref.running_attempt,
+        transition=transition,
+        observe=ref.status_and_notifications,
+        external_calls=(ExternalCall(ref.RECIPIENT, seam),),
+    )
+
+
+def test_a_notification_recovery_repeats_diverges(ledger_host: Host) -> None:
+    with pytest.raises(AssertionError, match=r"'worker died after external call 1': \('complete', 2\).*repeated"):
+        assert_crash_at_every_commit_converges(ref.NOTIFYING_DELIVERY, _notifying(ref.complete_notifying, "notify"))
+
+
+def test_an_idempotent_notification_converges(ledger_host: Host) -> None:
+    assert_crash_at_every_commit_converges(
+        ref.NOTIFYING_ONCE_DELIVERY, _notifying(ref.complete_notifying_once, "notify_once")
+    )
+
+
+def test_naming_a_seam_the_transition_never_calls_is_refused(ledger_host: Host) -> None:
+    with pytest.raises(AssertionError, match=r"never called: Recipient\.notify\."):
+        assert_crash_at_every_commit_converges(
+            ref.NOTIFYING_ONCE_DELIVERY, _notifying(ref.complete_notifying_once, "notify")
+        )
+
+
+def test_a_transition_that_changes_nothing_fails_the_positive_control(ledger_host: Host) -> None:
+    history = HandoffHistory(
+        name="heartbeat", arrange=ref.running_attempt, transition=ref.reconcile, observe=ref.attempt_and_successors
+    )
+    with pytest.raises(
+        AssertionError, match="positive control failed: normal operation left the observation unchanged"
+    ):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+
+
+def test_a_test_authored_transition_is_refused(ledger_host: Host) -> None:
+    def authored(attempt: int) -> None:
+        ref.LEDGER.update(attempt, status=ref.RETRYABLE_FAILED)
+
+    with pytest.raises(AssertionError, match=r"handoff\[retryable failure\]\.transition authors production semantics"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(authored))
+
+
+def test_a_test_authored_recovery_is_refused(ledger_host: Host) -> None:
+    def authored_recovery() -> None:
+        for attempt in ref.LEDGER.select(status=ref.REQUESTED):
+            ref.LEDGER.update(attempt, status=ref.RUNNING)
+
+    delivery = CallableDelivery(name="authored", recover=authored_recovery)
+    with pytest.raises(
+        AssertionError, match=r"recover (authors production semantics|is test code that references no production)"
+    ):
+        assert_crash_at_every_commit_converges(delivery, _retry(ref.fail_with_atomic_handoff))
+
+
+def test_crash_histories_need_a_worker_killer() -> None:
+    with hosted(Host()), pytest.raises(AssertionError, match="worker_killer"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(ref.fail_with_atomic_handoff))
+
+
+def _completion(transition: Callable[[int], Any]) -> HandoffHistory[int, Any]:
+    return HandoffHistory(
+        name="completion", arrange=ref.running_attempt, transition=transition, observe=ref.attempt_status
+    )
+
+
+@pytest.fixture
+def replying_ledger_host() -> Iterator[Host]:
+    """The ledger host, also losing the reply to each commit in turn."""
+    ref.reset()
+    with hosted(Host(worker_killer=ref.ledger_killer, reply_breaker=ref.ledger_reply_breaker)) as host:
+        yield host
+    ref.reset()
+
+
+def test_reading_back_after_a_lost_reply_converges(replying_ledger_host: Host) -> None:
+    assert_crash_at_every_commit_converges(ref.COMPLETION_DELIVERY, _completion(ref.complete_checking_on_error))
+
+
+def test_treating_a_lost_reply_as_a_failure_diverges(replying_ledger_host: Host) -> None:
+    # The completion landed; the worker never saw the answer and recorded a failure over it.
+    with pytest.raises(AssertionError, match=r"'the reply to commit 2 was lost': 'failed'"):
+        assert_crash_at_every_commit_converges(ref.COMPLETION_DELIVERY, _completion(ref.complete_failing_on_error))
+
+
+def test_a_findings_table_lists_only_the_findings(replying_ledger_host: Host) -> None:
+    history = _completion(ref.complete_failing_on_error)
+    assert_pinned_outcomes(
+        ref.COMPLETION_DELIVERY,
+        history,
+        delivered=ref.COMPLETE,
+        outcomes={"the reply to commit 2 was lost": ref.FAILED},
+    )
+    # A finding that no longer happens is reported, and so is one pinned for a history that never ran.
+    with pytest.raises(AssertionError, match=r"the reply to commit 2 was lost: pinned normal operation"):
+        assert_pinned_outcomes(ref.COMPLETION_DELIVERY, history, delivered=ref.COMPLETE, outcomes={})
+    with pytest.raises(AssertionError, match=r"worker died after commit 7: pinned 'failed', now '<not run>'"):
+        assert_pinned_outcomes(
+            ref.COMPLETION_DELIVERY,
+            history,
+            delivered=ref.COMPLETE,
+            outcomes={"the reply to commit 2 was lost": ref.FAILED, "worker died after commit 7": ref.FAILED},
+        )
+
+
+def test_an_assertion_raised_after_an_injected_failure_is_never_absorbed(replying_ledger_host: Host) -> None:
+    # The lost reply is injected, and production answers it with a broken invariant: that must fail the
+    # history, not pass as the injected failure reaching the caller.
+    with pytest.raises(AssertionError, match="the completion's reply must never be lost"):
+        assert_crash_at_every_commit_converges(ref.COMPLETION_DELIVERY, _completion(ref.complete_asserting_on_error))
+
+
+def test_an_ordinary_error_raised_on_the_way_out_of_a_dead_worker_is_absorbed(ledger_host: Host) -> None:
+    # A session's close raises its own error over the death; a dead process runs no close at all, so the
+    # history goes on to its verdict instead of erroring.
+    with pytest.raises(AssertionError, match=r"'worker died after commit 1': \('retryable_failed', \(\)\)"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(ref.fail_with_split_handoff_in_a_session))
+
+
+def test_a_transition_that_changes_nothing_fails_the_positive_control_not_as_a_divergence(ledger_host: Host) -> None:
+    history = HandoffHistory(
+        name="heartbeat", arrange=ref.running_attempt, transition=ref.reconcile, observe=ref.attempt_and_successors
+    )
+    with pytest.raises(AssertionError, match="positive control failed") as raised:
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    assert not isinstance(raised.value, HistoriesDiverged)
+
+
+def test_a_divergence_is_always_a_histories_diverged(ledger_host: Host) -> None:
+    with pytest.raises(HistoriesDiverged, match=r"'worker died after commit 1'"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(ref.fail_with_split_handoff))
+
+
+def test_an_observation_that_differs_between_clean_runs_is_refused_not_a_divergence(ledger_host: Host) -> None:
+    # The per-run identifier makes every history "diverge"; a known gap must not accept that.
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(
+        update={"observe": lambda attempt: (attempt, *ref.attempt_and_successors(attempt))}
+    )
+    with pytest.raises(AssertionError, match="not deterministic") as raised:
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    assert not isinstance(raised.value, HistoriesDiverged)
+
+
+def test_an_assertion_inside_an_exception_group_after_an_injected_failure_is_never_absorbed(
+    replying_ledger_host: Host,
+) -> None:
+    with pytest.raises(ExceptionGroup) as raised:
+        assert_crash_at_every_commit_converges(
+            ref.COMPLETION_DELIVERY, _completion(ref.complete_grouping_its_assertion_on_error)
+        )
+    assert raised.value.subgroup(AssertionError) is not None
+
+
+def test_an_assertion_on_the_way_out_of_a_dead_worker_is_absorbed(ledger_host: Host) -> None:
+    # The cleanup's check fails only because the worker died under it; a dead process runs no cleanup.
+    assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(ref.fail_with_atomic_handoff_checking_in_cleanup))
+
+
+def test_a_death_inside_a_task_group_is_the_death(ledger_host: Host) -> None:
+    assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, _retry(ref.fail_with_atomic_handoff_in_a_task_group))
+
+
+def test_a_task_group_reporting_the_injected_failure_is_absorbed(replying_ledger_host: Host) -> None:
+    assert_crash_at_every_commit_converges(
+        ref.COMPLETION_DELIVERY, _completion(ref.complete_in_a_task_group_checking_on_error)
+    )
+
+
+def test_a_deliberate_translation_of_the_injected_failure_is_absorbed(replying_ledger_host: Host) -> None:
+    assert_crash_at_every_commit_converges(ref.COMPLETION_DELIVERY, _completion(ref.complete_translating_a_lost_reply))
+
+
+@pytest.mark.parametrize(
+    ("transition", "note"),
+    [
+        (ref.complete_raising_unchained_on_error, "while handling the injected failure"),
+        (ref.complete_raising_unlinked_after_error, "after the injected failure"),
+    ],
+    ids=["implicit-context-only", "unlinked"],
+)
+def test_an_error_not_chained_from_the_injected_failure_fails_the_history_with_a_note(
+    replying_ledger_host: Host, transition: Callable[[int], Any], note: str
+) -> None:
+    with pytest.raises(ref.CompletionUnconfirmed) as raised:
+        assert_crash_at_every_commit_converges(ref.COMPLETION_DELIVERY, _completion(transition))
+    notes = "\n".join(getattr(raised.value, "__notes__", ()))
+    assert note in notes, notes
+    assert "raise it from the failure" in notes, notes
+
+
+def test_a_group_with_a_death_raised_by_a_live_worker_is_refused(ledger_host: Host) -> None:
+    with pytest.raises(AssertionError, match="WorkerDied escaped from something other than the simulated death"):
+        assert_crash_at_every_commit_converges(
+            ref.RETRY_DELIVERY, _retry(ref.fail_with_atomic_handoff_then_a_group_with_its_own_death)
+        )
+
+
+def test_a_divergence_has_no_other_type_to_take() -> None:
+    # A gap's xfail accepts HistoriesDiverged alone; a caller-chosen type would let it accept anything.
+    assert "divergence" not in inspect.signature(assert_histories_converge).parameters
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_scoped_arrangement_lives_through_observation_and_always_closes(ledger_host: Host, broken: bool) -> None:
+    scopes: list[bool] = []
+    active = False
+
+    @contextmanager
+    def arrange() -> Iterator[int]:
+        nonlocal active
+        assert not active
+        active = True
+        scopes.append(False)
+        try:
+            yield ref.running_attempt()
+        finally:
+            active = False
+            scopes[-1] = True
+
+    def observe(handle: int) -> Any:
+        assert active, "arrangement closed before final observation"
+        return ref.attempt_and_successors(handle)
+
+    history = HandoffHistory(
+        name="scoped retry",
+        arrange=arrange,
+        transition=ref.fail_with_split_handoff if broken else ref.fail_with_atomic_handoff,
+        observe=observe,
+    )
+    if broken:
+        with pytest.raises(AssertionError, match="worker died after commit 1"):
+            assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    else:
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    assert len(scopes) > 2 and all(scopes)
+    assert not active
+
+
+@pytest.mark.parametrize("expected", [None, ("wrong", ())])
+def test_independent_product_outcome_rejects_consistently_wrong_histories(ledger_host: Host, expected: Any) -> None:
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"expected": expected})
+    with pytest.raises(AssertionError, match="declared product outcome") as error:
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+    assert not isinstance(error.value, HistoriesDiverged)
+
+
+def test_expected_callback_is_evaluated_before_transition(ledger_host: Host) -> None:
+    def expected(handle: int) -> tuple[str, tuple[str, ...]]:
+        assert ref.attempt_and_successors(handle)[0] != ref.RETRYABLE_FAILED
+        return (ref.RETRYABLE_FAILED, ("running",))
+
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"expected": expected})
+    assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+
+
+def test_downstream_recovery_declaration_requires_delivery_support(ledger_host: Host) -> None:
+    from pytest_obligation.models import ObligationContractDesignError
+
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"recovery_ticks": (ref.reconcile,)})
+    with pytest.raises(ObligationContractDesignError, match="recover_with"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)
+
+
+def test_downstream_recovery_is_production_bound(ledger_host: Host) -> None:
+    history = _retry(ref.fail_with_atomic_handoff).model_copy(update={"recovery_ticks": (lambda: None,)})
+    with pytest.raises(AssertionError, match="recovery_ticks"):
+        assert_crash_at_every_commit_converges(ref.RETRY_DELIVERY, history)

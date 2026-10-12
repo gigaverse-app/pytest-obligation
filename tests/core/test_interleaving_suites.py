@@ -1,0 +1,111 @@
+"""An adopter's declaration really collects, runs, reports and optionally explores generated histories."""
+
+import importlib.util
+
+import pytest
+
+from pytest_obligation.interleavings import InFlightConvergence
+from pytest_obligation.interleavings.testing.reference import reference
+
+pytest_plugins = ["pytester"]
+
+DECLARATION = """
+from pytest_obligation import Claim, ObligationContract, NotApplicable, Profile, due_work_contract_suite
+from pytest_obligation.interleavings import InFlightConvergence
+from pytest_obligation.interleavings.testing.reference import reference
+
+scenario = InFlightConvergence(
+    name="generated", bind=reference, intents=("A", "B", "C"), seams=("write",), independent=True,
+    no_transport_because="This reference tests provider completion without a broker.",
+)
+contract = ObligationContract(
+    name="generated", profiles={**{p: NotApplicable("In-memory runner control.") for p in Profile}, Profile.E: Claim()},
+    in_flight={scenario.name: scenario},
+)
+@due_work_contract_suite(contract)
+class TestGenerated:
+    pass
+"""
+
+
+@pytest.mark.parametrize("mode", ["off", "smoke"])
+def test_generated_histories_and_optional_search_are_real_due_work_cases(pytester: pytest.Pytester, mode: str) -> None:
+    if mode == "smoke" and importlib.util.find_spec("hypothesis") is None:
+        pytest.skip("optional exploration extra is not installed")
+    pytester.makepyfile(DECLARATION)
+    scenario = InFlightConvergence(
+        name="generated",
+        bind=reference,
+        intents=("A", "B", "C"),
+        seams=("write",),
+        independent=True,
+        no_transport_because="This reference tests provider completion without a broker.",
+    )
+    result = pytester.runpytest_subprocess("-q", "-m", "due_work", f"--due-work-explore={mode}")
+    result.assert_outcomes(
+        passed=9 + len(scenario.histories()) + (mode == "smoke"), xfailed=3, deselected=(mode == "off")
+    )
+
+
+def test_explicit_search_without_the_optional_dependency_is_actionable(pytester: pytest.Pytester) -> None:
+    if importlib.util.find_spec("hypothesis") is not None:
+        pytest.skip("minimal-installation control runs in the core CI job")
+    pytester.makepyfile(DECLARATION)
+    result = pytester.runpytest_subprocess("--due-work-explore=smoke")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*Install pytest-obligation[[]exploration[]]*"])
+
+
+def test_assessment_gate_refuses_unassessed_families_even_when_deselected(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(DECLARATION)
+    result = pytester.runpytest_subprocess("-q", "--due-work-require-assessed", "-k", "not not_assessed")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*generated*E/snapshot*not assessed*"])
+
+
+def test_assessment_gate_accepts_explicit_family_decisions(pytester: pytest.Pytester) -> None:
+    source = DECLARATION.replace(
+        "in_flight={scenario.name: scenario},",
+        'in_flight={scenario.name: scenario}, convergence_families={family: NotApplicable("No separate API in this reference.") '
+        "for family in ConvergenceFamily if family != ConvergenceFamily.IN_FLIGHT},",
+    )
+    pytester.makepyfile("from pytest_obligation.profiles.catalog import ConvergenceFamily\n" + source)
+    result = pytester.runpytest_subprocess("-q", "--due-work-require-assessed")
+    assert result.ret == pytest.ExitCode.OK
+
+
+def test_assessment_gate_also_covers_standalone_safety_suites(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile("""
+from pytest_obligation import NotApplicable, NotAssessed, Profile, SafetyContract, safety_contract_suite
+contract = SafetyContract(name="safety", profiles={
+    Profile.H: NotAssessed(because="The task's external effect has not been evaluated."),
+    Profile.J: NotApplicable("The task is never retried."),
+})
+@safety_contract_suite(contract)
+class TestSafety:
+    pass
+""")
+    result = pytester.runpytest_subprocess("-q", "--due-work-require-assessed")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*safety*H*not assessed*"])
+
+
+@pytest.mark.parametrize("package", ["pytest_obligation", "due_work_harness"])
+@pytest.mark.parametrize(
+    ("counterfeit", "failures"),
+    [("", 0), (", trust_receipts_from_revision=2", 2), (", confirm_receipt_during_recovery=True", 3)],
+    ids=["verified", "trusts-update", "confirms-during-recovery"],
+)
+def test_receipt_invariants_are_enforced_through_public_pytest_collection(
+    pytester: pytest.Pytester, package: str, counterfeit: str, failures: int
+) -> None:
+    source = "from functools import partial\n" + DECLARATION.replace(
+        "bind=reference,", f"bind=partial(reference, receipt_only=True{counterfeit}),"
+    ).replace('seams=("write",),', 'seams=("write",), acknowledgement_only_seams=("write",),')
+    if package == "due_work_harness":
+        source = source.replace("pytest_obligation", package).replace("ObligationContract", "DueWorkContract")
+    pytester.makepyfile(source)
+    result = pytester.runpytest_subprocess("-q", "-k", "ack-without-apply", "--due-work-explore=off")
+    result.assert_outcomes(passed=3 - failures, failed=failures)
+    if failures:
+        result.stdout.fnmatch_lines(["*acknowledged-not-applied*"])
