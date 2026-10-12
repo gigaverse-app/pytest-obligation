@@ -9,6 +9,7 @@ from typing import Generic, TypeVar
 
 from pydantic import Field, FiniteFloat, model_validator
 
+from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
 from pytest_obligation.models import HarnessModel
 
 ObservationT = TypeVar("ObservationT")
@@ -35,9 +36,17 @@ class BoundedCompletion(HarnessModel, Generic[ObservationT]):
 
 def assert_completes_within(example: BoundedCompletion) -> None:
     """Require the declared terminal outcome, without early or reversed progress."""
+    assert_binding_reaches_production(
+        adopter="bounded completion",
+        field="recover",
+        binding=example.recover,
+        forbidden=INVOCATION_AUTHORING_OPERATIONS,
+        production_shape="the actual recovery entry point",
+    )
     assert example.observe() != example.expected, "completion example already has its terminal outcome"
     previous = example.remaining() if example.remaining is not None else None
     elapsed = 0.0
+    steps = 0
     while True:
         example.recover()
         if example.remaining is not None:
@@ -48,9 +57,10 @@ def assert_completes_within(example: BoundedCompletion) -> None:
             assert elapsed >= example.not_before_seconds, "terminal outcome arrived before the declared minimum wait"
             return
         assert elapsed < example.within_seconds, "declared terminal outcome was not reached within the time bound"
-        delta = min(example.interval_seconds, example.within_seconds - elapsed)
-        example.advance(delta)
-        elapsed += delta
+        steps += 1
+        target = min(steps * example.interval_seconds, example.within_seconds)
+        example.advance(target - elapsed)
+        elapsed = target
 
 
 class DeliveryReplay(HarnessModel, Generic[ObservationT]):
@@ -69,6 +79,13 @@ class DeliveryReplay(HarnessModel, Generic[ObservationT]):
 
 
 def assert_delivery_replay(example: DeliveryReplay) -> None:
+    assert_binding_reaches_production(
+        adopter="delivery replay",
+        field="deliver",
+        binding=example.deliver,
+        forbidden=INVOCATION_AUTHORING_OPERATIONS,
+        production_shape="the actual delivery entry point",
+    )
     initial = example.observe()
     assert initial != example.expected, "delivery replay example already has its terminal outcome"
     entries, callbacks = example.entries(), example.callback_entries()

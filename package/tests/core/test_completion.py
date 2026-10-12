@@ -4,28 +4,10 @@ import pytest
 
 from pytest_obligation.completion import (
     BoundedCompletion,
-    DeliveryReplay,
     assert_completes_within,
     assert_delivery_replay,
 )
-
-
-def timer(*, duration=3, reverse=False):
-    state = {"time": 0}
-
-    def advance(seconds):
-        state["time"] += seconds
-
-    return BoundedCompletion(
-        observe=lambda: state["time"] >= duration,
-        expected=True,
-        advance=advance,
-        recover=lambda: None,
-        within_seconds=4,
-        interval_seconds=0.5,
-        not_before_seconds=3,
-        remaining=lambda: int(state["time"]) if reverse else max(0, int(duration - state["time"])),
-    )
+from pytest_obligation.references.completion import delivery_example, timer
 
 
 def test_completion_accepts_declared_outcome_at_bound():
@@ -43,23 +25,7 @@ def test_completion_controls(kwargs, message):
 
 @pytest.mark.parametrize("fault", [None, "skip", "repeat", "wrong outcome"])
 def test_delivery_controls(fault):
-    state = {"entries": 0, "callbacks": 0, "outcome": 0}
-
-    def deliver():
-        if fault == "skip" and state["entries"]:
-            return
-        state["entries"] += 1
-        if not state["callbacks"] or fault == "repeat":
-            state["callbacks"] += 1
-            state["outcome"] = 2 if fault == "wrong outcome" else 1
-
-    example = DeliveryReplay(
-        deliver=deliver,
-        entries=lambda: state["entries"],
-        callback_entries=lambda: state["callbacks"],
-        observe=lambda: state["outcome"],
-        expected=1,
-    )
+    example = delivery_example(fault)
     if fault is None:
         assert_delivery_replay(example)
     else:
@@ -109,3 +75,16 @@ def test_decorated_partial_keeps_binding_annotations():
         return completed_in_time()
 
     assert callable_code(bound) is completed_in_time.__code__
+
+
+def test_test_authored_recovery_and_delivery_are_rejected():
+    for example, proof, field in (
+        (timer(), assert_completes_within, "recover"),
+        (delivery_example(None), assert_delivery_replay, "deliver"),
+    ):
+        with pytest.raises(AssertionError, match="production"):
+            proof(example.model_copy(update={field: lambda: None}))
+
+
+def test_fractional_clock_step_reaches_exact_declared_bound():
+    assert_completes_within(timer(duration=3).model_copy(update={"interval_seconds": 0.1, "within_seconds": 3}))

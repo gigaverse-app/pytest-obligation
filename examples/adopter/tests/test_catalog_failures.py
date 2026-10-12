@@ -169,3 +169,16 @@ def test_generated_replay_proofs_reject_consistently_wrong_content(monkeypatch: 
     )
     with pytest.raises(AssertionError, match="declared product outcome"):
         case.run()
+
+
+def test_generated_terminal_completion_rejects_noop_recovery(monkeypatch):
+    from pytest_obligation import contract_cases
+
+    monkeypatch.setattr(Catalog, "recover", lambda self: None)
+    case = next(
+        row.values[0]
+        for row in contract_cases(catalog_contract("completion control"))
+        if row.id.startswith("completion-")
+    )
+    with pytest.raises(AssertionError, match="terminal outcome"):
+        case.run()
