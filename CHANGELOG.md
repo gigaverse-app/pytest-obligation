@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.12.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.11.0...v0.12.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* the index-served verdict requires the selection's own narrowing ([#74](https://github.com/gigaverse-app/pytest-obligation/issues/74))
+
+### Features
+
+* owed-row loops bind external-resource identities through a listing seam ([#76](https://github.com/gigaverse-app/pytest-obligation/issues/76)) ([ccf6b67](https://github.com/gigaverse-app/pytest-obligation/commit/ccf6b674d5bdc7d28e8a75c691b2eba5c74c2c81))
+* polling selections prove isolation and per-tick service through generated owed-row cases ([#73](https://github.com/gigaverse-app/pytest-obligation/issues/73)) ([5bc5557](https://github.com/gigaverse-app/pytest-obligation/commit/5bc555741ca4a41154d91421da2b43b5c2e3789e))
+* prove bounded terminal completion and duplicate delivery separately ([#77](https://github.com/gigaverse-app/pytest-obligation/issues/77)) ([f2ae3c6](https://github.com/gigaverse-app/pytest-obligation/commit/f2ae3c6d0fde9b52796dade2dd05e8567b9513de))
+* the index-served verdict requires the selection's own narrowing ([#74](https://github.com/gigaverse-app/pytest-obligation/issues/74)) ([78ba059](https://github.com/gigaverse-app/pytest-obligation/commit/78ba0599b0fc7e5b2cc8727f50ea80633fd00e53))
+
+
+### Bug fixes
+
+* carry canonical Ruff rules with the editable package ([#70](https://github.com/gigaverse-app/pytest-obligation/issues/70)) ([67d0ed2](https://github.com/gigaverse-app/pytest-obligation/commit/67d0ed2461d331ced149c95c8943260be87463db))
+
 ## [0.11.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.10.0...v0.11.0) (2026-10-12)
 
 
