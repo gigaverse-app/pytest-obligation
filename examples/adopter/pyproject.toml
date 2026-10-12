@@ -24,4 +24,5 @@ production-packages = ["adopter_app"]
 bridge-methods = ["defer_notice"]
 
 [tool.pytest.ini_options]
+addopts = ["--due-work-check-fixtures"]
 pythonpath = ["."]

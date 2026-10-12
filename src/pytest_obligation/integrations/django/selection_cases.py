@@ -34,6 +34,7 @@ def selection_completeness_cases(contract: ObligationContract | ScheduledSelecti
                     rows,
                     state_fields=contract.state_fields,
                     excluded_states=contract.excluded_states,
+                    fixed_fields=contract.fixed_fields,
                 )
 
         return _cases(
@@ -42,7 +43,9 @@ def selection_completeness_cases(contract: ObligationContract | ScheduledSelecti
             enter=enter,
             gaps=contract.gaps,
             transactional=True,
-            commits=False,
+            # ScheduledSelection ticks run the real worker, which can close
+            # connections or require autocommit just like a transactional sweep.
+            commits=True,
             fixtures=contract.fixtures,
         )
     assert isinstance(contract, ObligationContract) and _claims_recovery(contract)

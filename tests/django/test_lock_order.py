@@ -14,14 +14,17 @@ import pytest
 from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 
+from pytest_obligation.integrations._internal.postgres_sql import bare_identifiers
 from pytest_obligation.integrations.django import lifecycle_references as ref
 from pytest_obligation.integrations.django import lock_order as lock_order_module
 from pytest_obligation.integrations.django.lock_order import (
     LockSequence,
+    RowLock,
     assert_consistent_lock_order,
     locked_tables,
     record_lock_order,
     recording_against_the_ledger,
+    row_locks,
 )
 
 # The fixture the recorder ships, registered the way an adopter's conftest does.
@@ -353,3 +356,47 @@ def test_a_table_also_locked_with_waiting_is_not_marked(two_tables: None) -> Non
             cursor.execute('SELECT id FROM "lock_order_b" WHERE id = 1 FOR UPDATE')
             cursor.execute('UPDATE "lock_order_a" SET id = 1 WHERE id = 1')
     assert [item.without_waiting for item in recorder.sequences] == [frozenset()]
+
+
+@pytest.mark.parametrize(
+    ("sql", "waits"),
+    [
+        ('SELECT "a"."id" FROM "a" FOR UPDATE SKIP LOCKED', False),
+        ('SELECT "a"."id" FROM "a" FOR UPDATE NOWAIT', False),
+        ('SELECT "a"."id" FROM "a" FOR UPDATE', True),
+        ('UPDATE "a" SET "s" = 1', True),
+    ],
+)
+def test_row_locks_says_whether_a_lock_waits(sql: str, waits: bool) -> None:
+    assert row_locks(sql) == (RowLock(table="a", waits=waits),)
+
+
+@pytest.mark.parametrize(
+    ("sql", "classified"),
+    [
+        # Only the first locking clause is read: `b`, locked by the second, is missed.
+        (
+            'SELECT * FROM "a" JOIN "b" ON (x) FOR UPDATE OF "a" SKIP LOCKED FOR UPDATE OF "b"',
+            (RowLock(table="a", waits=False),),
+        ),
+        # A comma join names only its first table.
+        ('SELECT * FROM "a", "b" WHERE x FOR UPDATE', (RowLock(table="a"),)),
+    ],
+    ids=["second-locking-clause", "comma-join"],
+)
+def test_documented_blind_spots_classify_as_the_docstring_says(sql: str, classified: tuple[RowLock, ...]) -> None:
+    # Django emits neither shape. Fixing one should update the module docstring with this case.
+    assert row_locks(sql) == classified
+
+
+@pytest.mark.parametrize(
+    ("expression", "bare"),
+    [
+        ("(kind = 'available_at <= soon'::text)", "(kind = "),
+        ('("order" <= $1)', "(order <= $1)"),
+        ('("odd name" <= $1)', "(           <= $1)"),
+    ],
+    ids=["literal-names-nothing", "plain-quoted-word-is-bare", "unplain-quoted-name-is-blanked"],
+)
+def test_bare_identifiers_leaves_only_names_a_word_pattern_can_read(expression: str, bare: str) -> None:
+    assert bare_identifiers(expression).startswith(bare)

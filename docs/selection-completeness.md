@@ -118,3 +118,29 @@ The optional `dispatched_ids` recorder belongs to `RowExecution`, so a
 `CompletenessBinding` carries the same observation into the selected-row verdict.
 `OwedRows` requires that recorder for its ordering proof. Its constructor and
 `CompletenessBinding`'s existing flat constructor remain compatible.
+
+## Executing committing workers and naming exact findings
+
+`ScheduledSelection` runs lifecycle histories in autocommit, as its real worker
+would. A worker may close connections between jobs. Each history removes rows
+it created, including its initial positive control and failed strict-gap case;
+pre-existing rows are retained. This prevents one committed history from filling
+the next history's recovery page.
+
+A strict gap can name a database edge through its canonical catalog alias:
+`assert_selection_is_complete[status:@blank]`, `status:@whitespace`,
+`status:@max_length`, or `status:@unknown_choice`. Each alias resolves to **one
+concrete field value**, using the same edge catalog as the search. Unknown
+aliases fail. The unqualified proof name remains forbidden as a gap.
+
+`ScheduledSelection.fixed_fields` holds named, compared, non-state columns at
+the value supplied by `make_owed`. Each needs a substantive reason. Use it for
+an explicit routing boundary, such as Wagtail's configured `backend_name`;
+the result proves completeness within that backend, not across other backends.
+Unknown columns, lifecycle paths and empty reasons are rejected. All remaining
+compared fields and every declared lifecycle state still participate.
+
+See the [real Wagtail worker binding](../demos/wagtail_tasks/test_worker_rows.py):
+it executes the unmodified worker, excludes terminal SUCCESSFUL/FAILED states,
+and reports stranded RUNNING and four invalid-status edges as separate strict
+findings. Its other queue-name and stop/failure findings remain independent.

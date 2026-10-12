@@ -141,3 +141,16 @@ case; a reason creates a strict expected failure, limited to `raises` when
 supplied. A broken binding must not be hidden by an invariant-only gap. This
 method preserves the case's ID and fixture declaration; ordinary adopters should
 continue using contract decorators and `ExtraProof`.
+
+## Validate fixtures before optional tests are skipped
+
+`pytest --due-work-check-fixtures` resolves fixtures for every retained item at
+collection time, including skipped external-provider tests. Missing fixture
+imports therefore fail ordinary CI instead of waiting for the first opt-in run.
+Direct parametrization is not mistaken for a fixture; indirect parametrization
+must resolve one. Deselected tests are outside this run. Dynamic calls to
+`request.getfixturevalue` remain runtime checks.
+
+The check works with xdist: workers collect the same single failing diagnostic
+item, so a missing fixture reports a normal failure rather than crashing worker
+collection. The runnable catalog and upstream adopter CI enable this option.
