@@ -558,31 +558,13 @@ def _nested_test_callables(binding: Callable[..., Any]) -> Collection[Callable[.
     )
 
 
-def _authored_operations(
-    binding: Callable[..., Any],
-    forbidden: Collection[str],
-    *,
-    seen: set[int],
-) -> set[str]:
-    identity = id(binding)
-    if identity in seen:
-        return set()
-    seen.add(identity)
-
-    code = callable_code(binding)
-    # Root-owned code is the trusted layer these tripwires exist to protect,
-    # not a place authorship can hide: everything in the harness package is
-    # reviewed as invariant/reference code, so it is exempt the same way
-    # production code is.
-    if code is None or not is_test_code(code) or is_harness_owned(code):
-        return set()
-
-    authored = set(code.co_names) & set(forbidden)
-    for constant in code.co_consts:
-        if isinstance(constant, CodeType):
-            authored.update(set(constant.co_names) & set(forbidden))
-    for nested in _nested_test_callables(binding):
-        authored.update(_authored_operations(nested, forbidden, seen=seen))
+def _authored_operations(binding: Callable[..., Any], forbidden: Collection[str]) -> set[str]:
+    authored: set[str] = set()
+    for _, code in _authored_bindings(binding, set()):
+        authored.update(set(code.co_names) & set(forbidden))
+        for constant in code.co_consts:
+            if isinstance(constant, CodeType):
+                authored.update(set(constant.co_names) & set(forbidden))
     return authored
 
 
@@ -601,7 +583,7 @@ def assert_test_binding_forwards(
         "contract cannot establish whether it forwards to production or "
         "reconstructs production behavior"
     )
-    authored = _authored_operations(binding, forbidden, seen=set())
+    authored = _authored_operations(binding, forbidden)
     assert not authored, (
         f"{adopter}: {field} authors production semantics in test code "
         f"(uses {sorted(authored)}). The generated tests would measure the "
@@ -695,18 +677,11 @@ def is_production_value(value: Any) -> bool:
     return defining is not None and _is_production_file(defining)
 
 
-def _references_production_code(binding: Callable[..., Any], *, seen: set[int]) -> bool:
-    identity = id(binding)
-    if identity in seen:
-        return False
-    seen.add(identity)
-    for value in _referenced_values(binding):
-        if is_production_value(value):
-            return True
-        code = callable_code(value) if callable(value) else None
-        if code is not None and is_test_code(code) and _references_production_code(value, seen=seen):
-            return True
-    return False
+def _references_production_code(binding: Callable[..., Any]) -> bool:
+    return any(
+        (defining := _defining_file(value)) is not None and _is_production_file(defining)
+        for value in _test_references(binding, set())
+    )
 
 
 def assert_test_binding_delegates_to_production(
@@ -747,7 +722,7 @@ def assert_test_binding_delegates_to_production(
     )
     if is_harness_owned(code) or not is_test_code(code):
         return
-    assert _references_production_code(binding, seen=set()), (
+    assert _references_production_code(binding), (
         f"{adopter}: {field} is test code that references no production "
         f"callable, class, or module, so the proofs would measure a "
         f"test-defined implementation rather than the runtime. Bind "
@@ -862,21 +837,11 @@ def authored_inversion_names(binding: Callable[..., Any], *, seen: set[int] | No
     legitimately raise ``AssertionError`` (that is what a proof is), and
     :class:`~.gap_probes.DisprovenCapability` legitimately inverts one.
     """
-    if seen is None:
-        seen = set()
-    identity = id(binding)
-    if identity in seen:
-        return set()
-    seen.add(identity)
-
-    code = callable_code(binding)
-    if code is None or not is_test_code(code) or is_harness_owned(code):
-        return set()
-
-    inverted = _inversion_names(code, _namespace(binding))
-    for nested in _nested_test_callables(binding):
-        inverted.update(authored_inversion_names(nested, seen=seen))
-    return inverted
+    return {
+        name
+        for authored, code in _authored_bindings(binding, set() if seen is None else seen)
+        for name in _inversion_names(code, _namespace(authored))
+    }
 
 
 def references_harness_assertion(binding: Callable[..., Any], *, seen: set[int] | None = None) -> bool:
@@ -889,19 +854,38 @@ def references_harness_assertion(binding: Callable[..., Any], *, seen: set[int] 
     values instead and requires at least one to be a callable defined in the
     harness package whose name starts with ``assert_``.
     """
-    if seen is None:
-        seen = set()
-    identity = id(binding)
-    if identity in seen:
-        return False
-    seen.add(identity)
+    return any(
+        callable(value)
+        and getattr(value, "__name__", "").startswith("assert_")
+        and (code := callable_code(value)) is not None
+        and is_harness_owned(code)
+        for value in _test_references(binding, set() if seen is None else seen)
+    )
+
+
+_AuthoredBinding = tuple[Callable[..., Any], CodeType]
+
+
+def _authored_bindings(binding: Callable[..., Any], seen: set[int]) -> Iterator[_AuthoredBinding]:
+    """Walk adapter-authored helpers once; production and harness code end this traversal."""
+    if id(binding) in seen:
+        return
+    seen.add(id(binding))
+    code = callable_code(binding)
+    if code is None or not is_test_code(code) or is_harness_owned(code):
+        return
+    yield binding, code
+    for nested in _nested_test_callables(binding):
+        yield from _authored_bindings(nested, seen)
+
+
+def _test_references(binding: Callable[..., Any], seen: set[int]) -> Iterator[Any]:
+    """Resolve referenced values through test helpers, including harness code, without revisiting cycles."""
+    if id(binding) in seen:
+        return
+    seen.add(id(binding))
     for value in _referenced_values(binding):
-        if not callable(value):
-            continue
-        name = getattr(value, "__name__", "")
-        code = callable_code(value)
-        if name.startswith("assert_") and code is not None and is_harness_owned(code):
-            return True
-        if code is not None and is_test_code(code) and references_harness_assertion(value, seen=seen):
-            return True
-    return False
+        yield value
+        code = callable_code(value) if callable(value) else None
+        if code is not None and is_test_code(code):
+            yield from _test_references(value, seen)

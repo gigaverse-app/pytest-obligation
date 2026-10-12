@@ -146,6 +146,7 @@ from functools import partial, wraps
 from typing import Any, TypeAlias
 
 import pytest
+from _pytest.mark.structures import ParameterSet
 from pydantic import Field, InstanceOf, SkipValidation
 
 from pytest_obligation.binding import (
@@ -1132,6 +1133,25 @@ class ContractCase(HarnessModel):
     #: Composition contributes this same execution to each related guarantee.
     related_profiles: tuple[Profile, ...] = ()
 
+    def parameter(
+        self,
+        *,
+        transactional: bool | None = None,
+        gap: str | None = None,
+        raises: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> ParameterSet:
+        """Collect this identity with host database marks and strict, optionally exception-limited debt.
+
+        ``None`` requests no database; ``False`` requests the host's ordinary
+        database mode; ``True`` requests real commits. Exception restrictions
+        apply only to the declared gap, never to a broken binding or control.
+        """
+        marks = [] if transactional is None else _database_marks(transactional)
+        if gap is not None:
+            mark = pytest.mark.xfail(strict=True, reason=gap)
+            marks.append(mark if raises is None else mark(raises=raises))
+        return pytest.param(self, id=self.id, marks=marks)
+
     @property
     def assessment_only(self) -> bool:
         """Pure declarations are not execution; real detect/prove callbacks carry evidence.
@@ -1214,26 +1234,23 @@ def _unclaimed_case(
         case = ContractCase(id=f"{label}-not_assessed", run=_documenting_failure(reason))
         # Only this deliberate assessment failure is expected. Unrelated errors
         # and accidental passes must still fail the suite.
-        return pytest.param(
-            case, id=case.id, marks=pytest.mark.xfail(strict=True, reason=reason, raises=pytest.fail.Exception)
-        )
+        return case.parameter(gap=reason, raises=pytest.fail.Exception)
     if isinstance(disposition, Decline):
         case = ContractCase(
             id=f"{label}-declined",
             run=disposition.prove or (lambda: None),
             fixtures=fixtures if disposition.prove else (),
         )
-        return pytest.param(case, id=case.id, marks=_database_marks(transactional) if disposition.prove else [])
+        return case.parameter(transactional=transactional if disposition.prove else None)
     if isinstance(disposition, NotApplicable):
         case = ContractCase(id=f"{label}-not_applicable", run=lambda: None)
-        return pytest.param(case, id=case.id)
+        return case.parameter()
     case = ContractCase(
         id=f"{label}-known_gap",
         run=disposition.detect or _documenting_failure(disposition.because),
         fixtures=fixtures if disposition.detect else (),
     )
-    marks = _database_marks(transactional) + [pytest.mark.xfail(strict=True, reason=disposition.because)]
-    return pytest.param(case, id=case.id, marks=marks)
+    return case.parameter(transactional=transactional, gap=disposition.because)
 
 
 def _database_marks(transactional: bool) -> list[Any]:
@@ -1310,7 +1327,7 @@ def _retry_budget_assessment(contract: ObligationContract, disposition: NotAppli
         profile=Profile.J,
         assessment=disposition,
     )
-    return pytest.param(case, id=case.id, marks=_database_marks(contract.transactional))
+    return case.parameter(transactional=contract.transactional)
 
 
 def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[Profile, ...]) -> list[Any]:
@@ -1342,12 +1359,7 @@ def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[P
                         family=field_name,
                         fixtures=contract.fixtures,
                     )
-                    marks = _database_marks(
-                        contract.transactional or profile is Profile.I or proof.__name__ in _TRANSACTIONAL_PROOFS
-                    )
                     reason = disposition.gaps.get(proof.__name__)
-                    if reason is not None:
-                        marks.append(pytest.mark.xfail(strict=True, reason=reason))
                     specific = (
                         poison_gap(disposition.gaps, proof.__name__)
                         if proof.__name__ == "assert_one_poisoned_identity_does_not_stall_the_tick"
@@ -1355,10 +1367,18 @@ def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[P
                         if proof.__name__ == "assert_a_soft_time_limit_ends_the_tick"
                         else None
                     )
+                    failure = None
                     if specific is not None:
-                        why, failure = specific
-                        marks.append(pytest.mark.xfail(strict=True, reason=why, raises=failure))
-                    params.append(pytest.param(case, id=case.id, marks=marks))
+                        reason, failure = specific
+                    params.append(
+                        case.parameter(
+                            transactional=contract.transactional
+                            or profile is Profile.I
+                            or proof.__name__ in _TRANSACTIONAL_PROOFS,
+                            gap=reason,
+                            raises=failure,
+                        )
+                    )
     return params
 
 
@@ -1393,12 +1413,14 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
             run=_gate_sweep_runner(binding, contract.sweep),
             fixtures=contract.fixtures,
         )
-        marks = _database_marks(contract.transactional)
         disposition = contract.profiles[Profile.G]
         assert isinstance(disposition, Claim)
-        if reason := disposition.gaps.get("assert_gate_is_recovered_by_the_contract_sweep"):
-            marks.append(pytest.mark.xfail(strict=True, reason=reason))
-        params.append(pytest.param(case, id=case.id, marks=marks))
+        params.append(
+            case.parameter(
+                transactional=contract.transactional,
+                gap=disposition.gaps.get("assert_gate_is_recovered_by_the_contract_sweep"),
+            )
+        )
     params.extend(interleaving_integration.cases(contract.in_flight, contract.fixtures))
     params.extend(interleaving_integration.cases(contract.evidence_confluence, contract.fixtures))
     if contract.prove_selection_complete:
@@ -1406,15 +1428,12 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
     params.extend(_coherence_cases(contract))
     params.extend(_handoff_cases(contract))
     for extra in contract.extras:
-        marks = _database_marks(extra.transactional)
-        if extra.gap is not None:
-            marks.append(pytest.mark.xfail(strict=True, reason=extra.gap))
         case = ContractCase(
             id=f"extra-{extra.name}",
             run=extra.run,
             fixtures=extra.fixtures + contract.fixtures,
         )
-        params.append(pytest.param(case, id=case.id, marks=marks))
+        params.append(case.parameter(transactional=extra.transactional, gap=extra.gap))
     return params
 
 
@@ -1423,19 +1442,6 @@ def _handoff_runner(delivery: Delivery, history: HandoffHistory[Any, Any]) -> Ca
         assert_crash_at_every_commit_converges(delivery, history)
 
     return run
-
-
-def _gap_mark(contract: ObligationContract, history: HandoffHistory[Any, Any] | ProcessHistory[Any, Any]) -> list[Any]:
-    """
-    A declared handoff gap's strict xfail, for the divergence alone.
-
-    Findings or not, only :class:`HistoriesDiverged` is the known gap: a broken
-    binding, a positive control that fails or a finding that moved fails the case.
-    """
-    reason = contract.handoff_gaps.get(history.name)
-    if reason is None:
-        return []
-    return [pytest.mark.xfail(strict=True, reason=reason, raises=HistoriesDiverged)]
 
 
 def _process_runner(history: ProcessHistory[Any, Any]) -> Callable[[], None]:
@@ -1459,7 +1465,11 @@ def _handoff_cases(contract: ObligationContract) -> list[Any]:
                 run=_handoff_runner(delivery, history),
                 fixtures=contract.fixtures,
             )
-            params.append(pytest.param(case, id=case.id, marks=_database_marks(True) + _gap_mark(contract, history)))
+            params.append(
+                case.parameter(
+                    transactional=True, gap=contract.handoff_gaps.get(history.name), raises=HistoriesDiverged
+                )
+            )
     for history in contract.process_handoffs:
         case = ContractCase(
             profile=Profile.A,
@@ -1468,8 +1478,13 @@ def _handoff_cases(contract: ObligationContract) -> list[Any]:
             run=_process_runner(history),
             fixtures=contract.fixtures,
         )
-        marks = _database_marks(contract.transactional) + _gap_mark(contract, history)
-        params.append(pytest.param(case, id=case.id, marks=marks))
+        params.append(
+            case.parameter(
+                transactional=contract.transactional,
+                gap=contract.handoff_gaps.get(history.name),
+                raises=HistoriesDiverged,
+            )
+        )
     return params
 
 
@@ -1497,9 +1512,6 @@ def _coherence_cases(contract: ObligationContract) -> list[Any]:
         disposition = contract.profiles[profile]
         if isinstance(disposition, Claim):
             reason = disposition.gaps.get(_COHERENCE_PROOF_NAME, reason)
-    marks = _database_marks(contract.transactional)
-    if reason is not None:
-        marks.append(pytest.mark.xfail(strict=True, reason=reason))
     case = ContractCase(
         profile=Profile.F,
         family="recovery-composition",
@@ -1508,7 +1520,7 @@ def _coherence_cases(contract: ObligationContract) -> list[Any]:
         run=_coherence_runner(contract.sweep, contract.derivation),
         fixtures=contract.fixtures,
     )
-    return [pytest.param(case, id=case.id, marks=marks)]
+    return [case.parameter(transactional=contract.transactional, gap=reason)]
 
 
 def _install_suite(cls: type, params: list[Any], test_name: str, doc: str) -> type:
@@ -1694,7 +1706,7 @@ def _covered_recovery_cases(contract: ObligationContract, covers: tuple[DueWorkS
             run=_covered_recovery_runner(contract, source),
             fixtures=contract.fixtures,
         )
-        params.append(pytest.param(case, id=case.id, marks=_database_marks(contract.transactional)))
+        params.append(case.parameter(transactional=contract.transactional))
     return params
 
 
@@ -1917,25 +1929,21 @@ def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
     if selection.owed_rows is not None:
         params.extend(current_host().require("owed_row_cases")(selection))
     for proof in SELECTION_PROOFS:
-        marks = _database_marks(False)
-        reason = selection.gaps.get(proof.__name__)
-        if reason is not None:
-            marks.append(pytest.mark.xfail(strict=True, reason=reason))
         case = ContractCase(
             id=proof.__name__,
             run=_populated_proof_runner(selection, proof),
             fixtures=selection.fixtures,
         )
-        params.append(pytest.param(case, id=case.id, marks=marks))
+        params.append(case.parameter(transactional=False, gap=selection.gaps.get(proof.__name__)))
     evidence = selection.assert_scheduled
     if evidence is not None:
         case = ContractCase(id="assert_the_selection_is_actually_scheduled", run=evidence)
-        params.append(pytest.param(case, id=case.id))
+        params.append(case.parameter())
     else:
         # The declared absence collects as a visible row, the same way a
         # declined profile does: reviewable, never silently skipped.
         case = ContractCase(id="schedule_evidence-declined", run=lambda: None)
-        params.append(pytest.param(case, id=case.id))
+        params.append(case.parameter())
     return params
 
 

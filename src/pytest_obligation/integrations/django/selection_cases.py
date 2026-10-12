@@ -5,8 +5,6 @@ from contextlib import AbstractContextManager, contextmanager
 from functools import partial
 from typing import Any
 
-import pytest
-
 from pytest_obligation.contract import (
     Claim,
     ContractCase,
@@ -17,7 +15,6 @@ from pytest_obligation.contract import (
     _entered,
     _selection_gaps,
 )
-from pytest_obligation.host import current_host
 from pytest_obligation.integrations.django.owed_cases import retries_are_bounded
 
 
@@ -104,7 +101,7 @@ def _cases(
         run=run,
         fixtures=(*fixtures, *_SELECTION_BUDGET_FIXTURES),
     )
-    params.append(pytest.param(case, id=case.id, marks=list(current_host().database_marks(transactional))))
+    params.append(case.parameter(transactional=transactional))
     for gap in declared:
         case = ContractCase(
             id=f"{prefix}{gap}",
@@ -114,9 +111,5 @@ def _cases(
             fixtures=fixtures,
         )
         # Only the invariant's own failure is the gap; a broken binding or example still fails.
-        marks = [
-            *current_host().database_marks(transactional),
-            pytest.mark.xfail(strict=True, reason=gaps[gap], raises=GAP_FAILURES),
-        ]
-        params.append(pytest.param(case, id=case.id, marks=marks))
+        params.append(case.parameter(transactional=transactional, gap=gaps[gap], raises=GAP_FAILURES))
     return params

@@ -121,3 +121,14 @@ call the named public generator and preserve its collection/outcome hooks; it
 must not replace proof logic. Without this declaration, an application function
 with the same name is rejected. The runtime suite guards still verify all generated
 proofs; a static coverage declaration alone cannot certify execution.
+
+### Generating additional contract cases
+
+Integration authors can collect a `ContractCase` through
+`case.parameter(transactional=True, gap=reason, raises=InvariantFailure)`.
+`transactional=None` requests no database marks, `False` asks for the host's
+ordinary database mode, and `True` asks for real commits. `gap=None` is an ordinary
+case; a reason creates a strict expected failure, limited to `raises` when
+supplied. A broken binding must not be hidden by an invariant-only gap. This
+method preserves the case's ID and fixture declaration; ordinary adopters should
+continue using contract decorators and `ExtraProof`.

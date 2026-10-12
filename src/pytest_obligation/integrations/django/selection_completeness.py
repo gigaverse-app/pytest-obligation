@@ -175,8 +175,6 @@ class CompletenessBinding(RowExecution):
     name: str
     #: REAL PRODUCTION: the unbounded selection the tick pages through.
     selection: Callable[[], Iterable[Any]]
-    #: OBSERVE: identities the ticks dispatched, recorded at the broker or a production record.
-    dispatched_ids: Callable[[], list[Any]] | None = None
     #: REAL PRODUCTION: one tick; with ``dispatched_ids``, a selected row must be one the tick dispatches.
     run_tick: Callable[[], Any] | None = None
     #: Lifecycle state paths of the selected model, related paths allowed.
@@ -545,11 +543,7 @@ def _judge(binding: CompletenessBinding, declaration: _Declaration, row: Model, 
                 related=tuple(state.holder(row) for state in declaration.paths.values() if state.relations),
                 describe=f"{describe} (states {states})",
                 selection=binding.selection,
-                identity_of=binding.identity_of,
-                execute=binding.execute,
-                deliver=binding.deliver,
-                dispatched_ids=binding.dispatched_ids,
-                effect_calls_for=binding.effect_calls_for,
+                rows=binding,
                 ends=binding.ends,
             )
         return "selected"

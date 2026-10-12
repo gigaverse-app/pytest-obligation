@@ -204,13 +204,9 @@ def test_related_row_edge_reaches_the_worker(retire: bool) -> None:
         assert_database_legal_owed_row_is_handled(
             name="related owner",
             edge=CandidateEdge(field="value", kind="blank", value=""),
-            make_owed=make,
             selection=lambda: PrimitiveWork.objects.filter(owner__completed_at__isnull=True),
-            identity_of=lambda work: work.pk,
-            execute=execute,
-            run_tick=lambda: None,
-            edge_row=lambda work: work.owner,
-            edge_model=PrimitiveOwner,
+            rows=OwedRows(make_owed=make, execute=execute, run_tick=lambda: None, dispatched_ids=lambda: []),
+            family=EdgeFamily(model=PrimitiveOwner, edge_row=lambda work: work.owner),
         )
 
     if retire:
