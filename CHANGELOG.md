@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.12.0...v0.12.1) (2026-10-12)
+
+
+### Bug fixes
+
+* an identity probe through a unique key passes the index-served verdict ([#78](https://github.com/gigaverse-app/pytest-obligation/issues/78)) ([12a917b](https://github.com/gigaverse-app/pytest-obligation/commit/12a917b291cd6abe0adf6da4cccd8bcb27b04744))
+
 ## [0.12.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.11.0...v0.12.0) (2026-10-12)
 
 
