@@ -1025,9 +1025,16 @@ def _design_errors(contract: ObligationContract) -> list[str]:
     if contract.prove_selection_complete and not _claims_recovery(contract):
         errors.append("prove_selection_complete requires a profile-A claim with a sweep")
     errors.extend(_profile_design_errors(contract, tuple(Profile)))
+    errors.extend(_extra_design_errors(contract.extras))
+    errors.extend(_gap_policy_violations(contract))
+    return errors
 
+
+def _extra_design_errors(extras: tuple[ExtraProof, ...]) -> list[str]:
+    """Checks every contract's extras share: unique names, reasoned gaps, annotated, delegating, reaching production."""
+    errors: list[str] = []
     seen: set[str] = set()
-    for extra in contract.extras:
+    for extra in extras:
         if not extra.name.strip():
             errors.append("an extra proof has no name")
         if extra.name in seen:
@@ -1045,8 +1052,6 @@ def _design_errors(contract: ObligationContract) -> list[str]:
         if defect:
             errors.append(defect)
         errors.extend(_extra_production_defects(extra))
-
-    errors.extend(_gap_policy_violations(contract))
     return errors
 
 
@@ -1431,11 +1436,18 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
         params.extend(current_host().require("selection_completeness_cases")(contract))
     params.extend(_coherence_cases(contract))
     params.extend(_handoff_cases(contract))
-    for extra in contract.extras:
+    params.extend(_extra_cases(contract.extras, contract.fixtures))
+    return params
+
+
+def _extra_cases(extras: tuple[ExtraProof, ...], fixtures: tuple[str, ...]) -> list[Any]:
+    """One ``extra-<name>`` case per extra proof, strict-xfailed when it declares a gap; every contract generates these."""
+    params: list[Any] = []
+    for extra in extras:
         case = ContractCase(
             id=f"extra-{extra.name}",
             run=extra.run,
-            fixtures=extra.fixtures + contract.fixtures,
+            fixtures=extra.fixtures + fixtures,
         )
         params.append(case.parameter(transactional=extra.transactional, gap=extra.gap))
     return params
@@ -1839,6 +1851,12 @@ class ScheduledSelection(HarnessModel):
     #: one a host needs to give a replica-routing proof a distinct replica.
     fixtures: tuple[str, ...] = ()
 
+    #: Domain-specific applications of the standalone proofs, as on
+    #: :attr:`ObligationContract.extras` (for example, the selection's loop
+    #: calling a provider inside its transaction). Validated the same way; a gap
+    #: on one is a gap the NEW_FEATURE policy forbids, like ``gaps``.
+    extras: tuple[ExtraProof, ...] = ()
+
     #: Integration-owned loop and edge families (Django: OwedRows and EdgeFamily).
     owed_rows: Callable[[], Any] | None = None
     owed_edges: Mapping[str, Any] = Field(default_factory=dict)
@@ -1910,10 +1928,12 @@ class ScheduledSelection(HarnessModel):
             )
         if self.unscheduled_because is not None and not self.unscheduled_because.strip():
             errors.append("unscheduled_because is empty. The reason is the substance of the declaration")
-        if self.adoption is not Adoption.LEGACY and self.gaps:
+        errors.extend(_extra_design_errors(self.extras))
+        declared_gaps = len(self.gaps) + sum(extra.gap is not None for extra in self.extras)
+        if self.adoption is not Adoption.LEGACY and declared_gaps:
             errors.append(
                 f"adoption is NEW_FEATURE (the default), which forbids gap "
-                f"declarations, but {len(self.gaps)} gap(s) are declared. Pass "
+                f"declarations, but {declared_gaps} gap(s) are declared. Pass "
                 f"`adoption=Adoption.LEGACY` ONLY when auditing a selection that "
                 f"predates its contract"
             )
@@ -1934,7 +1954,7 @@ def _populated_proof_runner(selection: ScheduledSelection, proof: Callable[[Any]
 
 
 def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
-    """The selection-only proofs, plus schedule evidence when declared."""
+    """The selection-only proofs, schedule evidence or its declared absence, the integration's cases, and the extras."""
     params: list[Any] = []
     if selection.state_fields:
         params.extend(current_host().require("selection_completeness_cases")(selection))
@@ -1956,6 +1976,7 @@ def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
         # declined profile does: reviewable, never silently skipped.
         case = ContractCase(id="schedule_evidence-declined", run=lambda: None)
         params.append(case.parameter())
+    params.extend(_extra_cases(selection.extras, selection.fixtures))
     return params
 
 
