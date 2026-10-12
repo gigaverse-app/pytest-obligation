@@ -193,11 +193,54 @@ def _borrowed_from_a_join(access: dict[str, Any], own: frozenset[str]) -> bool:
     )
 
 
+#: One side of an equality PostgreSQL printed: a column, optionally qualified by its relation or alias.
+_COLUMN = re.compile(r'(?:("[^"]+"|[A-Za-z_][\w$]*)\.)?("[^"]+"|[A-Za-z_][\w$]*)')
+
+
+def _pins_one_row(access: dict[str, Any], own: frozenset[str]) -> bool:
+    """
+    Whether ``access``'s Index Cond fixes every key column of a full unique index by equality.
+
+    Such a probe reads at most one row per row driving the join (an identity
+    lookup, such as an anti-join on a one-to-one dependency), so the join key
+    narrows the read completely. Only plain btree key columns count, each
+    compared with ``=`` to another column; a range, an ``= ANY`` list, an
+    expression key or a key column left open reads more. A partial unique
+    index is unique only within its predicate and follows the partial-index
+    rules instead: it must be named in ``partial_indexes``.
+    """
+    catalog = access.get(CATALOG_INDEX)
+    if not catalog or not catalog.get("Unique") or catalog.get("Predicate") is not None:
+        return False
+    if catalog.get("Access Method") != "btree":
+        return False
+    keys = [str(key).strip('"') for key in catalog.get("Key Columns", ())]
+    if not keys or any(not _COLUMN.fullmatch(key) or "." in key for key in keys):
+        return False
+    pinned: set[str] = set()
+    for clause in _conjuncts(str(access.get("Index Cond", ""))):
+        while clause.startswith("(") and _closing_paren(clause) == len(clause) - 1:
+            clause = clause[1:-1].strip()
+        sides = clause.split(" = ")
+        if len(sides) != 2:
+            continue
+        for column, other in (sides, sides[::-1]):
+            mine, theirs = _COLUMN.fullmatch(column.strip()), _COLUMN.fullmatch(other.strip())
+            if mine is None or theirs is None:
+                continue
+            qualifier = (mine.group(1) or "").strip('"')
+            if not qualifier or qualifier in own:
+                pinned.add(mine.group(2).strip('"'))
+    return set(keys) <= pinned
+
+
 def _join_key_failure(
     access: dict[str, Any], own: frozenset[str], constrained: Mapping[str, Collection[str]], table: str, plan: dict
 ) -> str | None:
     """Refuse a scan whose only index condition is a join key while its Filter carries the selection's condition."""
     if access.get("Index Name") in constrained or not _borrowed_from_a_join(access, own):
+        return None
+    if _pins_one_row(access, own):
         return None
     return (
         f"the selection reaches {table!r} through index {access.get('Index Name')!r} with only a join key as its "
@@ -435,6 +478,9 @@ def assert_plan_is_index_served(
        its children, which over realistic data is every row. An index condition
        counts only when one of its clauses is the selection's own (a literal, a
        parameter, ``now()``); ``(parent_id, due_at)`` with both clauses passes.
+       So does a join key that fixes every key column of a full unique btree
+       index by equality: an identity probe (an anti-join on a one-to-one
+       dependency) reads at most one row per driving row.
 
     7. *A partial index read whole is not narrowed when a join discards.* With
        no Filter on the table, a scan of a partial index looks like case 4, but

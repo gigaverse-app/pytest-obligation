@@ -164,6 +164,66 @@ def test_a_join_key_with_the_selections_own_narrowing_passes(child: dict[str, ob
     assert index_served_verdict(_driven_by_the_parent(child), table=_TABLE, predicate_indexes=named) is None
 
 
+def _unique(*keys: str, predicate: str | None = None, method: str = "btree") -> dict[str, object]:
+    return {"Access Method": method, "Key Columns": list(keys), "Predicate": predicate, "Unique": True}
+
+
+def _probe(cond: str, catalog: dict[str, object]) -> dict[str, object]:
+    """An anti-join's dependency probe: the join key reaches one table by identity, the state is filtered."""
+    return _index_scan(
+        **{
+            "Alias": "c",
+            "Index Name": "child_key",
+            "Index Cond": cond,
+            "Catalog Index": catalog,
+            "Filter": "((status)::text <> 'done'::text)",
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "probe",
+    [
+        _probe("(parent_id = p.id)", _unique("parent_id")),
+        _probe("(parent_id = shop_parent.id)", _unique("parent_id")),
+        _probe("((parent_id = p.id) AND (kind = p.kind))", _unique("parent_id", "kind")),
+    ],
+    ids=["aliased", "unaliased-outer", "composite-key"],
+)
+def test_a_join_key_that_pins_a_unique_index_reads_one_row_and_passes(probe: dict[str, object]) -> None:
+    assert index_served_verdict(_driven_by_the_parent(probe), table=_TABLE) is None
+
+
+@pytest.mark.parametrize(
+    "probe",
+    [
+        # NEGATIVE CONTROL: the same join key on a non-unique index reads every child of each parent.
+        _probe("(parent_id = p.id)", _catalog("parent_id")),
+        # One key column of a composite unique index left open: many rows per parent.
+        _probe("(parent_id = p.id)", _unique("parent_id", "kind")),
+        # A range or a list on the key is not an identity lookup.
+        _probe("(parent_id >= p.id)", _unique("parent_id")),
+        _probe("(parent_id = ANY (p.ids))", _unique("parent_id")),
+        # An expression key cannot be matched to the condition's column.
+        _probe("(lower(code) = p.code)", _unique("lower(code)")),
+        # A partial unique index is unique only within a predicate the query is not shown to imply.
+        _probe("(parent_id = p.id)", _unique("parent_id", predicate="(active)")),
+        # Uniqueness is a btree fact here; another access method is not trusted for it.
+        _probe("(parent_id = p.id)", _unique("parent_id", method="hash")),
+    ],
+    ids=["not-unique", "partial-key", "range", "any-list", "expression-key", "partial-unique", "not-btree"],
+)
+def test_a_join_key_that_does_not_pin_one_row_still_fails(probe: dict[str, object]) -> None:
+    verdict = index_served_verdict(_driven_by_the_parent(probe), table=_TABLE)
+    assert verdict is not None and "only a join key" in verdict
+
+
+def test_a_partial_unique_index_passes_only_under_the_partial_index_rules() -> None:
+    probe = _probe("(parent_id = p.id)", _unique("parent_id", predicate="(active)"))
+    named = {"child_key": frozenset({"active"})}
+    assert index_served_verdict(_driven_by_the_parent(probe), table=_TABLE, predicate_indexes=named) is None
+
+
 def test_false_negative_6_holds_for_a_parameterized_bitmap_too() -> None:
     """The bitmap-only re-plan of the same selection must not overturn the refusal."""
     arm: dict[str, object] = {

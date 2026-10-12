@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 from django.db import connection, models
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.expressions import RawSQL
 from django.test.utils import isolate_apps
 from django.utils import timezone
@@ -228,3 +228,45 @@ def test_a_schema_qualified_clock_narrows_the_due_index() -> None:
     plan = explain_index_eligibility(selection)
     assert any("tenant_clock.cutoff()" in node.get("Index Cond", "") for node in iter_plan_nodes(plan))
     assert index_served_verdict(plan, table=_CHILD) is None
+
+
+def _pending_without_an_active_parent() -> QuerySet[_Child]:
+    # ARRANGE: the tables, indexes and rows each test creates.
+    # REAL PRODUCTION: none; a batch whose eligibility is the absence of a dependency row.
+    # EXTERNAL SEAM: none; the selection is database-only.
+    # OBSERVE: PostgreSQL's plan for it.
+    return (
+        _Child.objects.filter(status="pending")
+        .exclude(Exists(_Parent.objects.filter(pk=OuterRef("parent_id"), active=True)))
+        .order_by("id")[:10]
+    )
+
+
+def _parents_without_a_pending_child() -> QuerySet[_Parent]:
+    # ARRANGE: the tables, indexes and rows each test creates.
+    # REAL PRODUCTION: none; the same absence test probed through a key that is not unique.
+    # EXTERNAL SEAM: none; the selection is database-only.
+    # OBSERVE: PostgreSQL's plan for it.
+    return (
+        _Parent.objects.filter(active=True)
+        .exclude(Exists(_Child.objects.filter(parent=OuterRef("pk"), status="pending")))
+        .order_by("id")[:10]
+    )
+
+
+def test_an_identity_probe_through_a_unique_key_reads_one_row(tables: None) -> None:
+    # Only the primary keys and the foreign-key index: each probe below is a join-key-only index condition.
+    _seed()
+
+    # The dependency probe reaches the parent by its primary key and filters its state: one row per child.
+    plan = explain_index_eligibility(_pending_without_an_active_parent())
+    [probe] = [node for node in iter_plan_nodes(plan) if node.get("Relation Name") == _PARENT]
+    assert probe["Index Name"] == f"{_PARENT}_pkey" and "Filter" in probe
+    assert probe["Index Cond"] == f"(id = {_CHILD}.parent_id)" and probe["Catalog Index"]["Unique"] is True
+    assert index_served_verdict(plan, table=_PARENT) is None
+
+    # NEGATIVE CONTROL: the same absence test through the foreign-key index reads every child of each parent.
+    plan = explain_index_eligibility(_parents_without_a_pending_child())
+    [probe] = [node for node in iter_plan_nodes(plan) if node.get("Relation Name") == _CHILD]
+    assert probe["Index Cond"] == f"(parent_id = {_PARENT}.id)" and probe["Catalog Index"]["Unique"] is False
+    assert "only a join key" in (index_served_verdict(plan, table=_CHILD) or "")
