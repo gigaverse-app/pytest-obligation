@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.9.0...v0.10.0) (2026-10-12)
+
+
+### Features
+
+* complete backend harness port and migration parity checks ([#50](https://github.com/gigaverse-app/pytest-obligation/issues/50)) ([fbe0b5a](https://github.com/gigaverse-app/pytest-obligation/commit/fbe0b5ad528bbd662a8db5a8e4876309b96a91f6))
+* enforce application outcomes through reusable contract bindings ([#56](https://github.com/gigaverse-app/pytest-obligation/issues/56)) ([5d6e01c](https://github.com/gigaverse-app/pytest-obligation/commit/5d6e01cd6965e80d8883a9580fe7085ae5fdd84b))
+* preserve current BE harness guarantees and debt controls ([#53](https://github.com/gigaverse-app/pytest-obligation/issues/53)) ([53a1222](https://github.com/gigaverse-app/pytest-obligation/commit/53a1222a6eecad0219e320f363d05b94727aaf30))
+* preserve scoped hosts and shared delivery proofs ([#55](https://github.com/gigaverse-app/pytest-obligation/issues/55)) ([8825ab8](https://github.com/gigaverse-app/pytest-obligation/commit/8825ab8e649c93c58ec6ad5f1a484b2ff7df344f))
+* prove recovery selection completeness ([#54](https://github.com/gigaverse-app/pytest-obligation/issues/54)) ([7d8be37](https://github.com/gigaverse-app/pytest-obligation/commit/7d8be37b083983691f7e7bbc4793cc9e4b772865))
+
+
+### Bug fixes
+
+* preserve proof failures and complete shared harness contracts ([#57](https://github.com/gigaverse-app/pytest-obligation/issues/57)) ([ba59710](https://github.com/gigaverse-app/pytest-obligation/commit/ba59710b5248ca8d68aed14599d417b0467289b8))
+
 ## [0.9.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.8.0...v0.9.0) (2026-10-11)
 
 
