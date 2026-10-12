@@ -191,3 +191,16 @@ The additional port controls reject a stop exception wrapped in an exception
 group inside its own handler, and keep `PoisonSwitch` firing counts local to
 each arm. A previous arm cannot satisfy the positive control for a seam that
 never fires in this run; nested arms restore the outer arm.
+
+### Real database errors at a poison seam
+
+For a PostgreSQL loop whose per-identity savepoint must isolate failed SQL, use
+`pytest_obligation.integrations.django.database_faults.fail_like_a_database_error`.
+Pass the binding's `PoisonSwitch`, identity and message at the real persistence
+seam. An armed identity executes a failing SQL statement before re-raising the
+original poison or cooperative-stop exception. An unarmed identity does no SQL.
+
+The helper deliberately opens no transaction or savepoint: the production
+caller must roll back its own failed transaction before later identities can
+progress. In autocommit the failed statement rolls back independently. Use a
+broker refusal instead when database isolation is not the boundary under test.
