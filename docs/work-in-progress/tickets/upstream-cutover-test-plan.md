@@ -9,7 +9,8 @@ into the public harness while preserving the framework-free core.
   production-delivery owner, including commit callbacks and delayed handoffs.
 - [x] Source audit: account for pre-cutover proofs, controls and tools that a
   subtree-only export could miss.
-- [ ] Packaging, lint, types and the optional integration CI matrix.
+- [x] Packaging, lint and types. The optional integration matrix is enforced by
+  [public PR checks](https://github.com/gigaverse-app/pytest-obligation/pull/55/checks).
 - [x] Consumer compatibility with this source and the matching Due candidate.
 
 ## Validation (2026-10-12)

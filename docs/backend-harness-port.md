@@ -159,7 +159,7 @@ The reusable cutover changes in this package are:
   version fallback when Git tags are unavailable.
 
 The audit also recovered Due-specific database, discovery and enrollment
-controls. Their owner is [Due's cutover audit](https://github.com/gigaverse-app/due/blob/codex/upstream-cutover-improvements/docs/cutover-audit.md).
+controls. Their owner is [Due's cutover audit](https://github.com/gigaverse-app/due/blob/d9147b3/docs/cutover-audit.md).
 
 | Original behavior | Current executable controls |
 | --- | --- |
