@@ -146,6 +146,56 @@ selected, so any raise on it, or a delivery that does nothing to it, fails its
 edge case. `still_owed` does not apply: a polling selection keeps the row it
 served, so its own selection is the owner the poison cases read.
 
+### External-resource identities
+
+Some loops owe work to identities that are not rows: a reconciler that lists a
+provider's resources and deletes the orphans owes one deletion per orphan, and
+nothing in the database names an orphan. Declare that, and bind the production
+listing seam on `OwedRows`, with the provider fake supplying the resources:
+
+```python
+from pytest_obligation import ExternalIdentities, ScheduledSelection
+
+
+def bind_orphan_reconciler() -> OwedRows:
+    # ARRANGE: a provider fake installed for this case.
+    provider = FakeChannelProvider()
+    reconciler = ChannelReconciler(provider)
+    # REAL PRODUCTION: the reconciler's listing, per-orphan step and tick.
+    # EXTERNAL SEAM: the fake supplies the resources; a PoisonSwitch the step consults fails one.
+    refusals = reconciler.refusals
+    # OBSERVE: the reconciler's own record of what each tick deleted.
+    return OwedRows(
+        make_owed=provider.create_channel,  # one more orphan in the fake
+        listed=reconciler.orphaned_channels,  # the production listing seam
+        identity_of=lambda channel: channel.id,  # required: a resource has no primary key
+        execute=reconciler.delete_orphan,
+        run_tick=reconciler.tick,
+        dispatched_ids=reconciler.deleted_ids,
+        poison=lambda channel: refusals.poisoned(channel.id),
+    )
+
+
+selection = ScheduledSelection(
+    name="orphaned channels",
+    due_work=select_known_channels,  # what the loop reads from the database
+    assert_scheduled=schedule_evidence,
+    owed_rows=bind_orphan_reconciler,
+    external_identities=ExternalIdentities("orphans are provider channels no row names"),
+)
+```
+
+The binding guard, valid-identity control, order control, poison and
+stop-request cases are generated as for rows, reading `listed` wherever they
+would read `due_work`: a served orphan must leave the listing, and a poisoned
+one must still be listed after the tick. `due_work` keeps its selection proofs
+(authorship, index, primary) for whatever the loop reads from the database.
+There is no row to give database-legal values, so `owed_edges` and
+`state_fields` are refused. The guard checks `listed` reaches production like
+`execute`; binding `listed` without the declaration, or declaring it without
+`listed` or `identity_of`, fails. `ExternalIdentities` and `Polling` compose,
+for a listing whose resources stay listed after each tick.
+
 The catalog covers empty strings, maximum string lengths, unknown string
 choices, zero, negative one where legal, and each integer column's maximum.
 It skips nullable, primary-key and relational columns; database constraints can

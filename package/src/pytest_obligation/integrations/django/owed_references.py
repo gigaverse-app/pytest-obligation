@@ -1,7 +1,7 @@
 """Small PostgreSQL lifecycle used only by the port's positive and negative controls."""
 
 from collections.abc import Iterator
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 from celery.exceptions import SoftTimeLimitExceeded
@@ -12,6 +12,7 @@ from django.test.utils import isolate_apps
 from pytest_obligation.host import hosted
 from pytest_obligation.integrations.celery import celery_handoffs, celery_publications
 from pytest_obligation.integrations.django import django_host
+from pytest_obligation.models import HarnessModel
 
 with isolate_apps("pytest_obligation"):
 
@@ -71,7 +72,11 @@ class ReferenceLoop:
         from pytest_obligation.poison import PoisonSwitch
 
         self.poison = PoisonSwitch()
-        self.dispatched: list[int] = []
+        self.dispatched: list[Any] = []
+
+    def owed(self) -> list[Any]:
+        """The identities one tick owes work to, in the order it serves them."""
+        return [row.pk for row in owed_owners()]
 
     def execute(self, identity: int) -> None:
         self.poison.check(identity)
@@ -79,15 +84,15 @@ class ReferenceLoop:
 
     def tick(self) -> None:
         failures: list[Exception] = []
-        for row in owed_owners():
+        for identity in self.owed():
             try:
-                self.execute(row.pk)
+                self.execute(identity)
             except SoftTimeLimitExceeded:
                 raise
             except Exception as error:
                 failures.append(error)
             else:
-                self.dispatched.append(row.pk)
+                self.dispatched.append(identity)
         if failures:
             raise ExceptionGroup("failed rows", failures)
 
@@ -105,3 +110,52 @@ class PollingReferenceLoop(ReferenceLoop):
     def execute(self, identity: int) -> None:
         self.poison.check(identity)
         poll(identity)
+
+
+class ProviderResource(HarnessModel):
+    """One resource an external provider lists; nothing in the database names it."""
+
+    name: str
+
+
+class ResourceProvider:
+    """An in-memory provider fake: the resources it lists, by name, in creation order."""
+
+    def __init__(self) -> None:
+        self.resources: dict[str, ProviderResource] = {}
+
+    def create(self) -> ProviderResource:
+        resource = ProviderResource(name=f"resource-{len(self.resources) + 1:04d}")
+        self.resources[resource.name] = resource
+        return resource
+
+    def list(self) -> list[ProviderResource]:
+        return list(self.resources.values())
+
+    def delete(self, name: str) -> None:
+        del self.resources[name]
+
+
+def orphaned_resources(provider: ResourceProvider) -> list[ProviderResource]:
+    """The provider's resources no owner row knows by name: the orphans a reconciler deletes."""
+    known = set(PrimitiveOwner.objects.values_list("value", flat=True))
+    return [resource for resource in provider.list() if resource.name not in known]
+
+
+class OrphanReconciler(ReferenceLoop):
+    """Production-shaped external-identity conformer: deletes each orphan, isolating ordinary failures."""
+
+    def __init__(self, provider: ResourceProvider) -> None:
+        super().__init__()
+        self.provider = provider
+
+    def orphans(self) -> list[ProviderResource]:
+        """The listing seam: what this reconciler's provider reports as orphaned now."""
+        return orphaned_resources(self.provider)
+
+    def owed(self) -> list[Any]:
+        return [resource.name for resource in self.orphans()]
+
+    def execute(self, identity: Any) -> None:
+        self.poison.check(identity)
+        self.provider.delete(identity)

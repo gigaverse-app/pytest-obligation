@@ -351,6 +351,43 @@ class OwedRows(RowExecution):
     #: and answer for this row: in the state the poison tick leaves, a row the
     #: step and its handoffs served to completion must read False.
     still_owed: Callable[[Any], bool] | None = None
+    #: REAL PRODUCTION: the listing seam that produces owed identities which are
+    #: not database rows (provider resources a reconciler acts on), read through
+    #: the provider fake this factory installs. Bound only, and always, for a
+    #: selection declaring
+    #: :class:`~pytest_obligation.contract.ExternalIdentities`; every owed-row
+    #: proof then reads it in place of ``due_work``, ``make_owed`` creates one
+    #: more resource in the fake, and ``identity_of`` must be bound.
+    listed: Callable[[], Iterable[Any]] | None = None
+
+
+def owed_selection(
+    name: str, due_work: Callable[[], Iterable[Any]], rows: OwedRows, *, external: bool
+) -> Callable[[], Iterable[Any]]:
+    """
+    What the owed-row proofs read as the selection: the declared ``due_work``, or the listing seam.
+
+    An external-identity selection must bind ``listed`` and its own
+    ``identity_of`` (a provider resource has no primary key); a row selection
+    must not bind ``listed``, so a listing cannot quietly replace the
+    production query the proofs are about.
+    """
+    if not external:
+        assert rows.listed is None, (
+            f"{name}: owed_rows.listed is bound, but the selection does not declare external identities. Declare "
+            f"`external_identities=ExternalIdentities(<why the owed identities are not rows>)`, or unbind `listed` so "
+            f"the proofs read `due_work`"
+        )
+        return due_work
+    assert rows.listed is not None, (
+        f"{name}: the selection declares external identities, but owed_rows.listed is unbound. Bind the production "
+        f"listing seam that returns the owed resources, read through the provider fake"
+    )
+    assert "identity_of" in rows.model_fields_set, (
+        f"{name}: external identities have no primary key; bind owed_rows.identity_of to the resource's stable "
+        f"identity (the one the listing, the step and dispatched_ids share)"
+    )
+    return rows.listed
 
 
 def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model] | None) -> OwedRows:
@@ -388,13 +425,15 @@ def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model] | None) -> OwedRo
 
 
 def assert_owed_row_bindings_are_production_bound(name: str, rows: OwedRows) -> None:
-    """INVARIANT 0 for the light contract: ``execute``, ``run_tick`` and ``still_owed`` invoke production, not a copy."""
+    """INVARIANT 0 for the light contract: ``execute``, ``run_tick``, ``still_owed`` and ``listed`` invoke production."""
     bindings = [
         ("execute", rows.execute, "the per-identity step the scheduled tick runs"),
         ("run_tick", rows.run_tick, "the scheduled task body"),
     ]
     if rows.still_owed is not None:
         bindings.append(("still_owed", rows.still_owed, "the production selection that owns the row next"))
+    if rows.listed is not None:
+        bindings.append(("listed", rows.listed, "the production listing of owed resources the tick reads"))
     for field_name, binding, shape in bindings:
         assert_binding_reaches_production(
             adopter=name,
