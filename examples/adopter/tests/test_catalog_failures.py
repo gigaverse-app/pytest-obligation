@@ -146,3 +146,26 @@ def test_generated_replay_verdict_survives_real_application_cleanup(
         monkeypatch.setattr(Catalog, "execute", lambda self, identity: None)
     with pytest.raises(AssertionError, match="boundary 0 time") if broken else nullcontext():
         case.run()
+
+
+@pytest.mark.parametrize("proof", ["assert_first_execution_has_visible_effect", "assert_replay_converges"])
+def test_generated_replay_proofs_reject_consistently_wrong_content(monkeypatch: pytest.MonkeyPatch, proof: str) -> None:
+    from pytest_obligation import contract_cases
+
+    original = Catalog.__init__
+
+    def wrong_writer(self: Catalog, *args: Any, **kwargs: Any) -> None:
+        original(self, *args, **kwargs)
+        write = self.write
+        self.write = lambda identity, value: write(identity, "wrong edition")
+
+    # The real command, worker and SQL settlement still run; only the external
+    # writer corrupts the payload. Both executions agree, but violate intent.
+    monkeypatch.setattr(Catalog, "__init__", wrong_writer)
+    case = next(
+        case.values[0]
+        for case in contract_cases(catalog_contract("content control"))
+        if case.id == f"REPLAY_SAFE_EXECUTION-{proof}"
+    )
+    with pytest.raises(AssertionError, match="declared product outcome"):
+        case.run()

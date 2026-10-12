@@ -137,3 +137,35 @@ def test_an_observation_that_differs_between_clean_runs_is_refused_not_a_diverge
     with pytest.raises(AssertionError, match="not deterministic") as raised:
         assert_process_deaths_converge(history)
     assert not isinstance(raised.value, HistoriesDiverged)
+
+
+@pytest.mark.parametrize("expected", [("complete", 99), None, lambda handle: ("complete", 99)])
+def test_consistently_wrong_product_outcome_is_rejected(ledger_host: object, expected: object) -> None:
+    history = _history(("before_send",)).model_copy(update={"expected": expected})
+    with pytest.raises(AssertionError, match="declared product outcome"):
+        assert_process_deaths_converge(history)
+
+
+@pytest.mark.parametrize("expected", [("complete", 1), lambda handle: ("complete", 1)])
+def test_independent_product_outcome_accepts_correct_recovery(ledger_host: object, expected: object) -> None:
+    history = _history(("before_send",)).model_copy(update={"expected": expected})
+    assert_process_deaths_converge(history)
+
+
+def test_application_binding_can_require_an_independent_oracle() -> None:
+    history = _history(("before_send",))
+    with pytest.raises(ValueError, match="declare expected independently"):
+        history.require_expected_outcome()
+    # None is a real requirement, not the sentinel for an omitted oracle.
+    history.model_copy(update={"expected": None}).require_expected_outcome()
+
+
+def test_explicit_none_can_be_the_correct_product_outcome(ledger_host: object) -> None:
+    # Observe an external effect disappearing after completion, independently
+    # of the ledger used to arrange faults and execute recovery.
+    def pending(attempt: int) -> str | None:
+        state, _ = ref.status_and_notifications(attempt)
+        return None if state == "complete" else state
+
+    history = _history(("before_send",)).model_copy(update={"initial": "absent", "observe": pending, "expected": None})
+    assert_process_deaths_converge(history)

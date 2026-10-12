@@ -1426,6 +1426,7 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
 
 def _handoff_runner(delivery: Delivery, history: HandoffHistory[Any, Any]) -> Callable[[], None]:
     def run() -> None:
+        history.require_expected_outcome()
         assert_crash_at_every_commit_converges(delivery, history)
 
     return run
@@ -1433,6 +1434,7 @@ def _handoff_runner(delivery: Delivery, history: HandoffHistory[Any, Any]) -> Ca
 
 def _process_runner(history: ProcessHistory[Any, Any]) -> Callable[[], None]:
     def run() -> None:
+        history.require_expected_outcome()
         assert_process_deaths_converge(history)
 
     return run

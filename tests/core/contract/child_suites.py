@@ -28,6 +28,7 @@ SUITE = """
                 arrange=ref.running_attempt,
                 transition=ref.fail_with_split_handoff,
                 observe=ref.attempt_and_successors,
+                expected=("retryable_failed", ("running",)),
                 findings=Findings(("retryable_failed", ("running",)), {{{pinned!r}: ("retryable_failed", ())}}),
             ),
         ),
