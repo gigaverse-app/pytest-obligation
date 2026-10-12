@@ -1,7 +1,6 @@
 """Django owed-row case generation for both public contract surfaces."""
 
 from collections.abc import Callable, Mapping
-from functools import partial
 from typing import Any
 
 from django.db.models import Model
@@ -31,6 +30,7 @@ from pytest_obligation.integrations.django.owed_rows import (
     assert_valid_owed_row_leaves_the_selection,
     failure_ends_of_sweep,
     owed_rows_of_sweep,
+    owed_selection,
 )
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import poison_gap, poison_gap_names, stop_gap, stop_gap_names
@@ -137,28 +137,43 @@ def _owed_row_selection_cases(selection: ScheduledSelection) -> list[Any]:
     if selection.owed_rows is None:
         return []
     name, due_work = selection.name, selection.due_work
-    polling = selection.polling is not None
+    polling, external = selection.polling is not None, selection.external_identities is not None
+
+    def reading(proof: Callable[..., None], **options: bool) -> Callable[[OwedRows], None]:
+        # The selection is resolved per case: an external one is the listing seam the factory binds.
+        def check(rows: OwedRows) -> None:
+            proof(name, owed_selection(name, due_work, rows, external=external), rows, **options)
+
+        return check
+
+    def guard(rows: OwedRows) -> None:
+        owed_selection(name, due_work, rows, external=external)
+        assert_owed_row_bindings_are_production_bound(name, rows)
+
     # A polling selection keeps the rows it serves: its control reads work instead of the row leaving.
     served = assert_a_polled_row_is_served_and_stays_selected if polling else assert_valid_owed_row_leaves_the_selection
     checks: list[tuple[str, Callable[[OwedRows], None], type[AssertionError] | None]] = [
-        (
-            assert_owed_row_bindings_are_production_bound.__name__,
-            partial(assert_owed_row_bindings_are_production_bound, name),
-            None,
-        ),
-        (served.__name__, partial(served, name, due_work), None),
+        (assert_owed_row_bindings_are_production_bound.__name__, guard, None),
+        (served.__name__, reading(served), None),
         (
             assert_the_tick_dispatches_owed_rows_in_selection_order.__name__,
-            partial(assert_the_tick_dispatches_owed_rows_in_selection_order, name, due_work),
+            reading(assert_the_tick_dispatches_owed_rows_in_selection_order),
             None,
         ),
-        (_LOOP_POISON_CASE, partial(assert_the_loop_isolates_a_poisoned_row, name, due_work, polling=polling), None),
-        (_LOOP_STOP_CASE, partial(assert_a_soft_time_limit_ends_the_loop, name, due_work, polling=polling), None),
+        (_LOOP_POISON_CASE, reading(assert_the_loop_isolates_a_poisoned_row, polling=polling), None),
+        (_LOOP_STOP_CASE, reading(assert_a_soft_time_limit_ends_the_loop, polling=polling), None),
     ]
     checks.extend(
         (
             case.key,
-            lambda rows, case=case: case.proof(name, due_work, case.family, case.edge, rows, NOTHING_ENDS_A_FAILURE),
+            lambda rows, case=case: case.proof(
+                name,
+                owed_selection(name, due_work, rows, external=external),
+                case.family,
+                case.edge,
+                rows,
+                NOTHING_ENDS_A_FAILURE,
+            ),
             OwedRowNotHandled,
         )
         for case in _owed_row_edge_cases(selection)
