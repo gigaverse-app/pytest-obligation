@@ -21,7 +21,7 @@ locking gets its coverage from adopters.
 """
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from uuid import UUID, uuid4
 
 import pytest
@@ -563,3 +563,62 @@ def test_a_racer_that_raises_is_told_which_setting_to_raise() -> None:
 def test_a_race_timeout_that_is_not_positive_is_refused() -> None:
     with pytest.raises(ObligationContractDesignError, match="race_timeout"):
         _binding(_LockedClaims()).model_copy(update={"race_timeout": 0.0})
+
+
+@pytest.mark.parametrize("timeout", [0.0, -1.0, 0.001, float("nan"), float("inf")])
+@pytest.mark.parametrize("direct", [False, True], ids=["binding", "proof-argument"])
+def test_a_race_deadline_cannot_disable_the_database_bounds(timeout: float, direct: bool) -> None:
+    with pytest.raises(ObligationContractDesignError, match="timeout"):
+        owner = _binding(_LockedClaims())
+        if direct:
+            assert_claim_is_exclusive_across_connections(owner, timeout=timeout)
+        else:
+            owner.model_copy(update={"race_timeout": timeout})
+
+
+def test_the_waiting_thread_cleans_only_the_stalled_racer_before_failure() -> None:
+    from contextlib import contextmanager
+
+    from pytest_obligation.host import current_host, hosted
+
+    owner = _HungClaims()
+    actors: list[threading.Thread] = []
+    cleaned: list[str] = []
+
+    @contextmanager
+    def scope() -> Iterator[Callable[[], None]]:
+        actor = threading.current_thread()
+        actors.append(actor)
+
+        def cleanup() -> None:
+            assert threading.current_thread() is threading.main_thread()
+            cleaned.append(actor.name)
+            owner.release.set()
+
+        yield cleanup
+
+    try:
+        with hosted(current_host().model_copy(update={"connection_scope": scope})):
+            with pytest.raises(AssertionError, match="had not returned"):
+                assert_claim_is_exclusive_across_connections(_binding(owner), timeout=0.1)
+        assert len(cleaned) == 1, "the successful racer must not be terminated"
+    finally:
+        owner.release.set()
+        for actor in actors:
+            actor.join(timeout=2)
+            assert not actor.is_alive()
+
+
+def test_a_connection_scope_setup_failure_is_reported_by_the_race() -> None:
+    from contextlib import contextmanager
+
+    from pytest_obligation.host import current_host, hosted
+
+    @contextmanager
+    def broken_scope() -> Iterator[None]:
+        raise RuntimeError("cannot open the worker connection")
+        yield  # pragma: no cover - gives the failing setup a context-manager boundary
+
+    with hosted(current_host().model_copy(update={"connection_scope": broken_scope})):
+        with pytest.raises(AssertionError, match="raised instead of losing cleanly.*cannot open the worker connection"):
+            assert_claim_is_exclusive_across_connections(_binding(_LockedClaims()), timeout=0.1)

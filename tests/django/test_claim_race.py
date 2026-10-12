@@ -154,3 +154,44 @@ def test_a_racing_threads_connection_is_bounded_and_closed_even_when_persistent(
     thread.join(timeout=30)
     assert seen == {"lock": lock, "statement": statement, "open_inside": True, "closed_after": True}
     assert connection.settings_dict["CONN_MAX_AGE"] == 0, "the racer's persistent setting leaked into this thread"
+
+
+def _stalled_sessions() -> int:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
+            "AND pid <> pg_backend_pid() AND state LIKE 'idle in transaction%%'"
+        )
+        return cursor.fetchone()[0]
+
+
+@pytest.mark.parametrize("transaction_delay", [0.0, 0.2], ids=["immediate-transaction", "late-transaction"])
+def test_a_winner_stalled_inside_its_transaction_fails_fast_and_leaves_no_lock_behind(transaction_delay: float) -> None:
+    # The winner stalls in Python with its row lock held: idle in transaction, which no statement bound ends.
+    release, first, entered = threading.Event(), threading.Lock(), []
+
+    def claim_then_stall() -> tuple[int, UUID] | None:
+        with first:
+            winner = not entered
+            entered.append(winner)
+        if not winner:
+            return None
+        # The server idle timeout starts later than the race; cleanup must still
+        # release this transaction as soon as the proof deadline expires.
+        time.sleep(transaction_delay)
+        with transaction.atomic():
+            row = ref.LifecycleAttempt.objects.select_for_update().filter(status=Status.REQUESTED).first()
+            assert row is not None
+            ref.LifecycleAttempt.objects.filter(pk=row.pk).update(status=Status.RUNNING)
+            release.wait(10)
+            return row.pk, uuid4()
+
+    started = time.monotonic()
+    try:
+        with pytest.raises(AssertionError, match="had not returned 0.5s after the race began"):
+            assert_claim_is_exclusive_across_connections(_owner(claim_then_stall), timeout=0.5)
+        assert time.monotonic() - started < 3, "the proof waited on the stalled racer"
+        # The stalled racer's session is gone, so the table's teardown takes no lock it holds.
+        assert _stalled_sessions() == 0, "a stalled racer's transaction outlived the failed proof"
+    finally:
+        release.set()

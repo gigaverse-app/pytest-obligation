@@ -104,6 +104,8 @@ class Declarations:
     def _harness(self, expression: ast.expr) -> str | None:
         """The pytest_obligation name an expression refers to, or None when it is not the harness's."""
         qualified = qualified_name(expression, self.module.name, self.imported, self.defined)
+        if qualified is not None and qualified in self.project.config.suite_aliases:
+            return self.project.config.suite_aliases[qualified]
         if qualified == "due.django.conformance.suite.effect_contract_suite":
             return "effect_contract_suite"
         if qualified is None or qualified.split(".", 1)[0] not in {HARNESS, "due_work_harness"}:

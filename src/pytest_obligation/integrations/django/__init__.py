@@ -38,7 +38,7 @@ from collections.abc import Callable, Collection, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 
-from pytest_obligation.host import Host, PublicationBreaker, ReceiverBreaker
+from pytest_obligation.host import ConnectionCleanup, Host, PublicationBreaker, ReceiverBreaker
 from pytest_obligation.integrations.clocks import time_machine_clock
 
 
@@ -62,35 +62,33 @@ DEFAULT_RACE_TIMEOUT = 10.0
 
 
 @contextmanager
-def _connection_scope() -> Iterator[None]:
+def _connection_scope() -> Iterator[ConnectionCleanup]:
+    """Own a racer's bounded connection and let its waiting thread end a stalled session.
+
+    Lock waits use half the race deadline; SQL and idle transactions use the
+    full deadline. The yielded cleanup releases row locks before a failed proof's
+    teardown, even when the worker is still blocked in Python.
     """
-    A racing thread's own connection: bounded while it runs, closed on every exit.
-
-    On PostgreSQL the bounds come from the race's deadline
-    (:func:`~pytest_obligation.host.race_timeout`): ``lock_timeout`` is half of it,
-    so a claim blocked on the other connection's lock fails with the database's
-    error well before the race gives up on it, and ``statement_timeout`` is all of
-    it, so nothing the racer started outlives the race on the server.
-
-    ``close_old_connections`` closes only connections past their ``CONN_MAX_AGE``, so
-    a persistent one would outlive the thread that owned it; ``close_all`` always
-    closes this thread's connections.
-    """
-    from django.db import connection, connections
-
     from pytest_obligation.host import race_timeout
+    from pytest_obligation.integrations.django.worker_connections import (
+        database_worker_connection,
+        end_stalled_worker_sessions,
+        worker_connection_wrapper,
+    )
 
-    race = race_timeout() or DEFAULT_RACE_TIMEOUT
-    try:
-        if connection.vendor == "postgresql":
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT set_config('lock_timeout', %s, false), set_config('statement_timeout', %s, false)",
-                    [f"{int(race * 500)}ms", f"{int(race * 1000)}ms"],
-                )
-        yield
-    finally:
-        connections.close_all()
+    declared = race_timeout()
+    race = DEFAULT_RACE_TIMEOUT if declared is None else declared
+    with database_worker_connection(
+        lock_timeout_ms=int(race * 500),
+        statement_timeout_ms=int(race * 1000),
+        idle_in_transaction_timeout_ms=int(race * 1000),
+    ):
+        worker = worker_connection_wrapper()
+
+        def cleanup() -> None:
+            end_stalled_worker_sessions((worker,))
+
+        yield cleanup
 
 
 @contextmanager

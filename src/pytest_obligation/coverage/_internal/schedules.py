@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ast
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -65,8 +65,9 @@ def _registered_name(decorator: ast.expr, default: str, tree: ast.Module, projec
     return default
 
 
-def _task_definitions(project: Project) -> dict[str, _Callable]:
+def _task_definitions(project: Project, task_names: Mapping[str, str] | None = None) -> dict[str, _Callable]:
     """Registered task name -> its production function, as Celery would register it."""
+    task_names = {} if task_names is None else task_names
     tasks: dict[str, _Callable] = {}
     for source in project.production:
         text = source.path.read_text(encoding="utf-8")
@@ -81,7 +82,11 @@ def _task_definitions(project: Project) -> dict[str, _Callable]:
                 target = decorator.func if isinstance(decorator, ast.Call) else decorator
                 if terminal_name(target) == "shared_task":
                     default = f"{module}.{node.name}"
-                    name = _registered_name(decorator, default, tree, project)
+                    name = (
+                        task_names[default]
+                        if default in task_names
+                        else _registered_name(decorator, default, tree, project)
+                    )
                     tasks[name] = _Callable(default, node)
     return tasks
 

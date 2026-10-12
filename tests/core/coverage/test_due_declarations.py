@@ -8,13 +8,19 @@ from .builders import write_project
 
 
 @pytest.mark.parametrize(
-    "decorator_module, valid",
+    "decorator_module, reviewed, valid",
     [
-        ("due.django.conformance.suite", True),
-        ("application_tests", False),
+        ("due.django.conformance.suite", False, True),
+        ("application_tests", False, False),
+        ("application_tests", True, True),
     ],
 )
-def test_due_effect_suite_accounts_for_exact_producer(tmp_path: Path, decorator_module: str, valid: bool):
+def test_due_effect_suite_accounts_for_exact_producer(
+    tmp_path: Path,
+    decorator_module: str,
+    reviewed: bool,
+    valid: bool,
+):
     report = scan(
         write_project(
             tmp_path,
@@ -34,6 +40,9 @@ def test_due_effect_suite_accounts_for_exact_producer(tmp_path: Path, decorator_
                 pass
         """,
             },
+            extra='suite-aliases = { "application_tests.effect_contract_suite" = "effect_contract_suite" }'
+            if reviewed
+            else "",
         )
     )
     if valid:
