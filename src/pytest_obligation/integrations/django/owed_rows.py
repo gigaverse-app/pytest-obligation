@@ -351,7 +351,7 @@ class OwedRows(RowExecution):
     still_owed: Callable[[Any], bool] | None = None
 
 
-def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model]) -> OwedRows:
+def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model] | None) -> OwedRows:
     """
     A profile-A sweep as the owed-row binding, so both contracts run the same proofs.
 
@@ -361,6 +361,8 @@ def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model]) -> OwedRows:
     queryset = sweep.due_work()
     assert isinstance(queryset, QuerySet), "Django owed_model requires a QuerySet selection"
     selected = queryset.model
+    if model is None:
+        model = selected
     assert selected._meta.concrete_model is model._meta.concrete_model, (
         f"{sweep.name}: owed_model={model.__name__} but the production selection returns "
         f"{selected.__name__}. Declare the model `due_work()` selects"

@@ -211,7 +211,9 @@ class CompletenessBinding(RowExecution):
         )
 
 
-def completeness_of_sweep(sweep: DueWorkSweep, model: type[Model], *, retries_bounded: bool) -> CompletenessBinding:
+def completeness_of_sweep(
+    sweep: DueWorkSweep, model: type[Model] | None, *, retries_bounded: bool
+) -> CompletenessBinding:
     """A profile-A sweep with its :class:`Lifecycle`, as owed-row admissibility projects it."""
     rows = owed_rows_of_sweep(sweep, model)
     assert sweep.lifecycle is not None  # owed_rows_of_sweep requires it

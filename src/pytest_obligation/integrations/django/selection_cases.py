@@ -51,9 +51,7 @@ def selection_completeness_cases(contract: ObligationContract | ScheduledSelecti
     def enter() -> Iterator[proof.CompletenessBinding]:
         assert contract.sweep is not None
         with _entered(contract.sweep) as sweep:
-            yield proof.completeness_of_sweep(
-                sweep, contract.owed_model or sweep.due_work().model, retries_bounded=retries_are_bounded(contract)
-            )
+            yield proof.completeness_of_sweep(sweep, contract.owed_model, retries_bounded=retries_are_bounded(contract))
 
     claim = contract.profiles[Profile.A]
     assert isinstance(claim, Claim)
