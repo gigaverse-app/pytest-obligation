@@ -78,6 +78,9 @@ def focal_point_replay(arrange: Callable[[], Any]) -> Iterator[ReplaySafeEffect]
         task = DBTaskResult.objects.get(task_path="wagtail.images.tasks.set_image_focal_point_task")
         yield ReplaySafeEffect(
             name="Wagtail automatic crop replay",
+            # Wagtail 8.0 AbstractImage.get_suggested_focal_point pads the face
+            # bounds by 20% and clamps each dimension to at least 100 pixels.
+            expected=(15, 15, 100, 100),
             prepare=lambda: task.args_kwargs["args"],
             execute=lambda args: set_image_focal_point_task.call(*args),
             observe=lambda _args: (

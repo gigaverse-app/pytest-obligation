@@ -164,6 +164,7 @@ def indexing_replay() -> ReplaySafeEffect:
     # OBSERVE: whether the book is indexed.
     return ReplaySafeEffect(
         name="index_book",
+        expected=True,
         prepare=lambda: Book.objects.create(title="Dune", author="Frank Herbert").id,
         execute=index_again,
         observe=lambda book_id: Book.objects.get(id=book_id).indexed,

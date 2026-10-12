@@ -135,6 +135,7 @@ from pytest_obligation.profiles.gated_execution import (
 )
 from pytest_obligation.profiles.harmless_replay import (
     REPLAY_SAFETY_PROOFS,
+    ReplayDiverged,
     ReplaySafeEffect,
     assert_replay_safety_contract,
 )
@@ -255,6 +256,7 @@ __all__ = [
     "FailureClass",
     "PersistentRetry",
     "ReplaySafeEffect",
+    "ReplayDiverged",
     "assert_bounded_retry_contract",
     "assert_classified_failure_contract",
     "assert_persistent_retry_contract",

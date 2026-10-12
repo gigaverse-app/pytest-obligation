@@ -106,6 +106,7 @@ def reference_replay_safety_binding(
     effect = effect if effect is not None else InMemoryReplayEffect()
     return ReplaySafeEffect(
         name="in-memory replay-safe effect",
+        expected="result",
         prepare=effect.prepare,
         execute=execute if execute is not None else effect.execute,
         observe=effect.observe,

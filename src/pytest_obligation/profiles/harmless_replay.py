@@ -41,6 +41,10 @@ from pytest_obligation.evidence.observation import assert_observation
 from pytest_obligation.outcomes import ExpectedOutcome, assert_expected_outcome
 
 
+class ReplayDiverged(AssertionError):
+    """A correct first execution changed its result on a real replay."""
+
+
 class ReplaySafeEffect(ExpectedOutcome[Any, Any]):
     """One replayable production operation and its meaningful observation."""
 
@@ -138,12 +142,15 @@ def assert_replay_converges(effect: ReplaySafeEffect) -> None:
         f"property that actually holds"
     )
     after_replay = effect.observe(operation)
-    assert_expected_outcome(effect.name, expected, after_replay)
-    assert_observation(
-        after_replay,
-        after_first,
-        because=f"{effect.name}: replaying the identical operation changed its visible result; blind retry can duplicate or drift the external effect",
-    )
+    try:
+        assert_expected_outcome(effect.name, expected, after_replay)
+        assert_observation(
+            after_replay,
+            after_first,
+            because=f"{effect.name}: replaying the identical operation changed its visible result; blind retry can duplicate or drift the external effect",
+        )
+    except AssertionError as error:
+        raise ReplayDiverged(str(error)) from error
 
 
 REPLAY_SAFETY_PROOFS: tuple[Callable[[ReplaySafeEffect], None], ...] = (

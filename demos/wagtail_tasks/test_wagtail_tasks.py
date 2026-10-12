@@ -240,6 +240,7 @@ def media_replay(arrange: Callable[[], Any], delete: Callable[[Any], None]) -> I
     with mock.patch.object(FileSystemStorage, "delete", counted):
         yield ReplaySafeEffect(
             name="Wagtail file deletion",
+            expected=False,
             prepare=lambda: args,
             execute=lambda arguments: delete_file_from_storage_task.call(*arguments),
             observe=lambda _arguments: Path(handle[1]).exists(),
@@ -450,6 +451,7 @@ def purge_replay() -> ReplaySafeEffect:
     cdn.PURGED.clear()
     return ReplaySafeEffect(
         name="Wagtail CDN purge",
+        expected=True,
         prepare=lambda: url,
         execute=lambda target: purge_urls_from_cache_task.call([target]),
         observe=lambda target: cdn.PURGED[target] > 0,
