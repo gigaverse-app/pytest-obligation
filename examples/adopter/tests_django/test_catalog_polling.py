@@ -2,7 +2,10 @@
 
 Run with the Django integration installed and tests.django.settings: the shared
 row oracle observes Django writes as well as provider calls, even though this
-application's durable owners live in SQLite.
+application's durable owners live in SQLite. Its listing exposes plain identities,
+not Django model rows: exercise the same external-listing routing used for provider
+resource IDs. These are standalone loop proofs, not an index claim over SQLite;
+the ScheduledSelection generation and PostgreSQL proofs have separate controls.
 """
 
 from collections import Counter
@@ -17,6 +20,7 @@ from pytest_obligation.integrations.django.owed_rows import (
     OwedRows,
     assert_a_polled_row_is_served_and_stays_selected,
     assert_the_loop_isolates_a_poisoned_row,
+    owed_selection,
 )
 from pytest_obligation.poison import PoisonSwitch, PoisonUnreported
 
@@ -49,6 +53,7 @@ def catalog_polling() -> Iterator[tuple[Catalog, OwedRows]]:
             OwedRows(
                 make_owed=make_owed,
                 identity_of=lambda identity: identity,
+                listed=catalog.eligible,
                 execute=lambda identity: catalog.read(identity),
                 run_tick=catalog.recover,
                 dispatched_ids=lambda: dispatched,
@@ -60,12 +65,19 @@ def catalog_polling() -> Iterator[tuple[Catalog, OwedRows]]:
 
 def test_acknowledged_catalog_owners_are_polled_on_every_tick() -> None:
     with catalog_polling() as (catalog, rows):
-        assert_a_polled_row_is_served_and_stays_selected("catalog remote reconciliation", catalog.eligible, rows)
+        assert_a_polled_row_is_served_and_stays_selected(
+            "catalog remote reconciliation", owed_selection("catalog", catalog.eligible, rows, external=True), rows
+        )
 
 
 def test_a_failed_catalog_read_is_isolated_and_reported_on_every_tick() -> None:
     with catalog_polling() as (catalog, rows):
-        assert_the_loop_isolates_a_poisoned_row("catalog remote reconciliation", catalog.eligible, rows, polling=True)
+        assert_the_loop_isolates_a_poisoned_row(
+            "catalog remote reconciliation",
+            owed_selection("catalog", catalog.eligible, rows, external=True),
+            rows,
+            polling=True,
+        )
 
 
 @pytest.mark.parametrize("silent_from", [1, 2])
@@ -85,7 +97,7 @@ def test_suppressing_a_catalog_failure_cannot_pass_the_polling_proof(silent_from
         with pytest.raises(PoisonUnreported):
             assert_the_loop_isolates_a_poisoned_row(
                 "catalog remote reconciliation",
-                catalog.eligible,
+                owed_selection("catalog", catalog.eligible, rows, external=True),
                 rows.model_copy(update={"run_tick": silent_tick}),
                 polling=True,
             )
