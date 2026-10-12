@@ -1,5 +1,5 @@
 """
-pytest integration: read the host from configuration before collection, and verify declared suites ran.
+pytest integration: configure a lazy application host, and verify declared suites ran.
 
 ``pytest --due-work-verify`` closes the gap between the static coverage check
 and the test run. The scan counts a function as covered or exempt because a
@@ -100,10 +100,14 @@ def pytest_configure(config: pytest.Config) -> None:
         return
     module_name, _, attribute = path.partition(":")
     assert attribute, f"due_work_harness_host must look like 'package.module:attribute', got {path!r}"
-    target = getattr(import_module(module_name), attribute)
-    host = target if isinstance(target, Host) else target()
-    assert isinstance(host, Host), f"{path} did not produce a pytest_obligation Host"
-    configure(host)
+
+    def configured_host() -> Host:
+        target = getattr(import_module(module_name), attribute)
+        host = target if isinstance(target, Host) else target()
+        assert isinstance(host, Host), f"{path} did not produce a pytest_obligation Host"
+        return host
+
+    configure(configured_host)
 
 
 class _SuitesRan:

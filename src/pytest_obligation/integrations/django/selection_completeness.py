@@ -109,14 +109,13 @@ from hypothesis.extra.django import from_field
 from pydantic import Field
 
 from pytest_obligation.binding import is_real_reason
-from pytest_obligation.host import HandoffsNeverStop, current_host
+from pytest_obligation.host import HandoffsNeverStop
 from pytest_obligation.integrations.clocks import time_machine_clock as frozen_scheduler_clock
 from pytest_obligation.integrations.django.edge_values import CandidateEdge, model_edges
 from pytest_obligation.integrations.django.lifecycle_states import (
     StatePath,
     filtered_fields,
     new_entries,
-    observed_effects,
     resolve_state_path,
 )
 from pytest_obligation.integrations.django.owed_rows import (
@@ -127,6 +126,7 @@ from pytest_obligation.integrations.django.owed_rows import (
     assert_selected_owed_row_is_handled,
     failure_ends_of_sweep,
     owed_rows_of_sweep,
+    serve_row,
     worker_transaction,
 )
 from pytest_obligation.models import HarnessModel
@@ -484,31 +484,14 @@ def _acts_on(binding: CompletenessBinding, declaration: _Declaration, row: Model
     calls_before = binding.effect_calls_for(row) if binding.effect_calls_for is not None else 0
     selected_before = _selected(binding)
     acted: list[str] = []
-    failure: Exception | None = None
-    with observed_effects(None) as worker:
-        try:
-
-            def execute() -> object:
-                with TestCase.captureOnCommitCallbacks(execute=True), worker_transaction():
-                    return binding.execute(delivery)
-
-            runner = current_host().handoff_runner
-            if runner is None:
-                execute()
-            else:
-                runner(execute)
-        except HandoffsNeverStop as endless:
-            acted.append(f"started a handoff chain that {endless}")
-        except Exception as error:
-            failure = error
-    created = list(worker.created)
-    assert not worker.published, (
-        "the worker published follow-up work but the host did not deliver it; configure handoff_runner"
-    )
-    if failure is not None:
-        acted.append(f"raised {failure!r}")
-    if created:
-        acted.append(f"created rows {created}")
+    try:
+        served = serve_row(binding.execute, delivery, dispatched_ids=None)
+    except HandoffsNeverStop as endless:
+        return [f"started a handoff chain that {endless}"]
+    if served.failure is not None:
+        acted.append(f"{served.ran_in} raised {served.failure!r}")
+    if served.created:
+        acted.append(f"created rows {list(served.created)}")
     states_after = _states(declaration, row)
     if states_after != states_before:
         acted.append(f"moved its states from {states_before} to {states_after}")

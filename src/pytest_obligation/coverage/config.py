@@ -22,7 +22,7 @@ Coverage configuration: ``[tool.due-work-harness]`` in the project's ``pyproject
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -46,6 +46,11 @@ class CoverageConfig(HarnessModel):
     bridge_methods: frozenset[str] = frozenset()
     transaction_openers: frozenset[str] = frozenset()
     baseline: Mapping[str, int] = Field(default_factory=dict)
+    #: Explicitly reviewed application wrappers around a public suite decorator.
+    #: This declares trust for static inventory; runtime collection still verifies the generated proofs.
+    suite_aliases: Mapping[
+        str, Literal["effect_contract_suite", "due_work_contract_suite", "scheduled_selection_suite"]
+    ] = Field(default_factory=dict)
 
     def is_production(self, qualified: str) -> bool:
         """Whether a dotted name lies inside one of the production packages."""
@@ -102,4 +107,5 @@ def load_config(root: Path | str = ".") -> CoverageConfig:
         bridge_methods=frozenset(_strings(table, "bridge-methods", ())),
         baseline=_counts(table, "baseline"),
         transaction_openers=frozenset(_strings(table, "transaction-openers", ())),
+        suite_aliases=table.get("suite-aliases", {}),
     )

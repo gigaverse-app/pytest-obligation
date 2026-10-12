@@ -64,15 +64,19 @@ def assert_schedule_contract(
     default_stale_after: timedelta,
     generated_recovery: Mapping[str, RecoveryTick] | None = None,
     reviewed_grandfathered: frozenset[str] = frozenset(),
+    task_names: Mapping[str, str] | None = None,
 ) -> None:
     """Require every scheduled task's declared recovery structure and cadence.
 
     `schedule` maps entry names to registered task names. `intervals` maps static
     task names to their shortest cadence. Generated runtime tasks instead have
     their registry-owned cadence; their `via` chains are supplied explicitly.
+    ``task_names`` maps qualified production functions to their configured Celery
+    names when a settings expression cannot be resolved statically. Bind these
+    values to the installed task objects in the application test.
     Application-owned reviewed lists are exact: growth and stale entries fail.
     """
-    defined = _task_definitions(project)
+    defined = _task_definitions(project, {} if task_names is None else task_names)
     index = _function_index(project)
     problems = [*project.unparsable, *(f"hidden source: {path}" for path in project.hidden)]
     scheduled = set(schedule.values())

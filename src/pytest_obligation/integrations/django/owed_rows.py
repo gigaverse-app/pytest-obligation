@@ -136,7 +136,7 @@ def failure_ends_of_sweep(sweep: DueWorkSweep, *, retries_bounded: bool) -> Fail
     return FailureEnds(is_terminal=is_terminal, retries_bounded=retries_bounded)
 
 
-class _Served(HarnessModel):
+class ServedRow(HarnessModel):
     """What one production delivery, and the handoff chain it started, did to an owed row."""
 
     #: What raised, in the worker or anywhere in its chain; an autoretry's ``Retry`` carries what it raised.
@@ -145,9 +145,12 @@ class _Served(HarnessModel):
     ran_in: str
     #: Whether anything besides publishing and recording the dispatch happened.
     worked: bool
+    created: tuple[str, ...]
 
 
-def _serve(execute: Callable[[Any], Any], delivery: Any, *, dispatched_ids: Callable[[], list[Any]] | None) -> _Served:
+def serve_row(
+    execute: Callable[[Any], Any], delivery: Any, *, dispatched_ids: Callable[[], list[Any]] | None
+) -> ServedRow:
     """
     Deliver one owed row to the production worker, then the chain it hands off to.
 
@@ -179,7 +182,12 @@ def _serve(execute: Callable[[Any], Any], delivery: Any, *, dispatched_ids: Call
         "the worker published follow-up work but the host did not deliver it; configure "
         "handoff_runner (celery_handoffs for Celery) so the proof observes the downstream outcome"
     )
-    return _Served(failure=failure, ran_in="the production worker and its handoffs", worked=effects.did_work)
+    return ServedRow(
+        failure=failure,
+        ran_in="the production worker and its handoffs",
+        worked=effects.did_work,
+        created=tuple(effects.created),
+    )
 
 
 def assert_database_legal_owed_row_is_handled(
@@ -422,7 +430,7 @@ def _served_to_completion(name: str, selection: Callable[[], Iterable[Any]], row
     assert identity in _selected(selection, rows.identity_of), (
         f"{name}: the owed example is not selected, so nothing below would be measured"
     )
-    failure = _serve(
+    failure = serve_row(
         rows.execute, rows.deliver(row) if rows.deliver is not None else identity, dispatched_ids=None
     ).failure
     assert failure is None, (
@@ -680,7 +688,7 @@ def assert_selected_owed_row_is_handled(
     before = _rows_as_persisted((row, *related))
     calls_before = effect_calls_for(row) if effect_calls_for is not None else 0
     try:
-        served = _serve(execute, delivery, dispatched_ids=dispatched_ids)
+        served = serve_row(execute, delivery, dispatched_ids=dispatched_ids)
     except HandoffsNeverStop as endless:
         raise OwedRowNotHandled(
             f"{name}: delivering the row {describe} started a chain that {endless}; every tick would start it again"

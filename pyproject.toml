@@ -86,6 +86,8 @@ source = "vcs"
 [tool.hatch.version.raw-options]
 # Untagged commits build as the next patch dev release, never as a real version.
 local_scheme = "no-local-version"
+# Archives and embedded subtrees have no repository tags; never inspect parent tags.
+fallback_version = "0.9.1.dev0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pytest_obligation", "shims/due_work_harness"]

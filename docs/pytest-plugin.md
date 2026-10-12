@@ -97,7 +97,27 @@ the plugin accepts a dotted path to a `Host` or a zero-argument host factory:
 due_work_harness_host = "myapp.testing:make_due_work_host"
 ```
 
-The host is configured before collection. The application still supplies
+The host path is configured before collection and imported on the first host read
+by a declaration or proof. A session containing only unrelated tests never imports
+the application adapter; a missing or broken adapter still fails when required.
+The application still supplies
 production transitions, independent observations, and real recovery behavior.
 The [handoff coverage scan](coverage.md) complements runtime proofs by finding
 production handoffs that have not yet been accounted for.
+
+
+### Application wrappers around suite decorators
+
+A consumer that scopes its own manifest around a public generator can declare the
+exact reviewed wrapper in `CoverageConfig.suite_aliases`, or in TOML:
+
+```toml
+[tool.due-work-harness.suite-aliases]
+"app.tests.harness.effect_contract_suite" = "effect_contract_suite"
+```
+
+This is an explicit trust boundary for static handoff inventory. The wrapper must
+call the named public generator and preserve its collection/outcome hooks; it
+must not replace proof logic. Without this declaration, an application function
+with the same name is rejected. The runtime suite guards still verify all generated
+proofs; a static coverage declaration alone cannot certify execution.

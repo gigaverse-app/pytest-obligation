@@ -327,16 +327,26 @@ class Host(HarnessModel):
         return value
 
 
-_host = Host()
+_host: Host | Callable[[], Host] = Host()
 
 
-def configure(host: Host) -> None:
-    """Install the host every proof reads. Call once per test session."""
+def configure(host: Host | Callable[[], Host]) -> None:
+    """Install a host or a factory resolved once on first use by a proof.
+
+    Lazy factories keep application/framework imports out of unrelated pytest
+    sessions. Factory failures propagate; they never fall back to an empty host.
+    """
     global _host
     _host = host
 
 
 def current_host() -> Host:
+    """Resolve the configured host before a declaration or proof uses it."""
+    global _host
+    if not isinstance(_host, Host):
+        resolved = _host()
+        assert isinstance(resolved, Host), "The configured factory did not produce a pytest_obligation Host"
+        _host = resolved
     return _host
 
 
