@@ -682,3 +682,9 @@ def test_a_bitmap_only_of_named_partial_indexes_overturns_the_walk() -> None:
     assert index_served_verdict(bitmap, table=_TABLE, predicate_indexes=named) is None
     assert bitmap_overturns_the_walk(_WALKS_AN_UNRELATED_INDEX, bitmap, table=_TABLE, predicate_indexes=named)
     assert not bitmap_overturns_the_walk(_WALKS_AN_UNRELATED_INDEX, bitmap, table=_TABLE)
+
+
+@pytest.mark.parametrize("clock", ["tenant.clock()", '"tenant"."clock"()', "tenant.clock ()", "tenant.clock_9()"])
+def test_a_qualified_clock_is_not_a_join_column(clock: str) -> None:
+    scan = _child(f"(due_at <= {clock})", ("due_at",), Filter="(status = 'pending'::text)")
+    assert index_served_verdict(scan, table=_TABLE) is None

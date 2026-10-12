@@ -20,12 +20,13 @@ from typing import Any
 import pytest
 from django.db import connection, models
 from django.db.models import QuerySet
+from django.db.models.expressions import RawSQL
 from django.test.utils import isolate_apps
 from django.utils import timezone
 
 from pytest_obligation.contract import ScheduledSelection
 from pytest_obligation.integrations.django.selection import DjangoSelectionInspector, explain_index_eligibility
-from pytest_obligation.integrations.postgres_plans import iter_plan_nodes
+from pytest_obligation.integrations.postgres_plans import index_served_verdict, iter_plan_nodes
 from pytest_obligation.profiles.automatic_recovery import assert_selection_is_index_served
 
 with isolate_apps():
@@ -212,3 +213,18 @@ def test_a_join_key_driven_by_an_indexed_parent_serves_the_selection(tables: Non
     child = _child_scan(_children_of_active_parents_by_parent())
     assert child["Index Cond"] == f"(parent_id = {_PARENT}.id)" and "Filter" not in child
     assert_selection_is_index_served(_scheduled(_children_of_active_parents_by_parent))
+
+
+@pytest.mark.usefixtures("tables")
+def test_a_schema_qualified_clock_narrows_the_due_index() -> None:
+    with connection.cursor() as cursor:
+        cursor.execute("CREATE SCHEMA tenant_clock")
+        cursor.execute(
+            "CREATE FUNCTION tenant_clock.cutoff() RETURNS timestamptz LANGUAGE plpgsql STABLE "
+            "AS $$ BEGIN RETURN now(); END $$"
+        )
+    _seed(f"CREATE INDEX child_due_ix ON {_CHILD} (due_at)")
+    selection = _Child.objects.filter(due_at__lte=RawSQL("tenant_clock.cutoff()", []), status="pending")
+    plan = explain_index_eligibility(selection)
+    assert any("tenant_clock.cutoff()" in node.get("Index Cond", "") for node in iter_plan_nodes(plan))
+    assert index_served_verdict(plan, table=_CHILD) is None

@@ -147,8 +147,9 @@ def _own_names(scan: dict[str, Any]) -> frozenset[str]:
 
 
 #: A column qualified by a relation name or alias, as PostgreSQL prints another relation's column in a
+#: Match the complete identifier: backtracking must not turn schema.clock() into schema.cloc.
 #: parameterized scan (``(parent_id = p.id)``); a qualified name followed by ``(`` is a function, not a column.
-_QUALIFIED = re.compile(r'(?<![\w$."])("[^"]+"|[A-Za-z_][\w$]*)\.(?:"[^"]+"|[A-Za-z_][\w$]*)(?!\s*\()')
+_QUALIFIED = re.compile(r'(?<![\w$."])("[^"]+"|[A-Za-z_][\w$]*)\.(?:"[^"]+"|[A-Za-z_][\w$]*)(?![\w$"]|\s*\()')
 
 
 def _conjuncts(expression: str) -> list[str]:
