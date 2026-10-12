@@ -23,6 +23,7 @@ from pytest_obligation.integrations.django.owed_rows import (
     OwedRowNotHandled,
     OwedRowProof,
     OwedRows,
+    assert_a_polled_row_is_served_and_stays_selected,
     assert_a_soft_time_limit_ends_the_loop,
     assert_owed_row_bindings_are_production_bound,
     assert_the_loop_isolates_a_poisoned_row,
@@ -136,24 +137,23 @@ def _owed_row_selection_cases(selection: ScheduledSelection) -> list[Any]:
     if selection.owed_rows is None:
         return []
     name, due_work = selection.name, selection.due_work
+    polling = selection.polling is not None
+    # A polling selection keeps the rows it serves: its control reads work instead of the row leaving.
+    served = assert_a_polled_row_is_served_and_stays_selected if polling else assert_valid_owed_row_leaves_the_selection
     checks: list[tuple[str, Callable[[OwedRows], None], type[AssertionError] | None]] = [
         (
             assert_owed_row_bindings_are_production_bound.__name__,
             partial(assert_owed_row_bindings_are_production_bound, name),
             None,
         ),
-        (
-            assert_valid_owed_row_leaves_the_selection.__name__,
-            partial(assert_valid_owed_row_leaves_the_selection, name, due_work),
-            None,
-        ),
+        (served.__name__, partial(served, name, due_work), None),
         (
             assert_the_tick_dispatches_owed_rows_in_selection_order.__name__,
             partial(assert_the_tick_dispatches_owed_rows_in_selection_order, name, due_work),
             None,
         ),
-        (_LOOP_POISON_CASE, partial(assert_the_loop_isolates_a_poisoned_row, name, due_work), None),
-        (_LOOP_STOP_CASE, partial(assert_a_soft_time_limit_ends_the_loop, name, due_work), None),
+        (_LOOP_POISON_CASE, partial(assert_the_loop_isolates_a_poisoned_row, name, due_work, polling=polling), None),
+        (_LOOP_STOP_CASE, partial(assert_a_soft_time_limit_ends_the_loop, name, due_work, polling=polling), None),
     ]
     checks.extend(
         (

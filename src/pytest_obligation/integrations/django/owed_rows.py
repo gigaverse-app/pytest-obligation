@@ -25,9 +25,12 @@ from pytest_obligation.integrations.django.lifecycle_states import (
 )
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
+    PoisonDropped,
     PoisonedHistory,
+    PoisonStalled,
     assert_a_stop_request_ends_the_tick,
     assert_poison_is_isolated,
+    assert_poison_is_reported,
 )
 from pytest_obligation.profiles.automatic_recovery import (
     DueWorkSweep,
@@ -418,7 +421,8 @@ def assert_valid_owed_row_leaves_the_selection(
     control the "did nothing at all" oracle compares against: a valid row must
     leave the selection, through ``execute`` and the tasks it publishes, with no
     raise or retry anywhere in the chain. A sweep that legitimately re-reads a
-    served row (polling) does not fit the light contract's owed-row proofs.
+    served row declares :class:`~pytest_obligation.contract.Polling`, which
+    runs :func:`assert_a_polled_row_is_served_and_stays_selected` instead.
     """
     _served_to_completion(name, selection, rows)
 
@@ -438,10 +442,81 @@ def _served_to_completion(name: str, selection: Callable[[], Iterable[Any]], row
         f"would measure that failure, not its edge value; fix the binding's fakes or the example"
     )
     assert identity not in _selected(selection, rows.identity_of), (
-        f"{name}: a valid owed row is still selected after the production step and its handoffs ran. Either "
-        f"`execute` is not what serves the row, or the sweep re-reads served rows and does not fit these proofs"
+        f"{name}: a valid owed row is still selected after the production step and its handoffs ran. Most "
+        f"often `execute` is not what serves the row, or the step forgets to settle it: fix that first. Only "
+        f"if the selection re-reads served rows by design (a sweep over long-lived active rows) declare "
+        f"`polling=Polling(<why a served row stays selected>)`, whose control then requires work on every tick"
     )
     return row
+
+
+#: Consecutive ticks a polling selection must serve the same healthy row in.
+POLLED_TICKS = 2
+
+_POLLING_KEEPS_ITS_ROWS = (
+    "{name}: owed_rows.still_owed follows a row handed to another selection, but a polling selection keeps the row "
+    "it served, so its selection is the only owner to read; leave still_owed unbound"
+)
+
+
+def _did_work(served: ServedRow, rows: RowExecution, row: Any, calls_before: int) -> bool:
+    """A write or created row in the chain, or an external effect counted for this row."""
+    return served.worked or (rows.effect_calls_for is not None and rows.effect_calls_for(row) > calls_before)
+
+
+def assert_a_polled_row_is_served_and_stays_selected(
+    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows
+) -> None:
+    """
+    POSITIVE CONTROL for a :class:`~pytest_obligation.contract.Polling` selection, in place of the leave check.
+
+    A polled row is served by staying selected, so "served" is read from work
+    instead: one delivery to ``execute`` and its handoffs, then
+    :data:`POLLED_TICKS` production ticks, must each finish without raising,
+    write something or add an external effect counted by ``effect_calls_for``,
+    and leave the row selected; each tick must also record the row in
+    ``dispatched_ids``. The per-edge "did nothing at all" verdicts lean on
+    the delivery half; the tick half is the polling guarantee itself, that the
+    row is served on every tick and not once. A row that leaves the selection
+    fails here, so a sweep whose served rows leave cannot declare polling and
+    lose the default control.
+    """
+    assert rows.still_owed is None, _POLLING_KEEPS_ITS_ROWS.format(name=name)
+    row = rows.make_owed()
+    identity = rows.identity_of(row)
+    assert identity in _selected(selection, rows.identity_of), (
+        f"{name}: the owed example is not selected, so nothing below would be measured"
+    )
+    delivery = rows.deliver(row) if rows.deliver is not None else identity
+    passes: list[tuple[str, Callable[[Any], Any]]] = [("one delivery to the production step", rows.execute)]
+    passes.extend(
+        (f"production tick {tick} of {POLLED_TICKS}", lambda _delivery: rows.run_tick())
+        for tick in range(1, POLLED_TICKS + 1)
+    )
+    for described, run in passes:
+        recorded = list(rows.dispatched_ids())
+        calls_before = rows.effect_calls_for(row) if rows.effect_calls_for is not None else 0
+        served = serve_row(run, delivery, dispatched_ids=None)
+        assert served.failure is None, (
+            f"{name}: {described} failed on a valid polled row ({served.failure!r}). Every edge case would measure "
+            f"that failure, not its edge value; fix the binding's fakes or the example"
+        )
+        # The declaration's own check first: a row that leaves was settled, so this is no polling selection.
+        assert identity in _selected(selection, rows.identity_of), (
+            f"{name}: a valid row left the selection after {described}, but the selection declares polling. A "
+            f"selection whose served rows leave it is not polling; remove `polling=` so the default control "
+            f"proves the row is served"
+        )
+        if run is not rows.execute:
+            assert identity in new_entries(recorded, list(rows.dispatched_ids())), (
+                f"{name}: {described} did not dispatch a valid polled row the selection still returns. A polling "
+                f"selection serves its rows on every tick, not once (a cursor or an already-served set skips it)"
+            )
+        assert _did_work(served, rows, row, calls_before), (
+            f"{name}: {described} did nothing at all to a valid polled row: no write, no created row and no "
+            f"external effect. A polled row is served by its per-tick effect; bind `effect_calls_for` when that "
+            f"effect is a provider call"
+        )
 
 
 def assert_the_tick_dispatches_owed_rows_in_selection_order(
@@ -475,7 +550,9 @@ def assert_the_tick_dispatches_owed_rows_in_selection_order(
     )
 
 
-def assert_the_loop_isolates_a_poisoned_row(name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows) -> None:
+def assert_the_loop_isolates_a_poisoned_row(
+    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows, *, polling: bool = False
+) -> None:
     """
     INVARIANT 12 on the light contract: one poisoned row first in selection order does not stall the next.
 
@@ -494,14 +571,30 @@ def assert_the_loop_isolates_a_poisoned_row(name: str, selection: Callable[[], I
     answers "is anything owed" instead (email unpark's reaper selection is
     never empty while the healthy campaign's dispatcher is in flight) passes
     every dropped row; that is a binding failure, which no poison gap absorbs.
+
+    A ``polling`` selection serves both rows again on the next tick, so one
+    more tick runs with the poison still armed: the healthy row must be
+    dispatched again (a loop that backs off the whole tick after a failure, or
+    resumes after the last row it served, starves it: ``PoisonStalled``) and
+    the poisoned one still selected (``PoisonDropped``). That tick may hold the
+    poisoned row back without retrying or reporting it, as a backoff would.
     """
-    history = _poisoned_row_history(
-        name, selection, rows, proof="assert_one_poisoned_identity_does_not_stall_the_tick", proves="does not stall"
+    arranged = _arrange_poisoned_rows(
+        name,
+        selection,
+        rows,
+        proof="assert_one_poisoned_identity_does_not_stall_the_tick",
+        proves="does not stall",
+        polling=polling,
     )
-    assert_poison_is_isolated(name=name, run_tick=rows.run_tick, **history)
+    assert_poison_is_isolated(name=name, run_tick=rows.run_tick, **_poisoned_tick(name, selection, rows, arranged))
+    if polling:
+        _assert_the_next_poll_serves_the_healthy_row(name, selection, rows, arranged)
 
 
-def assert_a_soft_time_limit_ends_the_loop(name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows) -> None:
+def assert_a_soft_time_limit_ends_the_loop(
+    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows, *, polling: bool = False
+) -> None:
     """
     INVARIANT 12b on the light contract: Celery's soft time limit in the leading row's step ends the tick there.
 
@@ -512,30 +605,52 @@ def assert_a_soft_time_limit_ends_the_loop(name: str, selection: Callable[[], It
     (:func:`~pytest_obligation.poison.assert_a_stop_request_ends_the_tick`)
     requires the limit to escape the tick, the row behind not to have run, and
     the interrupted row to still be owed. A declared gap names the one failure
-    it expects (``"<proof>[swallowed]"``).
+    it expects (``"<proof>[swallowed]"``). One tick, polling or not: the
+    interrupted row must still be selected after it.
     """
-    history = _poisoned_row_history(
+    arranged = _arrange_poisoned_rows(
         name,
         selection,
         rows,
         proof="assert_a_soft_time_limit_ends_the_tick",
         proves="ends on Celery's soft time limit",
+        polling=polling,
     )
-    assert_a_stop_request_ends_the_tick(name=name, run_tick=rows.run_tick, **history)
+    assert_a_stop_request_ends_the_tick(
+        name=name, run_tick=rows.run_tick, **_poisoned_tick(name, selection, rows, arranged)
+    )
 
 
-def _poisoned_row_history(
-    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows, *, proof: str, proves: str
-) -> PoisonedHistory:
-    """Two owed rows in production order, the leading one poisoned; the poison and stop-request cases share it."""
+class _PoisonedRows(HarnessModel):
+    """Two owed rows in production order, the leading one to poison, and a served row for ``still_owed``."""
+
+    pair: _OwedPair
+    #: A row production served to completion first, for the ``still_owed`` differential; None when unbound.
+    settled: Any
+
+
+def _arrange_poisoned_rows(
+    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows, *, proof: str, proves: str, polling: bool
+) -> _PoisonedRows:
+    """The rows the poison and stop-request cases share, arranged once per case."""
     assert rows.poison is not None, (
         f"{name}: no `poison=` on the owed-row binding, so the suite cannot prove that a loop whose leading row's "
         f"step raises {proves}. Bind the seam the tick calls per identity (integrations.celery.refusing_publication for a "
         f"broker publication), or declare `{proof}` as a gap for a loop known not to"
     )
-    owned_next = rows.still_owed
-    settled = _served_to_completion(name, selection, rows) if owned_next is not None else None
-    pair = _two_owed_in_selection_order(name, selection, rows.make_owed, rows.identity_of)
+    assert not (polling and rows.still_owed is not None), _POLLING_KEEPS_ITS_ROWS.format(name=name)
+    settled = _served_to_completion(name, selection, rows) if rows.still_owed is not None else None
+    return _PoisonedRows(
+        pair=_two_owed_in_selection_order(name, selection, rows.make_owed, rows.identity_of), settled=settled
+    )
+
+
+def _poisoned_tick(
+    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows, arranged: _PoisonedRows
+) -> PoisonedHistory:
+    """One tick's poison seam and observations, armed for the leading row and read from now on."""
+    assert rows.poison is not None
+    pair, owned_next = arranged.pair, rows.still_owed
     poisoned_row = pair.rows[pair.head]
     before = list(rows.dispatched_ids())
     return PoisonedHistory(
@@ -544,11 +659,39 @@ def _poisoned_row_history(
         progressed=lambda: pair.behind in new_entries(before, list(rows.dispatched_ids())),
         # The light contract declares no lifecycle: still selected, or owed by the selection the step handed it to.
         still_owed=(
-            (lambda: _owed_next(name, owned_next, poisoned_row, settled))
+            (lambda: _owed_next(name, owned_next, poisoned_row, arranged.settled))
             if owned_next is not None
             else (lambda: pair.head in _selected(selection, rows.identity_of))
         ),
     )
+
+
+def _assert_the_next_poll_serves_the_healthy_row(
+    name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows, arranged: _PoisonedRows
+) -> None:
+    """The tick after a poisoned one, on a polling selection: the healthy row is served again, nothing dropped."""
+    history = _poisoned_tick(name, selection, rows, arranged)
+    escaped: Exception | None = None
+    with history["poison"] as fired:
+        try:
+            rows.run_tick()
+        except Exception as error:  # noqa: BLE001 - a reported failure is allowed; starving the healthy row is not
+            escaped = error
+    if not history["progressed"]():
+        raise PoisonStalled(
+            f"{name}: on the tick after a poisoned one, a polling selection did not serve the healthy row behind the "
+            f"poisoned one again (the tick raised {escaped!r}). The selection still returns it, so a loop that backs "
+            f"off the whole tick after a failure, or resumes after the last row it served, starves every polled row "
+            f"behind one poisoned identity"
+        ) from escaped
+    if not history["still_owed"]():
+        raise PoisonDropped(
+            f"{name}: the poisoned row of a polling selection is no longer selected after a second tick. Isolation "
+            f"must leave a failing identity selectable (or held with backoff), not drop, settle or retire it"
+        ) from escaped
+    # A per-identity backoff may defer the poison. If it fires again, silence is never isolation.
+    if fired():
+        assert_poison_is_reported(name, escaped)
 
 
 def _owed_next(name: str, still_owed: Callable[[Any], bool], row: Any, settled: Any) -> bool:

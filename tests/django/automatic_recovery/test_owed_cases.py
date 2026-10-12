@@ -11,6 +11,7 @@ from pytest_obligation import (
     NotApplicable,
     ObligationContract,
     ObligationContractDesignError,
+    Polling,
     Profile,
     ScheduledSelection,
     contract_cases,
@@ -19,6 +20,7 @@ from pytest_obligation import (
 from pytest_obligation.integrations.django.edge_values import model_edges
 from pytest_obligation.integrations.django.lifecycle_states import Lifecycle
 from pytest_obligation.integrations.django.owed_references import (
+    PollingReferenceLoop,
     PrimitiveOwner,
     ReferenceLoop,
     owed_owners,
@@ -27,7 +29,7 @@ from pytest_obligation.integrations.django.owed_references import (
     isolated_primitive as isolated_primitive,
 )
 from pytest_obligation.integrations.django.owed_rows import OWED_ROW_PROOFS, EdgeFamily, OwedRowNotHandled, OwedRows
-from pytest_obligation.poison import PoisonDropped, StopRequestDropped
+from pytest_obligation.poison import PoisonDropped, PoisonStalled, StopRequestDropped
 from pytest_obligation.profiles.automatic_recovery import DueWorkSweep
 
 
@@ -47,14 +49,14 @@ def rows() -> OwedRows:
 
 
 def selection(**changes: Any) -> ScheduledSelection:
-    return ScheduledSelection(
-        name="reference rows",
-        due_work=owed_owners,
-        owed_rows=rows,
-        owed_edges={"owner": EdgeFamily(model=PrimitiveOwner)},
-        assert_scheduled=lambda: None,
-        **changes,
-    )
+    declared: dict[str, Any] = {
+        "name": "reference rows",
+        "due_work": owed_owners,
+        "owed_rows": rows,
+        "owed_edges": {"owner": EdgeFamily(model=PrimitiveOwner)},
+        "assert_scheduled": lambda: None,
+    }
+    return ScheduledSelection(**{**declared, **changes})
 
 
 def generated_ids() -> list[str]:
@@ -248,3 +250,84 @@ def test_generated_selection_completeness_is_opt_in_and_gap_is_narrow() -> None:
 def test_selection_completeness_rejects_broad_or_malformed_gaps(gap: str) -> None:
     with pytest.raises(ObligationContractDesignError):
         selection(state_fields=("value",), adoption=Adoption.LEGACY, gaps={gap: "legacy branch requires repair"})
+
+
+def polled_rows() -> OwedRows:
+    # ARRANGE: each case owns one production-shaped polling loop.
+    loop = PollingReferenceLoop()
+    # REAL PRODUCTION: the reference polling step and tick are library-owned controls.
+    # EXTERNAL SEAM: the same per-row fault seam tests failure and stop requests.
+    # OBSERVE: only successful execution adds to this dispatch recorder.
+    return OwedRows(
+        make_owed=lambda: PrimitiveOwner.objects.create(value="valid"),
+        execute=loop.execute,
+        run_tick=loop.tick,
+        dispatched_ids=lambda: loop.dispatched,
+        poison=lambda row: loop.poison.poisoned(row.pk),
+    )
+
+
+POLLING = Polling("owners stay active for hours; every tick re-reads each one")
+_SELECTION_PROOF_IDS = {
+    "assert_the_adapter_does_not_author_the_selection",
+    "assert_selection_is_index_served",
+    "assert_selection_does_not_read_the_replica",
+    "assert_the_selection_is_actually_scheduled",
+}
+
+
+def _owed_row_case(declaration: ScheduledSelection, case_id: str) -> Any:
+    return next(param.values[0] for param in scheduled_selection_cases(declaration) if param.id == case_id)
+
+
+def polled_ids() -> list[str]:
+    return [
+        param.id
+        for param in scheduled_selection_cases(selection(owed_rows=polled_rows, polling=POLLING))
+        if param.id not in _SELECTION_PROOF_IDS
+    ]
+
+
+@pytest.mark.usefixtures("isolated_primitive")
+@pytest.mark.parametrize("case_id", polled_ids())
+def test_generated_polling_contract(case_id: str) -> None:
+    _owed_row_case(selection(owed_rows=polled_rows, polling=POLLING), case_id).run()
+
+
+def test_polling_swaps_only_the_served_row_control() -> None:
+    default, polled = set(generated_ids()), set(polled_ids())
+    assert default - polled == {"assert_valid_owed_row_leaves_the_selection"}
+    assert polled - default == {"assert_a_polled_row_is_served_and_stays_selected"}
+
+
+@pytest.mark.usefixtures("isolated_primitive")
+def test_a_polling_loop_without_the_declaration_fails_the_leave_control() -> None:
+    case = _owed_row_case(selection(owed_rows=polled_rows), "assert_valid_owed_row_leaves_the_selection")
+    with pytest.raises(AssertionError, match="declare `polling=Polling"):
+        case.run()
+
+
+@pytest.mark.usefixtures("isolated_primitive")
+def test_a_settling_loop_cannot_declare_polling() -> None:
+    case = _owed_row_case(selection(polling=POLLING), "assert_a_polled_row_is_served_and_stays_selected")
+    with pytest.raises(AssertionError, match="remove `polling=`"):
+        case.run()
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"owed_rows": None, "owed_edges": {}}, "declare owed_rows with it"),
+        ({"polling": Polling("  ")}, "polling.because is empty"),
+    ],
+)
+def test_polling_declaration_is_validated(changes: dict[str, Any], message: str) -> None:
+    with pytest.raises(ObligationContractDesignError, match=message):
+        selection(**{"polling": POLLING, **changes})
+
+
+def test_polling_poison_gaps_resolve_in_the_same_failure_family() -> None:
+    proof = "assert_one_poisoned_identity_does_not_stall_the_tick"
+    declared = selection(polling=POLLING, adoption=Adoption.LEGACY, gaps={f"{proof}[stalled]": "legacy backoff"})
+    param = next(p for p in scheduled_selection_cases(declared) if p.id == proof)
+    assert next(m for m in param.marks if m.name == "xfail").kwargs["raises"] is PoisonStalled
