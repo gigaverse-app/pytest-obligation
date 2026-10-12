@@ -30,3 +30,24 @@ the application's real Python call and observed effects. It does not ship a
 Shopify-specific adapter or claim every provider behavior is covered. See
 [the adopter capability map](adopter-capabilities.md) for what existing suites
 actually exercise.
+
+## Bounded ownership racers
+
+`FencedOwnership.race_timeout` and the race proof's explicit `timeout` must be
+finite and at least 0.01 seconds. A smaller value can round a PostgreSQL lock
+bound to zero, which means waiting indefinitely.
+
+A host's `connection_scope` runs inside each racer thread. It may yield a
+`ConnectionCleanup` callback that is safe to invoke from the waiting thread.
+The race invokes that callback only for a racer still alive at its deadline,
+before raising the failed-proof assertion. Returning `None` retains the default
+behavior for hosts without external resources.
+
+The Django integration uses `integrations.django.worker_connections` to set
+lock, statement and idle-transaction bounds on each worker's own connection
+settings. It restores settings and closes connections on scope exit. Its
+cleanup terminates only the stalled worker's PostgreSQL session, so a thread
+stuck in Python cannot leave row locks blocking test teardown. The shared helper
+also backs Due's work-table histories. Both psycopg drivers are exercised in CI.
+A connection setup failure is reported by the proof, rather than escaping as an
+unobserved thread exception.

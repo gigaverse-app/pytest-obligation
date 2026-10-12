@@ -155,6 +155,9 @@ The reusable cutover changes in this package are:
   names still fail the production-task check.
 - Owed-row and selection-completeness proofs share
   [one delivery contract and observer](selection-completeness.md#one-delivery-binding-for-both-checks).
+- Ownership races retain BE's minimum timeout and stalled-transaction cleanup.
+  The Django host and Due histories share bounded worker connections, including
+  both psycopg drivers. See [the host cleanup contract](integrations.md#bounded-ownership-racers).
 - Source archives and embedded subtrees build with an explicit development
   version fallback when Git tags are unavailable.
 

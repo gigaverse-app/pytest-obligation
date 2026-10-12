@@ -70,6 +70,7 @@ cheap way to summarise its row. A shared work-table library owns the row shape
 by construction, so this is close to free for one — which is the point.
 """
 
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -82,7 +83,7 @@ from pytest_obligation.binding import (
     assert_test_binding_delegates_to_production,
     assert_test_binding_forwards,
 )
-from pytest_obligation.host import current_host, racing
+from pytest_obligation.host import ConnectionCleanup, current_host, racing
 from pytest_obligation.models import HarnessModel, ObligationContractDesignError
 
 
@@ -172,8 +173,16 @@ class FencedOwnership(HarnessModel):
     race_timeout: float = 10.0
 
     def model_post_init(self, _context: Any) -> None:
-        if self.race_timeout <= 0:
-            raise ObligationContractDesignError("FencedOwnership race_timeout must be a positive number of seconds")
+        _validate_race_timeout("FencedOwnership race_timeout", self.race_timeout)
+
+
+MIN_RACE_TIMEOUT = 0.01
+
+
+def _validate_race_timeout(name: str, seconds: float) -> None:
+    # PostgreSQL treats a timeout rounded to zero milliseconds as unbounded.
+    if not math.isfinite(seconds) or seconds < MIN_RACE_TIMEOUT:
+        raise ObligationContractDesignError(f"{name} must be finite and at least {MIN_RACE_TIMEOUT}s (got {seconds!r})")
 
 
 def assert_ownership_transitions_are_production_bound(ownership: FencedOwnership) -> None:
@@ -592,7 +601,9 @@ def assert_claim_is_exclusive_across_connections(ownership: FencedOwnership, *, 
     nothing releases, is not a lost race: counting only the racer that came
     back would find one winner and pass, where two workers in production would
     deadlock or stall. Racers are daemon threads, so a hung one cannot keep the
-    test process alive; the host's ``connection_scope()`` is what bounds and
+    test process alive. A cleanup yielded by the host's ``connection_scope()``
+    is invoked from the waiting thread before failure to release stalled resources.
+    The host's ``connection_scope()`` is what bounds and
     closes its connection.
 
     ``timeout`` (by default :attr:`FencedOwnership.race_timeout`, which a
@@ -610,6 +621,7 @@ def assert_claim_is_exclusive_across_connections(ownership: FencedOwnership, *, 
     """
     if timeout is None:
         timeout = ownership.race_timeout
+    _validate_race_timeout("race timeout", timeout)
     ownership.make_claimable()
 
     barrier = threading.Barrier(2)
@@ -617,17 +629,21 @@ def assert_claim_is_exclusive_across_connections(ownership: FencedOwnership, *, 
     errors: list[BaseException] = []
     lock = threading.Lock()
     connection_scope = current_host().connection_scope
+    cleanups: dict[threading.Thread, ConnectionCleanup] = {}
 
     def racer() -> None:
-        with racing(timeout), connection_scope():
-            try:
+        try:
+            with racing(timeout), connection_scope() as cleanup:
+                if cleanup is not None:
+                    with lock:
+                        cleanups[threading.current_thread()] = cleanup
                 barrier.wait(timeout=max(0.0, deadline - time.monotonic()))
                 claimed = ownership.claim()
                 with lock:
                     claims.append(claimed)
-            except BaseException as error:  # noqa: BLE001 - reported, never swallowed
-                with lock:
-                    errors.append(error)
+        except BaseException as error:  # noqa: BLE001 - reported, never swallowed
+            with lock:
+                errors.append(error)
 
     threads = [threading.Thread(target=racer, name=f"claim-racer-{i}", daemon=True) for i in range(2)]
     deadline = time.monotonic() + timeout
@@ -636,7 +652,12 @@ def assert_claim_is_exclusive_across_connections(ownership: FencedOwnership, *, 
     for thread in threads:
         thread.join(timeout=max(0.0, deadline - time.monotonic()))
 
-    hung = [thread.name for thread in threads if thread.is_alive()]
+    stalled = [thread for thread in threads if thread.is_alive()]
+    with lock:
+        cleanup_stalled = [cleanups[thread] for thread in stalled if thread in cleanups]
+    for cleanup in cleanup_stalled:
+        cleanup()
+    hung = [thread.name for thread in stalled]
     assert not hung, (
         f"{ownership.name}: {', '.join(hung)} had not returned {timeout:g}s after the race began "
         f"({len(claims)} of 2 claims returned, {len(errors)} raised). A claim that does not return is "

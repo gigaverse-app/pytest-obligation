@@ -25,3 +25,15 @@ into the public harness while preserving the framework-free core.
 - BE with both public candidates: **2,113 passed, 70 existing expected failures,
   six existing collection exclusions**. This includes adopters, concrete counter
   callers, source/debt/Beat policy, populated migration and packaging boundaries.
+
+The final body-level audit recovered the original race deadline validation and
+stalled-session cleanup too. Before the fix, eight timeout controls and the
+real PostgreSQL stalled-transaction control failed. With the fix, **948 core
+tests pass** and the Django race controls release locks even when a transaction
+starts late in the race. Due reuses this implementation through its existing
+worker-connection exports.
+
+Both driver paths now pass: **366 Django tests with psycopg2**, and the final
+**nine PostgreSQL claim-race controls with psycopg 3** in addition to the full
+365-test run before the late-transaction parameter was added. The paired Due
+suite remains **1,357 passed, four expected failures**.

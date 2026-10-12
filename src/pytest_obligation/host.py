@@ -221,6 +221,9 @@ class HandoffsNeverStop(Exception):
     """A handoff chain exceeded its bounded delivery budget."""
 
 
+ConnectionCleanup = Callable[[], None]
+
+
 class Host(HarnessModel):
     """What the application's framework supplies. Every field is optional."""
 
@@ -264,7 +267,9 @@ class Host(HarnessModel):
     #: The connection lifecycle of a thread a proof starts, for example to race
     #: two claims on two real connections. Inside a race, :func:`race_timeout`
     #: gives the race's deadline, from which a scope bounds the racer's waits.
-    connection_scope: Callable[[], AbstractContextManager[None]] = nullcontext
+    #: A scope may yield a cleanup callback safe to invoke from the waiting
+    #: thread to end resources held by a racer that outlives its deadline.
+    connection_scope: Callable[[], AbstractContextManager[ConnectionCleanup | None]] = nullcontext
 
     #: Database facts about a selection: index use, replica reads, scan ratio.
     #: Protocol implementations, so Pydantic does not check them.
