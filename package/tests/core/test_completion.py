@@ -88,3 +88,21 @@ def test_test_authored_recovery_and_delivery_are_rejected():
 
 def test_fractional_clock_step_reaches_exact_declared_bound():
     assert_completes_within(timer(duration=3).model_copy(update={"interval_seconds": 0.1, "within_seconds": 3}))
+
+
+def test_decorated_partial_cannot_hide_ignored_runtime_identity():
+    from functools import partial, wraps
+
+    from pytest_obligation.binding import assert_test_binding_consumes_its_first_parameter
+
+    def ignores(label, identity):
+        return label
+
+    @wraps(partial(ignores, "fixed label"))
+    def wrapper(identity):
+        return ignores("fixed label", identity)
+
+    with pytest.raises(AssertionError, match="identity"):
+        assert_test_binding_consumes_its_first_parameter(
+            adopter="partial control", field="execute", binding=wrapper, parameter_shape="the runtime identity"
+        )

@@ -410,15 +410,32 @@ def _filled_positionals(binding: Callable[..., Any]) -> int:
     same way as :func:`_function_of`, so the parameter checked is the one the
     caller's value arrives in.
     """
-    filled = 0
-    while isinstance(binding, functools.partial):
-        filled += len(binding.args)
-        binding = binding.func
-    body = _body(binding)
+    unwrapped, filled = _unwrap_binding(binding)
+    body = _body(unwrapped)
     if isinstance(body, MethodType):
         return filled + 1
     function = inspect.unwrap(body) if callable(body) else body
     return filled if inspect.isfunction(function) else filled + 1
+
+
+def _unwrap_binding(binding: Callable[..., Any]) -> tuple[Callable[..., Any], int]:
+    """One owner for interleaved decorators and partial positional arguments."""
+    body = binding
+    filled = 0
+    seen: set[int] = set()
+    while not isinstance(body, MethodType):
+        if id(body) in seen:
+            raise ValueError("cycle in wrapped binding")
+        seen.add(id(body))
+        if isinstance(body, functools.partial):
+            filled += len(body.args)
+            unwrapped = body.func
+        else:
+            unwrapped = inspect.unwrap(body)
+        if unwrapped is body:
+            break
+        body = unwrapped
+    return body, filled
 
 
 def _body(binding: Callable[..., Any]) -> object:
@@ -431,16 +448,7 @@ def _body(binding: Callable[..., Any]) -> object:
     whose ``__call__`` runs its ``run``. Celery is recognised only when something
     already imported it, so the core stays framework-free.
     """
-    body: object = binding
-    seen: set[int] = set()
-    while callable(body) and not isinstance(body, MethodType):
-        if id(body) in seen:
-            raise ValueError("cycle in wrapped binding")
-        seen.add(id(body))
-        unwrapped = body.func if isinstance(body, functools.partial) else inspect.unwrap(body)
-        if unwrapped is body:
-            break
-        body = unwrapped
+    body, _ = _unwrap_binding(binding)
     celery_task = sys.modules.get("celery.app.task")
     if celery_task is not None and not inspect.isfunction(body) and not isinstance(body, MethodType):
         task_class: type[Any] = celery_task.Task
