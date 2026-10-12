@@ -761,6 +761,51 @@ def test_a_new_feature_scheduled_selection_refuses_gaps() -> None:
         )
 
 
+def test_a_scheduled_selection_generates_one_case_per_extra(marking_host: Host) -> None:
+    """The light contract takes the full contract's extras: transactional when asked, a strict xfail per gap."""
+    selection = ScheduledSelection(
+        name="self-test selection",
+        due_work=annotated_empty_selection,  # type: ignore[arg-type] - never evaluated
+        assert_scheduled=lambda: None,
+        adoption=Adoption.LEGACY,
+        extras=(
+            ExtraProof(
+                name="applied",
+                run=annotated_extra,
+                transactional=True,
+                no_production_callable_because=SELF_TEST_NO_PRODUCTION,
+            ),
+            ExtraProof(
+                name="gapped", run=annotated_extra, gap=WHY, no_production_callable_because=SELF_TEST_NO_PRODUCTION
+            ),
+        ),
+    )
+    params = _params_by_id(scheduled_selection_cases(selection))
+    assert _database_mark(params["extra-applied"]).kwargs == {"transaction": True}
+    assert "xfail" not in _mark_names(params["extra-applied"])
+    marks = {mark.name: mark for mark in params["extra-gapped"].marks}
+    assert marks["xfail"].kwargs == {"strict": True, "reason": WHY}
+
+
+def test_a_scheduled_selection_validates_its_extras_like_the_full_contract() -> None:
+    """The same checks as ``ObligationContract.extras``; a gapped extra is a gap the new-feature policy refuses."""
+    with pytest.raises(ObligationContractDesignError) as caught:
+        ScheduledSelection(
+            name="self-test selection",
+            due_work=annotated_empty_selection,  # type: ignore[arg-type] - never evaluated
+            assert_scheduled=lambda: None,
+            extras=(
+                ExtraProof(
+                    name="gapped", run=annotated_extra, gap=WHY, no_production_callable_because=SELF_TEST_NO_PRODUCTION
+                ),
+                ExtraProof(name="bespoke", run=lambda: None),
+            ),
+        )
+    message = str(caught.value)
+    assert "forbids gap declarations, but 1 gap(s) are declared" in message
+    assert "extra proof 'bespoke'" in message and "delegates to no harness-defined assert_" in message
+
+
 # Extras must reach production, or say why they cannot.
 
 
