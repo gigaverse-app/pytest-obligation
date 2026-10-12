@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.10.0...v0.11.0) (2026-10-12)
+
+
+### Features
+
+* deliver scheduled selection extras on main ([#65](https://github.com/gigaverse-app/pytest-obligation/issues/65)) ([82a3310](https://github.com/gigaverse-app/pytest-obligation/commit/82a33107ab9552519c320a202fc32f10159991b7))
+* profile J proves each named provider outcome gets its declared classification ([#63](https://github.com/gigaverse-app/pytest-obligation/issues/63)) ([6f89fb8](https://github.com/gigaverse-app/pytest-obligation/commit/6f89fb8ecc9f75e680f66e886af6df0d5574ab91))
+* profile J proves unbounded retry keeps the obligation owed ([#61](https://github.com/gigaverse-app/pytest-obligation/issues/61)) ([4638b3a](https://github.com/gigaverse-app/pytest-obligation/commit/4638b3a11d7c81dfef030a2148bd78d366c93a21))
+* require outcomes in generated replay contracts ([#59](https://github.com/gigaverse-app/pytest-obligation/issues/59)) ([5d9de46](https://github.com/gigaverse-app/pytest-obligation/commit/5d9de46494e4101687bade37cfee17c3f50355c8))
+
+
+### Bug fixes
+
+* authenticate release PRs from a main-only environment ([#66](https://github.com/gigaverse-app/pytest-obligation/issues/66)) ([696719d](https://github.com/gigaverse-app/pytest-obligation/commit/696719d840589fb11f94e8a38cc69ce502f595ef))
+* wait for normal CI before publishing manual releases ([#62](https://github.com/gigaverse-app/pytest-obligation/issues/62)) ([0bd60e5](https://github.com/gigaverse-app/pytest-obligation/commit/0bd60e537b2d6ba69f794883a356969947bc8b98))
+
 ## [0.10.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.9.0...v0.10.0) (2026-10-12)
 
 

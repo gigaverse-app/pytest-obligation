@@ -1,7 +1,7 @@
 # Can Gigaverse replace its local harness with pytest-obligation?
 
 > Historical scope: the remaining reusable harness checks and Due integration are
-> now covered by the [complete port](../backend-harness-port.md). The ownership decisions below
+> now covered by the [complete port](../../package/docs/backend-harness-port.md). The ownership decisions below
 > describe the earlier extraction; application runtime/data cutover remains separate.
 
 Not completely yet. The generic recovery port and stronger adopters are useful,
@@ -36,7 +36,7 @@ of semantic equivalence.
 | Backend schedule and source policy | Keep the Beat registry/exemption policy, alert-threshold rules, provider guard and transitive pre-commit-publication scan in BE. The public lexical coverage scan does not replace them. |
 | Simulated broker and application wiring | Retain BE glue for primitive routing/worker-option assertions, retry-signature and jitter behavior, universe context, provider fakes and composition-root installation until equivalent bindings are demonstrated. |
 
-The detailed ownership decisions in [recovery edge cases](../recovery-edge-cases.md)
+The detailed ownership decisions in [recovery edge cases](../../package/docs/recovery-edge-cases.md)
 remain valid. They explain where remaining work belongs; they do not make the
 full backend migration complete. The missing work-table harness should be bound
 to `due` through an integration with a declared version contract, while the

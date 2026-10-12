@@ -5,9 +5,9 @@
 [![CI](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pytest-obligation)](https://pypi.org/project/pytest-obligation/)
 [![Python](https://img.shields.io/pypi/pyversions/pytest-obligation)](https://pypi.org/project/pytest-obligation/)
-[![pytest plugin](https://img.shields.io/badge/pytest-plugin-0A9EDC?logo=pytest&logoColor=white)](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/pytest-plugin.md)
+[![pytest plugin](https://img.shields.io/badge/pytest-plugin-0A9EDC?logo=pytest&logoColor=white)](https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/pytest-plugin.md)
 [![Typed](https://img.shields.io/badge/typing-py.typed-blue)](https://typing.python.org/en/latest/spec/distributing.html)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](package/LICENSE)
 
 ## Don’t lose orders, money, receipts, or work when the happy path breaks
 
@@ -28,12 +28,12 @@ for your application's particular risks. The core accepts plain Python
 callables: it assumes no framework, database, queue, or business domain.
 
 It integrates as a pytest plugin in your existing test suite and CI. Read the
-[pytest plugin guide](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/pytest-plugin.md)
+[pytest plugin guide](https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/pytest-plugin.md)
 for automatic discovery, test selection, reports, and configuration.
 
 Coming from distributed systems and familiar with Jepsen? pytest-obligation
 brings a similar approach to your application's workflows. Read
-[Jepsen-style fault testing for application work](docs/jepsen-analogy.md).
+[Jepsen-style fault testing for application work](package/docs/jepsen-analogy.md).
 
 ## What it finds
 
@@ -65,8 +65,8 @@ pytest_obligation.HistoriesDiverged: orders: handoff 'place order': normal opera
 The second send is visible instead of being hidden behind a green happy-path
 test. Known, independently reproduced gaps remain **strict xfails**; a change
 that fixes one turns it red so the finding must be re-evaluated. See
-[how crash histories work](docs/how-it-works.md#crash-histories) and
-[what a green result means](docs/what-a-green-result-means.md).
+[how crash histories work](package/docs/how-it-works.md#crash-histories) and
+[what a green result means](package/docs/what-a-green-result-means.md).
 
 ## Stronger tests without hand-writing more tests
 
@@ -79,7 +79,7 @@ checks for a profile you already bound, upgrading can generate more cases from
 the same contract. New profiles or bindings still need your assessment. The
 separate handoff scan spots newly introduced queue/task handoffs that need a
 contract; it does not silently claim they are proven. [See the guarantees and
-limits](docs/how-it-works.md#the-a-j-guarantees).
+limits](package/docs/how-it-works.md#the-a-j-guarantees).
 
 ## What the run shows
 
@@ -96,7 +96,7 @@ test_wagtail_tasks.py::TestDjangoTasksDb: 7 passed, 5 xfailed
 
 For CI, `--due-work-profile-report=profiles.json` records what was declared,
 collected, selected, and actually executed. An xfail or unassessed profile is
-not a verified guarantee. [Read the reporting guide](ADOPTING.md#required-adoption-shape).
+not a verified guarantee. [Read the reporting guide](package/docs/adopting.md#required-adoption-shape).
 
 ## Get started
 
@@ -108,9 +108,9 @@ environment: they provide the same Python modules. New code uses
 imports and `DueWorkContract` are supported by an isolated compatibility shim.
 The `--due-work-*` options, `due-work-harness` command, and
 `[tool.due-work-harness]` configuration remain supported.
-[See the compatibility and migration guide](docs/package-migration.md).
-Recovery loops also have [poison isolation, cooperative-stop and database-legal row checks](docs/recovery-edge-cases.md).
-The [complete backend harness port](docs/backend-harness-port.md) includes Due work-table conformance and reusable source-policy checks. The [cutover follow-through audit](docs/backend-harness-port.md#cutover-follow-through-october-2026) records the remaining improvements and their public test owners.
+[See the compatibility and migration guide](package/docs/package-migration.md).
+Recovery loops also have [poison isolation, cooperative-stop and database-legal row checks](package/docs/recovery-edge-cases.md).
+The [complete backend harness port](package/docs/backend-harness-port.md) includes Due work-table conformance and reusable source-policy checks. The [cutover follow-through audit](package/docs/backend-harness-port.md#cutover-follow-through-october-2026) records the remaining improvements and their public test owners.
 
 Install the Python test library **in the application you want to test** (Python
 3.11+). Choose your package manager; add an optional extra only for an
@@ -124,18 +124,18 @@ poetry add --group dev pytest-obligation
 
 Optional integrations:
 
-[![Django integration](https://img.shields.io/badge/integration-Django-092E20?logo=django&logoColor=white)](docs/integrations.md)
-[![PostgreSQL integration](https://img.shields.io/badge/integration-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](docs/integrations.md)
-[![Celery integration](https://img.shields.io/badge/integration-Celery-37814A?logo=celery&logoColor=white)](docs/integrations.md)
-[![MongoDB integration](https://img.shields.io/badge/integration-MongoDB-47A248?logo=mongodb&logoColor=white)](docs/mongodb.md)
-[![Redis and RQ integration](https://img.shields.io/badge/integration-Redis%20%2F%20RQ-DC382D?logo=redis&logoColor=white)](docs/integrations.md)
-[![Prefect integration](https://img.shields.io/badge/integration-Prefect-024DFD?logo=prefect&logoColor=white)](docs/prefect.md)
-[![Kafka aiokafka integration](https://img.shields.io/badge/integration-Kafka%20%28aiokafka%29-231F20?logo=apachekafka&logoColor=white)](docs/aiokafka.md)
-[![Hypothesis optional exploration](https://img.shields.io/badge/optional%20exploration-Hypothesis-6B4C9A)](docs/interleavings.md#optional-search)
+[![Django integration](https://img.shields.io/badge/integration-Django-092E20?logo=django&logoColor=white)](package/docs/integrations.md)
+[![PostgreSQL integration](https://img.shields.io/badge/integration-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](package/docs/integrations.md)
+[![Celery integration](https://img.shields.io/badge/integration-Celery-37814A?logo=celery&logoColor=white)](package/docs/integrations.md)
+[![MongoDB integration](https://img.shields.io/badge/integration-MongoDB-47A248?logo=mongodb&logoColor=white)](package/docs/mongodb.md)
+[![Redis and RQ integration](https://img.shields.io/badge/integration-Redis%20%2F%20RQ-DC382D?logo=redis&logoColor=white)](package/docs/integrations.md)
+[![Prefect integration](https://img.shields.io/badge/integration-Prefect-024DFD?logo=prefect&logoColor=white)](package/docs/prefect.md)
+[![Kafka aiokafka integration](https://img.shields.io/badge/integration-Kafka%20%28aiokafka%29-231F20?logo=apachekafka&logoColor=white)](package/docs/aiokafka.md)
+[![Hypothesis optional exploration](https://img.shields.io/badge/optional%20exploration-Hypothesis-6B4C9A)](package/docs/interleavings.md#optional-search)
 
 For example, use `"pytest-obligation[django]"` with any of the commands above
 for the Django/PostgreSQL integration. Other extras include `[celery]`, `[rq]`,
-`[mongodb]`, `[prefect]`, and `[aiokafka]`; [see integration scope](docs/integrations.md).
+`[mongodb]`, `[prefect]`, and `[aiokafka]`; [see integration scope](package/docs/integrations.md).
 The current source has A–J profiles. Check the adoption guide matching your
 installed version; older PyPI releases use an earlier profile catalog.
 
@@ -169,21 +169,23 @@ Open your application in Claude Code or Codex and ask:
 
 | You want to… | Read |
 | --- | --- |
-| Find the right workflow or public interface | [Harness guide and module map](docs/harness-guide.md) |
-| Bind your application and run generated proofs | [Adoption walkthrough](ADOPTING.md), [runnable SQLite adopter](examples/adopter/) |
-| Inspect transaction and schedule policy | [Handoff coverage](docs/coverage.md), [source-policy APIs and examples](docs/source-policies.md) |
-| Understand recovery and outcome evidence | [Recovery edge cases](docs/recovery-edge-cases.md), [what a green result means](docs/what-a-green-result-means.md) |
-| Replace the backend harness | [Completed port and ownership map](docs/backend-harness-port.md) |
-| Contribute a proof or integration | [Architecture](ARCHITECTURE.md), [contributor workflow](CONTRIBUTING.md) |
+| Find the right workflow or public interface | [Harness guide and module map](package/docs/harness-guide.md) |
+| Bind your application and run generated proofs | [Adoption walkthrough](package/docs/adopting.md), [runnable SQLite adopter](examples/adopter) |
+| Inspect transaction and schedule policy | [Handoff coverage](package/docs/coverage.md), [source-policy APIs and examples](package/docs/source-policies.md) |
+| Understand recovery and outcome evidence | [Recovery edge cases](package/docs/recovery-edge-cases.md), [what a green result means](package/docs/what-a-green-result-means.md) |
+| Replace the backend harness | [Completed port and ownership map](package/docs/backend-harness-port.md) |
+| Contribute a proof or integration | [Architecture](package/docs/architecture.md), [contributor workflow](CONTRIBUTING.md) |
 
-Start with the [adoption guide](ADOPTING.md) if you want to bind a contract
+Start with the [adoption guide](package/docs/adopting.md) if you want to bind a contract
 yourself. For framework boundaries and the handoff scan, see
-[integrations](docs/integrations.md) and [coverage](docs/coverage.md). To probe
+[integrations](package/docs/integrations.md) and [coverage](package/docs/coverage.md). To probe
 another project, follow the [upstream playbook](docs/upstream-playbook.md).
 
-Alpha; the public API may change before 1.0. [Architecture](ARCHITECTURE.md) ·
-[Contributing](CONTRIBUTING.md) · [Apache-2.0 license](LICENSE)
+Alpha; the public API may change before 1.0. [Architecture](package/docs/architecture.md) ·
+[Contributing](CONTRIBUTING.md) · [Apache-2.0 license](package/LICENSE)
 
-Generated expected failures can be enforced with an application-owned [debt baseline](docs/debt-baseline.md).
+Generated expected failures can be enforced with an application-owned [debt baseline](package/docs/debt-baseline.md).
 
-Recovery contracts can also [prove selection completeness](docs/selection-completeness.md), including related lifecycle states and strict per-combination debt.
+Recovery contracts can also [prove selection completeness](package/docs/selection-completeness.md), including related lifecycle states and strict per-combination debt.
+
+See [package ownership and subtree development](package/docs/development.md) for library edits made inside an adopter checkout.

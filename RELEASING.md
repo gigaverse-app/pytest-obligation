@@ -1,75 +1,81 @@
-# Releasing
+# Releasing pytest-obligation
 
-Releases follow [Semantic Versioning](https://semver.org/) and are cut from
-[Conventional Commit](https://www.conventionalcommits.org/) messages by
-[release-please](https://github.com/googleapis/release-please). Nobody edits a
-version number by hand.
+## The release PR is the manual publishing decision
 
-## How a release happens
+Normal feature and fix PRs run the complete `CI` workflow, including the OSS
+application/demo suites. After a successful CI run on the current `main` head,
+Release Please opens or updates one release PR with the accumulated version and
+changelog. Leave that PR open while alpha development continues; ordinary merges
+**do not publish a version**.
 
-1. **Pull requests are squash-merged with their title as the commit message.**
-   The `PR title` check requires the title to be a Conventional Commit.
-2. **release-please keeps a release PR open** on `main` (`chore(main): release X.Y.Z`),
-   holding the next version and the `CHANGELOG.md` entries since the last
-   release. Every merge to `main` updates it.
-3. **Merging the release PR is the release.** release-please tags the merge
-   commit `vX.Y.Z` and creates the GitHub release; the `Release` workflow then
-   builds that tag, checks that the built version is the tag, and publishes the
-   wheel and sdist to PyPI through Trusted Publishing. The files are also
-   attached to the GitHub release.
+The release PR runs the same normal CI. Merging it authorizes publication:
 
-Each release also moves the floating major tag (`v0` for 0.x) to it, so projects using
-`gigaverse-app/pytest-obligation/check@v0` follow the latest compatible release.
+1. Normal CI tests the merged commit on `main`.
+2. `Release` runs after CI succeeds, creates `vX.Y.Z` and the GitHub release,
+   then builds that exact tag. An outdated CI completion cannot release a newer head.
+3. The build verifies that the resolved tag has a successful **push CI run on
+   main for that exact SHA**, checks distribution metadata, and smoke-tests the wheel.
+4. The isolated `pypi` job publishes the wheel and source distribution with
+   Trusted Publishing; the distributions are attached to the GitHub release.
 
-The package version is the tag itself (`hatch-vcs`): nothing in `pyproject.toml`
-or `uv.lock` changes at release time, and an untagged commit builds as a `.devN`
-pre-release that is never published.
+A failed or cancelled main CI run cannot publish. A release build can repeat
+packaging checks because it builds a newly tagged version, but it does not run a
+second copy of the test suite. If the main head advances during release creation,
+the exact-tag CI check still prevents publication of an untested commit.
 
-## Which version comes next
+## Why GitHub can ask to approve CI
 
-| Title | Example | Before 1.0 | From 1.0 |
-| --- | --- | --- | --- |
-| `fix:` | `fix: count commits made through SELECT fn()` | patch | patch |
-| `feat:` | `feat: add a SQLAlchemy host` | minor | minor |
-| `feat!:` or a `BREAKING CHANGE:` footer | `feat!: rename Delivery.session` | minor | major |
-| `perf:`, `revert:` | | patch | patch |
-| `docs:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:` | | none | none |
+Release Please's default `GITHUB_TOKEN` creates PR workflow runs that need approval
+on every update. This is a [GitHub token rule](https://docs.github.com/en/actions/concepts/security/github_token#when-github_token-triggers-workflow-runs),
+not PyPI approval and not a request to publish. Approving those workflows only runs
+CI; **merging the release PR** is the publishing decision.
 
-Before 1.0 a breaking change bumps the minor version (`bump-minor-pre-major`),
-as SemVer allows for `0.y.z`. `docs:` changes appear in the changelog but do not
-release on their own.
+Release Please uses the existing organization secret `GV_CI_CROSS_REPO_TOKEN`.
+In the organization's Actions secret settings, include this repository in that
+secret's selected repositories. The credential needs Contents and Pull requests
+read/write access. The release job fails clearly when it is absent; it never
+falls back to `GITHUB_TOKEN` and recreates the approval prompt.
 
-## Repository and PyPI settings
+The `release-automation` environment restricts the release job to `main` without
+required reviewers. The shared secret is repository-accessible, not scoped to
+that environment; maintainers who can change trusted workflows can use it.
+Release automation follows the shared CI credential's existing rotation lifecycle
+and no longer stores a separate copy of the maintainer's GitHub CLI credential.
 
-The workflow depends on settings outside the code:
+## One-time publisher setup
 
-1. **PyPI Trusted Publisher.** Before publishing the renamed package, configure
-   a pending publisher for PyPI project `pytest-obligation` with
-   owner `gigaverse-app`, repository `pytest-obligation`, workflow `release.yml`,
-   environment `pypi`. For a project that does not exist yet this is a
-   *pending publisher* (pypi.org → Account → Publishing). test.pypi.org has the
-   same entry with environment `testpypi` for rehearsals.
-   The old project's publisher does not authorize the new project. Do not merge
-   the next release PR until this setup is complete. Keep historical releases
-   under `due-work-harness`; users migrating to the new distribution must remove
-   the old one first because both provide the `due_work_harness` namespace.
-2. **GitHub environments.** `pypi` accepts deployments from `main` only, which
-   is where both release-please and a manual re-publish run; `testpypi` is
-   unrestricted. Adding required reviewers to `pypi` makes every publish wait
-   for approval.
-3. **Actions may open pull requests** (Settings → Actions → General → Workflow
-   permissions), so release-please can open its release PR. The default token
-   stays read-only; jobs ask for what they need.
-4. **Squash merging only, titled by the PR title** (Settings → General → Pull
-   Requests), so each commit on `main` is the checked title.
+Configure the PyPI Trusted Publisher for project `pytest-obligation`:
 
-Release PRs are opened with the workflow's token, and GitHub does not run
-workflows for events created by it, so CI does not run on the release PR
-itself. It only changes `CHANGELOG.md` and the version manifest; the
-commit it releases already passed CI when it was merged.
+- Owner: `gigaverse-app`
+- Repository: `pytest-obligation`
+- Workflow filename: `release.yml`
+- Environment: `pypi`
 
-## Rehearsing or re-publishing
+For a new project, use a pending publisher under PyPI Account → Publishing.
+For an existing project, use its Publishing settings. TestPyPI is separate;
+configure the same identity with environment `testpypi` for rehearsals.
 
-`Actions → Release → Run workflow` builds an existing tag and publishes it to
-TestPyPI (the default) or PyPI. Use it to rehearse before the first release, or
-to finish a release whose publish step failed after the tag was created.
+The GitHub `pypi` environment should allow only `main`, without required reviewers:
+the release PR merge already supplies the manual decision. Manual dispatch must
+also run from `main`. Keep default Actions permissions read-only and allow Actions
+to create pull requests. Prefer squash-merging ordinary PRs with their checked
+Conventional Commit titles.
+
+## Versions and retries
+
+Release Please calculates SemVer from Conventional Commits: `fix:` and `perf:`
+bump the patch, `feat:` bumps the minor, and breaking changes bump the minor while
+below 1.0. Docs/tests/CI-only changes do not independently request a release.
+`hatch-vcs` derives package versions from Git tags. Untagged source builds as a
+development version; embedded subtrees use the explicit development fallback.
+Neither the package metadata nor the lock needs a version edit on release PRs.
+
+Use `Actions → Release → Run workflow`, on `main`, with an existing `vX.Y.Z` tag
+to retry a failed publish. Choose `pypi` explicitly; the default is `testpypi`.
+Production retries still require successful main CI for the resolved tag commit.
+Re-run that commit's failed CI first. An empty tag is allowed only for a TestPyPI
+development rehearsal. A successful upload is immutable; do not reuse a version
+for different source.
+
+Successful releases also maintain the existing floating `v0` action tag so
+`gigaverse-app/pytest-obligation/check@v0` follows the latest compatible release.
