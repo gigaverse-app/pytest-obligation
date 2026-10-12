@@ -187,3 +187,5 @@ Alpha; the public API may change before 1.0. [Architecture](package/docs/archite
 Generated expected failures can be enforced with an application-owned [debt baseline](package/docs/debt-baseline.md).
 
 Recovery contracts can also [prove selection completeness](package/docs/selection-completeness.md), including related lifecycle states and strict per-combination debt.
+
+See [package ownership and subtree development](package/docs/development.md) for library edits made inside an adopter checkout.

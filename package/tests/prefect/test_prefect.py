@@ -4,12 +4,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from prefect import flow
 from prefect.deployments.runner import RunnerDeployment
-from tests_support.prefect_app import other, record
 
 from pytest_obligation.binding import assert_binding_reaches_production
 from pytest_obligation.host import Host, hosted
 from pytest_obligation.integrations.prefect import assert_prefect_recurs, prefect_flow_call
 from pytest_obligation.models import ObligationContractDesignError
+from tests_support.prefect_app import other, record
 
 
 def test_flow_binding_finishes_coroutines_and_keeps_production_identity():

@@ -11,10 +11,10 @@ import redis
 from celery import Celery
 from celery.contrib.testing.worker import start_worker
 from test_bindings import catalog_contract
-from tests.redis_databases import redis_url
-from tests_support.catalog_executor import execute, registered
 
 from pytest_obligation import due_work_contract_suite
+from tests.redis_databases import redis_url
+from tests_support.catalog_executor import execute, registered
 
 APP = Celery("catalog-proof", broker=redis_url("celery broker"), backend=redis_url("celery backend"))
 APP.conf.update(task_default_queue="catalog", worker_prefetch_multiplier=1, task_acks_late=True)

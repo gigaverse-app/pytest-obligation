@@ -16,7 +16,7 @@ dev = [ { include-group = "lint" }, { include-group = "xdist" }]
 default-groups = ["dev"]
 
 [tool.ruff]
-src = ["package/src", "package/shims", "."]
+src = ["package/src", "package/shims", "package", "."]
 line-length = 120
 target-version = "py311"
 extend-exclude = ["demos/.upstream", ".venv*"]

@@ -9,7 +9,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError, ConnectionFailure
 from pymongo.write_concern import WriteConcern
-from tests_support.mongodb_app import MongoDBOutbox
 
 from pytest_obligation import CallableDelivery, ExternalCall, HandoffHistory, assert_crash_at_every_commit_converges
 from pytest_obligation.crash_histories import HistoriesDiverged
@@ -17,6 +16,7 @@ from pytest_obligation.host import hosted
 from pytest_obligation.integrations.mongodb import mongodb_host, mongodb_reply_breaker, mongodb_worker_killer
 from pytest_obligation.models import ObligationContractDesignError
 from pytest_obligation.worker_death import WorkerDied
+from tests_support.mongodb_app import MongoDBOutbox
 
 
 @pytest.fixture

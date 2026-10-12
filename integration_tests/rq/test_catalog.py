@@ -5,11 +5,11 @@ from collections.abc import Callable
 from rq import Queue
 from rq.job import JobStatus
 from test_bindings import catalog_contract
-from tests.rq.connection import CONNECTION
-from tests_support.catalog_executor import execute, registered
 
 from pytest_obligation import due_work_contract_suite
 from pytest_obligation.integrations.rq import worker_pass
+from tests.rq.connection import CONNECTION
+from tests_support.catalog_executor import execute, registered
 
 
 def rq_run(operation: Callable[[], None]) -> None:

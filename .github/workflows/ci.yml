@@ -59,6 +59,12 @@ jobs:
       - run: uv sync --all-packages --python ${{ matrix.python }} --locked --no-default-groups --extra debt --group xdist
       - run: uv run --python ${{ matrix.python }} --no-sync python scripts/check_core_is_framework_free.py
       - run: uv run --python ${{ matrix.python }} --no-sync python -m compileall -q package/src/pytest_obligation
+      - name: Prove package-only core controls need no application checkout
+        if: matrix.python == '3.12'
+        run: |
+          package_dir=$(mktemp -d)
+          git archive HEAD:package | tar -x -C "$package_dir"
+          uv run --directory "$package_dir" --extra selftest python -m pytest tests/core
       - run: uv run --python ${{ matrix.python }} --no-sync pytest package/tests/core integration_tests/core
 
   minimum-models:

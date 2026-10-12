@@ -4,7 +4,6 @@ from functools import partial
 from typing import Any
 
 import pytest
-from tests_support.sample_production import cache
 
 from pytest_obligation import (
     DueWorkSource,
@@ -13,6 +12,7 @@ from pytest_obligation import (
     exempt_due_work_suite,
 )
 from pytest_obligation.host import Host, hosted
+from tests_support.sample_production import cache
 
 REASON = "the next request re-derives the summary from the database"
 KEY = 7
