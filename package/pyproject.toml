@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling>=1.25", "hatch-vcs>=0.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytest-obligation"
+# The version is the release tag (vX.Y.Z), written by release-please; see RELEASING.md.
+dynamic = ["version"]
+description = "A pytest plugin, a library for writing tests, a test generator, and a harness test runner for finding lost work, duplicate effects, and recovery bugs with your application's ObligationContract."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Gigaverse" }]
+keywords = [
+    "pytest", "pytest plugin", "generated tests", "ObligationContract",
+    "fault injection", "crash testing", "recovery testing", "idempotency",
+    "lost tasks", "duplicate processing", "background jobs", "task queue",
+    "durable execution", "transactional outbox", "celery", "django",
+    "postgresql", "mongodb", "kafka", "prefect", "rq", "redis",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+# The core imports no framework: its dependencies are pytest and pydantic. Every
+# integration lives behind an extra and is imported only when its framework is installed.
+dependencies = ["pytest>=8", "pydantic>=2.11"]
+
+[project.optional-dependencies]
+# Dependencies for the reusable tests shipped alongside the source.
+selftest = ["pytest-xdist>=3.6", "PyYAML>=6"]
+debt = ["PyYAML>=6"]
+exploration = ["hypothesis>=6.112"]
+django = ["django>=4.2", "pytest-django>=4.8", "psycopg[binary]>=3.1", "time-machine>=2.10"]
+celery = ["celery>=5.3"]
+procrastinate = ["procrastinate>=3.0"]
+dbos = ["dbos>=2.0"]
+redis = ["redis>=5.0", "time-machine>=2.10"]
+rq = ["rq>=2.6", "redis>=5.0", "time-machine>=2.10"]
+# The wire adapter binds PyMongo's 4.x connection API; 4.18 replaced its bulk-write boundary.
+mongodb = ["pymongo>=4.9,<4.18", "motor>=3.7,<4"]
+prefect = ["prefect>=3.7,<3.8"]
+aiokafka = ["aiokafka>=0.12,<0.15"]
+
+[project.urls]
+Homepage = "https://github.com/gigaverse-app/pytest-obligation"
+Documentation = "https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/pytest-plugin.md"
+Source = "https://github.com/gigaverse-app/pytest-obligation"
+Changelog = "https://github.com/gigaverse-app/pytest-obligation/blob/main/CHANGELOG.md"
+Issues = "https://github.com/gigaverse-app/pytest-obligation/issues"
+
+[project.scripts]
+pytest-obligation = "pytest_obligation.coverage.cli:main"
+due-work-harness = "pytest_obligation.coverage.cli:main"
+
+[project.entry-points.pytest11]
+due_work_harness = "pytest_obligation.pytest_plugin"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+# Untagged commits build as the next patch dev release, never as a real version.
+local_scheme = "no-local-version"
+# Floating action tags (v0) are not package versions, including on manual retries.
+git_describe_command = "git describe --dirty --tags --long --match v[0-9]*.[0-9]*.[0-9]*"
+# Archives and embedded subtrees have no repository tags; never inspect parent tags.
+fallback_version = "0.9.1.dev0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pytest_obligation", "shims/due_work_harness"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/shims", "/tests", "/tests_support", "/docs", "/README.md", "/LICENSE", "/pyproject.toml"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests_support"]
+addopts = "-p no:cacheprovider"

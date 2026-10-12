@@ -21,7 +21,7 @@ into the public harness while preserving the framework-free core.
 - Ruff and changed-module Pyrefly pass; wheel and source archive build.
 - The first public CI revision passed every integration, demo, Python and
   framework-free lane; final-revision CI and consumer validation follow.
-- Ownership and intentional exclusions: [cutover audit](../../backend-harness-port.md#cutover-follow-through-october-2026).
+- Ownership and intentional exclusions: [cutover audit](../../../package/docs/backend-harness-port.md#cutover-follow-through-october-2026).
 - BE with both public candidates: **2,113 passed, 70 existing expected failures,
   six existing collection exclusions**. This includes adopters, concrete counter
   callers, source/debt/Beat policy, populated migration and packaging boundaries.

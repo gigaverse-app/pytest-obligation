@@ -8,6 +8,33 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[manifest]
+members = [
+    "pytest-obligation",
+]
+
+[manifest.dependency-groups]
+demos = [
+    { name = "dbos", specifier = "==3.1.0" },
+    { name = "django-tasks-db", specifier = "==0.13.0" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0" },
+    { name = "wagtail", specifier = "==8.0" },
+]
+dev = [
+    { name = "celery-types", specifier = ">=0.22" },
+    { name = "django-stubs", specifier = ">=5.1" },
+    { name = "pyrefly", specifier = ">=1.0,<2" },
+    { name = "pytest-obligation", extras = ["selftest"], editable = "package" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+lint = [
+    { name = "celery-types", specifier = ">=0.22" },
+    { name = "django-stubs", specifier = ">=5.1" },
+    { name = "pyrefly", specifier = ">=1.0,<2" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+xdist = [{ name = "pytest-obligation", extras = ["selftest"], editable = "package" }]
+
 [[package]]
 name = "agent-detector"
 version = "2.0.0"
@@ -2765,7 +2792,7 @@ wheels = [
 
 [[package]]
 name = "pytest-obligation"
-source = { editable = "." }
+source = { editable = "package" }
 dependencies = [
     { name = "pydantic" },
     { name = "pytest" },
@@ -2813,30 +2840,9 @@ rq = [
     { name = "rq" },
     { name = "time-machine" },
 ]
-
-[package.dev-dependencies]
-demos = [
-    { name = "dbos" },
-    { name = "django-tasks-db" },
-    { name = "fastapi", extra = ["standard"] },
-    { name = "wagtail" },
-]
-dev = [
-    { name = "celery-types" },
-    { name = "django-stubs" },
-    { name = "pyrefly" },
+selftest = [
     { name = "pytest-xdist" },
     { name = "pyyaml" },
-    { name = "ruff" },
-]
-lint = [
-    { name = "celery-types" },
-    { name = "django-stubs" },
-    { name = "pyrefly" },
-    { name = "ruff" },
-]
-xdist = [
-    { name = "pytest-xdist" },
 ]
 
 [package.metadata]
@@ -2854,7 +2860,9 @@ requires-dist = [
     { name = "pymongo", marker = "extra == 'mongodb'", specifier = ">=4.9,<4.18" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-django", marker = "extra == 'django'", specifier = ">=4.8" },
+    { name = "pytest-xdist", marker = "extra == 'selftest'", specifier = ">=3.6" },
     { name = "pyyaml", marker = "extra == 'debt'", specifier = ">=6" },
+    { name = "pyyaml", marker = "extra == 'selftest'", specifier = ">=6" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
     { name = "redis", marker = "extra == 'rq'", specifier = ">=5.0" },
     { name = "rq", marker = "extra == 'rq'", specifier = ">=2.6" },
@@ -2862,30 +2870,7 @@ requires-dist = [
     { name = "time-machine", marker = "extra == 'redis'", specifier = ">=2.10" },
     { name = "time-machine", marker = "extra == 'rq'", specifier = ">=2.10" },
 ]
-provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "rq"]
-
-[package.metadata.requires-dev]
-demos = [
-    { name = "dbos", specifier = "==3.1.0" },
-    { name = "django-tasks-db", specifier = "==0.13.0" },
-    { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0" },
-    { name = "wagtail", specifier = "==8.0" },
-]
-dev = [
-    { name = "celery-types", specifier = ">=0.22" },
-    { name = "django-stubs", specifier = ">=5.1" },
-    { name = "pyrefly", specifier = ">=1.0,<2" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", specifier = ">=0.8" },
-]
-lint = [
-    { name = "celery-types", specifier = ">=0.22" },
-    { name = "django-stubs", specifier = ">=5.1" },
-    { name = "pyrefly", specifier = ">=1.0,<2" },
-    { name = "ruff", specifier = ">=0.8" },
-]
-xdist = [{ name = "pytest-xdist", specifier = ">=3.6" }]
+provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "rq", "selftest"]
 
 [[package]]
 name = "pytest-xdist"

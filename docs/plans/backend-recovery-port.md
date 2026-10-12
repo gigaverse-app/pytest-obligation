@@ -17,4 +17,4 @@ registrations remain in the backend.
 No repository PR template was found. This is test-library work and requires no
 backend deployment followups.
 
-See [the port and migration guide](../recovery-edge-cases.md) for source mapping and explicit exclusions.
+See [the port and migration guide](../../package/docs/recovery-edge-cases.md) for source mapping and explicit exclusions.

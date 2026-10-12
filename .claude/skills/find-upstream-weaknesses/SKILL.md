@@ -7,7 +7,7 @@ description: Use to probe a real open-source project (an application first, or a
 
 The full method is [docs/upstream-playbook.md](../../../docs/upstream-playbook.md); read the step you are
 on when you reach it. The copy-and-fill templates are in
-[docs/upstream-templates/](../../../docs/upstream-templates/). This file is the runbook: what to do, in
+[docs/upstream-templates/](../../../docs/upstream-templates). This file is the runbook: what to do, in
 order, and the rules that are not negotiable.
 
 The installable plugin's [probe-upstream-due-work](../../../plugins/pytest-obligation/skills/probe-upstream-due-work/SKILL.md)
@@ -21,7 +21,7 @@ gigaverse-backend's own due-work runtime and conformance instructions.
   propose or write the fix in an issue or PR.
 - **Every adoption PR MUST carry `ObligationContract` and a collected
   `@due_work_contract_suite(CONTRACT)` class.** Follow the
-  [required adoption shape](../../../ADOPTING.md#required-adoption-shape): declare
+  [required adoption shape](../../../package/docs/adopting.md#required-adoption-shape): declare
   all A–J profiles for the current source (or the installed release's matching catalog), put histories in the contract, execute the generated
   cases, and link the declaration, suite and `--due-work-summary` report. Ordinary
   tests and direct crash-helper calls are supporting evidence, never a substitute.

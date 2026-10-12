@@ -52,7 +52,7 @@ uv run --no-sync pytest demos/dbos_transactional_outbox -p no:django
 
 ## Rules the code follows
 
-See [ARCHITECTURE.md](ARCHITECTURE.md). In short: nothing outside
+See [ARCHITECTURE.md](package/docs/architecture.md). In short: nothing outside
 `src/pytest_obligation/integrations/` imports a framework; integrations import
 theirs only when installed; every harness defense is self-tested in both
 directions (a conforming binding passes, a counterfeit fails with its specific
@@ -60,4 +60,4 @@ message).
 
 ## Finding weaknesses in other projects
 
-A new demo, an integration, or an upstream report follows [the upstream playbook](docs/upstream-playbook.md), with the templates in [`docs/upstream-templates`](docs/upstream-templates/). With Claude Code, the `find-upstream-weaknesses` skill in `.claude/skills` runs the whole cycle.
+A new demo, an integration, or an upstream report follows [the upstream playbook](docs/upstream-playbook.md), with the templates in [`docs/upstream-templates`](docs/upstream-templates). With Claude Code, the `find-upstream-weaknesses` skill in `.claude/skills` runs the whole cycle.

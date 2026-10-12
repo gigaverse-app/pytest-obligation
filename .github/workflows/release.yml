@@ -130,7 +130,10 @@ jobs:
             exit 1
           fi
       - uses: astral-sh/setup-uv@v7
-      - run: uv build
+      - name: Build the package using the public repository release version
+        run: |
+          version=$(uvx --from 'setuptools-scm>=8,<10' python -c 'from setuptools_scm import get_version; print(get_version(root=".", local_scheme="no-local-version"))')
+          SETUPTOOLS_SCM_PRETEND_VERSION="$version" uv build --project package --out-dir dist
       - run: uvx --from twine twine check --strict dist/*
       - name: The built version is the tag
         if: steps.tag.outputs.tag != ''
