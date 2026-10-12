@@ -88,6 +88,13 @@ observes external progress; `still_owed` follows an obligation handed to another
 selection. Add a related-row family with
 `EdgeFamily(model=Account, edge_row=lambda delivery: delivery.account)`.
 
+A selection-only contract also takes `extras=`, the same `ExtraProof` tuple an
+`ObligationContract` takes, for a standalone proof the loop needs (for example
+`assert_provider_call_holds_no_transaction` around the loop's provider call).
+Extras are validated as on the full contract and each one collects as an
+`extra-<name>` case; a gap on an extra counts against the `NEW_FEATURE` policy
+like an entry in `gaps`.
+
 The suite checks the production bindings, a valid row's completion, and that the
 dispatch recorder follows the selection order. It then generates poison/stop
 cases and two cases per edge: the selected row is handled or excluded, and it
