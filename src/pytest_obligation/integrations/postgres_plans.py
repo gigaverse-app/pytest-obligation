@@ -24,6 +24,7 @@ from collections.abc import Collection, Iterator, Mapping
 from typing import Any, TypeAlias
 
 from pytest_obligation.host import ReadCost
+from pytest_obligation.integrations._internal.postgres_sql import bare_identifiers, blank_literals_and_comments
 
 #: Plan keys proving an index narrowed the rows a scan node returned.
 CATALOG_INDEX = "Catalog Index"
@@ -157,13 +158,12 @@ def _re_tested_predicate(node: dict[str, Any], constrained: dict[str, frozenset[
     return None
 
 
-_LITERAL = re.compile(r"'(?:[^']|'')*'")
 _IDENTIFIER = re.compile(r'"([^"]+)"|\b([A-Za-z_][A-Za-z0-9_$]*)\b')
 
 
 def referenced_columns(expression: str, candidates: Collection[str]) -> set[str]:
     """Which of ``candidates`` an expression PostgreSQL printed names, outside its string literals."""
-    text = _LITERAL.sub("''", expression)
+    text = blank_literals_and_comments(expression)
     names = {quoted or bare for quoted, bare in _IDENTIFIER.findall(text)}
     return names & set(candidates)
 
@@ -242,7 +242,7 @@ def _range_bounded_columns(expressions: list[str]) -> set[str]:
     """The columns compared by a range operator, on either side, outside string literals and casts."""
     found: set[str] = set()
     for expression in expressions:
-        text = _CAST.sub("", _LITERAL.sub("''", expression))
+        text = _CAST.sub("", blank_literals_and_comments(expression))
         for match in _RANGE.finditer(text):
             operands = [match.group("left")] + ([] if match.group("call") else [match.group("right")])
             found.update(operand.strip('"') for operand in operands if operand and operand.upper() not in _NOT_COLUMNS)
@@ -389,13 +389,12 @@ def _leading_key_left_open(access: dict[str, Any]) -> str | None:
     catalog = access[CATALOG_INDEX]
     if catalog["Predicate"] is not None or catalog["Access Method"] != "btree":
         return None
-    leading = catalog["Key Columns"][0].strip().strip('"')
+    leading = bare_identifiers(catalog["Key Columns"][0]).strip()
     if not leading.isidentifier():
         return None
     return (
         None
-        if leading
-        in set(_KEY_CONDITION.findall(_CAST.sub("", _LITERAL.sub("''", str(access["Index Cond"]))).replace('"', "")))
+        if leading in set(_KEY_CONDITION.findall(_CAST.sub("", bare_identifiers(str(access["Index Cond"])))))
         else leading
     )
 

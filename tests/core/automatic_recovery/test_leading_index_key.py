@@ -68,7 +68,19 @@ def test_valid_catalog_shapes(keys: list[str], condition: str, predicate: str | 
     )
 
 
-def test_a_column_named_inside_a_literal_does_not_constrain_the_leading_key() -> None:
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "(state = 'campaign_id = 1')",
+        r"(state = E'escaped\' campaign_id = 1')",
+        "(state = $$campaign_id = 1$$)",
+        "(state = $body$campaign_id = 1$body$)",
+        '("other campaign_id" = 1)',
+        "(state = 'UNKNOWN') /* campaign_id = 1 */",
+        "(state = 'UNKNOWN') -- campaign_id = 1",
+    ],
+)
+def test_a_column_named_only_in_sql_text_does_not_constrain_the_leading_key(condition: str) -> None:
     with pytest.raises(AssertionError, match="leading key column 'campaign_id'"):
         assert_plan_is_index_served(
             name="literal",
@@ -77,7 +89,7 @@ def test_a_column_named_inside_a_literal_does_not_constrain_the_leading_key() ->
                 "Node Type": "Index Scan",
                 "Relation Name": "work",
                 "Index Name": "ix",
-                "Index Cond": "(state = 'campaign_id = 1')",
+                "Index Cond": condition,
                 "Catalog Index": {"Access Method": "btree", "Key Columns": ["campaign_id", "state"], "Predicate": None},
             },
         )

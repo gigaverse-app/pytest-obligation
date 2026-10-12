@@ -180,3 +180,28 @@ tenant values, reviewed exceptions and historical debt remain consumer-owned.
 The generic scanners and proofs consume those declarations. Due's unused native
 lifecycle convenience API is intentionally excluded; generic proofs for
 application-owned ORM lifecycles remain supported.
+
+## Second pass: consolidation and SQL evidence
+
+The first cutover comparison used merged backend `main`. A second pass also
+examined the concurrent consolidation branch, since merged as backend #5361
+(`31c25aa13`), and inspected function bodies and shared helpers outside the
+original harness directory. It recovered these additional owners:
+
+- `ContractCase.parameter` applies the configured host's database marks and
+  strict, optionally exception-limited gaps across profiles, selections,
+  handoffs and interleavings. Case IDs, fixtures and gap restrictions remain.
+- Binding guards share cycle-aware traversals while keeping two trust rules:
+  authorship stops at production or harness code; delegation follows referenced
+  test helpers to establish a production or shared-proof dependency.
+- Owed-row proofs consume `OwedRows` and `EdgeFamily` directly; the shared
+  selected-row verdict accepts `RowExecution`. `EdgeFamily.target` rejects a
+  mismatched model before writing an edge. See the [direct-call migration](selection-completeness.md#direct-proof-call-migration).
+- Index verdicts reuse the SQL masking that lock-order observation already
+  trusted. A column mentioned only inside escaped strings, dollar quotes,
+  comments or a different quoted identifier cannot count as an index constraint.
+  Six negative controls failed before the fix; all 73 plan controls pass after it.
+
+The SQL reader lives under `integrations._internal` and imports no framework or
+driver; public plan and lock-order interfaces remain in their existing modules.
+This remains a lexical proof over captured plans, not an arbitrary SQL parser.

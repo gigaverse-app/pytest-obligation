@@ -67,6 +67,7 @@ import pytest
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from pydantic import PrivateAttr
 
+from pytest_obligation.integrations._internal.postgres_sql import blank_literals_and_comments
 from pytest_obligation.integrations.django.writes import statement_text
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
 
@@ -93,7 +94,6 @@ _CTE_HEAD = re.compile(
     r"\s*(?:\"[^\"]+\"|\w+)\s*(?:\([^)]*\)\s*)?AS\s+(?:NOT\s+)?(?:MATERIALIZED\s+)?\(", re.IGNORECASE
 )
 _CTE_SEPARATOR = re.compile(r"\s*,")
-_DOLLAR_TAG = re.compile(r"\$[A-Za-z_]*\$")
 
 
 class RowLock(HarnessModel):
@@ -115,7 +115,7 @@ def row_locks(sql: str) -> tuple[RowLock, ...]:
     ``SKIP LOCKED`` and ``NOWAIT`` never wait for a lock another transaction
     holds, so a transaction taking one cannot be the one a deadlock leaves waiting.
     """
-    return tuple(_locks(_blank_literals_and_comments(statement_text(sql))))
+    return tuple(_locks(blank_literals_and_comments(statement_text(sql))))
 
 
 def _locks(text: str) -> list[RowLock]:
@@ -195,60 +195,6 @@ def _distinct(tables: Iterable[str]) -> tuple[str, ...]:
         if table not in seen:
             seen.append(table)
     return tuple(seen)
-
-
-def _blank_literals_and_comments(sql: str) -> str:
-    """
-    The statement with string literals, dollar quotes and comments blanked out, so their text opens nothing.
-
-    Quoted identifiers are kept: they are the table names. Blanking keeps every
-    other character where it was.
-    """
-    out, index = list(sql), 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            end = sql.find("\n", index)
-            end = len(sql) if end < 0 else end
-        elif sql.startswith("/*", index):
-            end, depth = index + 2, 1
-            while end < len(sql) and depth:
-                if sql.startswith("/*", end):
-                    depth, end = depth + 1, end + 2
-                elif sql.startswith("*/", end):
-                    depth, end = depth - 1, end + 2
-                else:
-                    end += 1
-        elif sql[index] == "'":
-            # An E'' literal takes backslash escapes; a plain one only doubles its quote.
-            escapes = (
-                index > 0
-                and sql[index - 1] in "Ee"
-                and (index < 2 or not (sql[index - 2].isalnum() or sql[index - 2] == "_"))
-            )
-            end = index + 1
-            while end < len(sql):
-                if escapes and sql[end] == "\\":
-                    end += 2
-                elif sql[end] == "'" and sql.startswith("''", end):
-                    end += 2
-                elif sql[end] == "'":
-                    end += 1
-                    break
-                else:
-                    end += 1
-        elif sql[index] == '"':
-            closing = sql.find('"', index + 1)
-            index = len(sql) if closing < 0 else closing + 1
-            continue
-        elif tag := _DOLLAR_TAG.match(sql, index):
-            closing = sql.find(tag.group(), tag.end())
-            end = len(sql) if closing < 0 else closing + len(tag.group())
-        else:
-            index += 1
-            continue
-        out[index:end] = " " * (end - index)
-        index = end
-    return "".join(out)
 
 
 def _outside_parentheses(sql: str) -> str:
