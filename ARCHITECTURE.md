@@ -171,7 +171,10 @@ Django owed-row generation, and handoff execution. `Host.stop_exception`,
 `handoff_runner`, and `commit_scope` keep execution details at the integration
 boundary. `owed_row_cases` and `owed_row_gap_names` let the core contract delegate
 Django case enumeration without importing Django. The typed `EdgeFamily` and
-`OwedRows` declarations belong to that integration. Core poison oracles import no
+`OwedRows` declarations belong to that integration; the core `Polling`
+declaration on `ScheduledSelection` tells it the loop serves a row by keeping
+it selected, which swaps the leave-the-selection control for a work-per-tick
+control and adds a second poisoned tick. Core poison oracles import no
 framework; the Celery publication seam lives only in `integrations/celery.py`.
 
 ## Adoption and policy interfaces

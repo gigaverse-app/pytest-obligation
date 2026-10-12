@@ -95,6 +95,50 @@ does not block the next valid row. A recorder entry or no-op commit callback is
 not progress. Legacy edge gaps absorb only `OwedRowNotHandled`, never a broken
 binding or positive control.
 
+### Polling selections
+
+The valid-row control above requires a served row to leave the selection,
+because that is how the suite tells "served" from "did nothing at all". Some
+loops are served by staying selected: a sweep over rows in a long-lived active
+state re-reads each one every tick, and a producer that records nothing lets the
+next period select the same identity again. Declare that, with the reason:
+
+```python
+from pytest_obligation import Polling, ScheduledSelection
+
+selection = ScheduledSelection(
+    name="active sessions",
+    due_work=select_active_sessions,
+    assert_scheduled=schedule_evidence,
+    owed_rows=bind_session_poll,
+    owed_edges={"session": EdgeFamily(model=Session)},
+    polling=Polling("sessions stay active for hours; every tick re-reads their provider state"),
+)
+```
+
+Polling replaces exactly one case and extends another; the case list shows which:
+
+- `assert_a_polled_row_is_served_and_stays_selected` replaces
+  `assert_valid_owed_row_leaves_the_selection`. One delivery to `execute` and
+  two production ticks must each finish without raising, write something or
+  add an effect counted by `effect_calls_for` (bind it when the per-tick effect
+  is only a provider call), and leave the row selected; each tick must also
+  record the row in `dispatched_ids`. A row that leaves the selection fails it,
+  so a sweep whose served rows leave cannot declare polling to skip the default
+  control. A tick that serves each row once (a cursor, an already-served set)
+  fails it too.
+- `assert_one_poisoned_identity_does_not_stall_the_tick` runs its usual tick,
+  then one more with the poison still armed: the healthy row must be dispatched
+  again (`PoisonStalled`) and the poisoned one still selected
+  (`PoisonDropped`). A loop that backs off the whole tick after a failure fails
+  only here. The second tick may hold the poisoned row back, as a per-identity
+  backoff would.
+
+The stop-request and per-edge cases are unchanged; a polled row is always still
+selected, so any raise on it, or a delivery that does nothing to it, fails its
+edge case. `still_owed` does not apply: a polling selection keeps the row it
+served, so its own selection is the owner the poison cases read.
+
 The catalog covers empty strings, maximum string lengths, unknown string
 choices, zero, negative one where legal, and each integer column's maximum.
 It skips nullable, primary-key and relational columns; database constraints can

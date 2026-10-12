@@ -90,3 +90,18 @@ class ReferenceLoop:
                 self.dispatched.append(row.pk)
         if failures:
             raise ExceptionGroup("failed rows", failures)
+
+
+def poll(owner_id: int) -> None:
+    """One poll of an owner: stamps it and leaves it selected, as a sweep over long-lived active rows does."""
+    from django.utils import timezone
+
+    PrimitiveOwner.objects.filter(pk=owner_id).update(claimed_at=timezone.now())
+
+
+class PollingReferenceLoop(ReferenceLoop):
+    """Production-shaped polling conformer: every tick polls every owner again, isolating ordinary failures."""
+
+    def execute(self, identity: int) -> None:
+        self.poison.check(identity)
+        poll(identity)

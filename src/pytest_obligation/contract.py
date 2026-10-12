@@ -1778,6 +1778,30 @@ def contract_report(contract: ObligationContract) -> str:
     return "\n".join(lines)
 
 
+class Polling(HarnessModel):
+    """
+    The selection keeps returning an identity it served: every tick serves it again.
+
+    The owed-row proofs assume a served row leaves the selection, which is how
+    they tell "served" from "did nothing at all". A sweep over rows in a
+    long-lived active state (it re-reads each one every tick), or a producer
+    that records nothing and lets the next period select the same identity, is
+    served by staying selected. Declaring it swaps that one assumption for its
+    polling counterpart: the generated control requires a served row to *stay*
+    selected and every delivery and every tick to do observable work on it,
+    and the poison case adds a second tick in which the healthy row is served
+    again and the poisoned one is still selected. A sweep whose served rows do
+    leave fails that control, so the declaration cannot be used to skip the
+    leave-the-selection check.
+    """
+
+    #: Why a served identity stays selected, read in review beside the cases it changes.
+    because: str
+
+    def __init__(self, because: str = MISSING, /, **data: Any) -> None:
+        super().__init__(**with_positional(data, because=because))
+
+
 class ScheduledSelection(HarnessModel):
     """
     A scheduled selection that is not a full due-work sweep.
@@ -1842,6 +1866,8 @@ class ScheduledSelection(HarnessModel):
     #: Integration-owned loop and edge families (Django: OwedRows and EdgeFamily).
     owed_rows: Callable[[], Any] | None = None
     owed_edges: Mapping[str, Any] = Field(default_factory=dict)
+    #: The owed-row loop serves an identity by polling it, so it stays selected (:class:`Polling`).
+    polling: Polling | None = None
     #: Related lifecycle paths whose combinations the selection-completeness proof explores.
     state_fields: tuple[str, ...] = ()
     #: Combinations deliberately outside this recovery, with substantive reasons.
@@ -1863,6 +1889,12 @@ class ScheduledSelection(HarnessModel):
             errors.append("owed_rows and owed_edges come together")
         if any(not name.strip() for name in self.owed_edges):
             errors.append("owed_edges family names must be nonempty")
+        if self.polling is not None and self.owed_rows is None:
+            errors.append("polling describes the owed-row loop; declare owed_rows with it")
+        if self.polling is not None and not self.polling.because.strip():
+            errors.append(
+                "polling.because is empty. Why a served row stays selected is the substance of the declaration"
+            )
         if self.state_fields and self.owed_rows is None:
             errors.append("state_fields require owed_rows for selection completeness")
         if self.excluded_states and not self.state_fields:
