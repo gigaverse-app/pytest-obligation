@@ -288,3 +288,14 @@ adopters still get actionable XFAIL debt while migrating. It does not certify
 unimported suites or make a Decline/known gap green; combine it with
 `--due-work-verify` and `--due-work-profile-report=profiles.json` for enrollment
 and executed evidence. The shipped demos enable it in CI.
+
+
+### Configuring extra proofs without copying wrappers
+
+Use `ExtraProof(run=partial(prove_resource, "channel"), ...)` when several bindings
+share a proof body. The optional `coverage.proof_calls.assert_declared_proofs`
+policy recognizes module-level `functools.partial` imports (including aliases),
+nested partials and lambda runners. Only the registered runner is exempt;
+other proof calls remain subject to the application's declaration policy.
+Ambiguous/rebound import names fail closed and need an explicit runner or review.
+This is a static source check, not resolution of arbitrary callable factories.
