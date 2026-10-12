@@ -544,6 +544,7 @@ DJANGO_TASKS_DB = worker_contract(
     name="django-tasks-db: the worker running Wagtail's tasks",
     enqueue=a_purge_owed,
     effect=purges,
+    expected=_task("SUCCESSFUL", 1),
     # EXTERNAL SEAM: the CDN's purge API.
     external_calls=(ExternalCall(owner=cdn.RecordingCDN, attribute="purge"),),
     delivery=WORKER,

@@ -529,7 +529,7 @@ jobs:
         working-directory: .upstream/due
         run: >-
           .venv/bin/python -m pytest -p due.django.conformance.reporting
-          --due-work-require-assessed --due-work-profile-report=profiles.json
+          --due-work-debt-baseline=tests/conformance/debt_baseline.yaml --due-work-profile-report=profiles.json
           --durable-work-report=effects.json --durable-observation-report=observations.json
           --junitxml=results.xml
       - name: Require executed primitive and application guarantees

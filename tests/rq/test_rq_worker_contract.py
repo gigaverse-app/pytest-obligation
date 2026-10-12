@@ -139,6 +139,7 @@ CONTRACT = worker_contract(
     queue=QUEUE,
     enqueue=a_message_owed,
     effect=what_happened,
+    expected=FINDINGS.delivered,
     enqueue_failing=a_failing_job,
     failures=lambda _job_id: jobs.outbox.failed_calls,
     max_retries=2,
