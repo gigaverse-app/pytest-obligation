@@ -17,11 +17,12 @@ if TYPE_CHECKING:
 
 def reference_scheduled_selection_queryset() -> "QuerySet[ContentType]":
     """
-    A primary-key walk of a framework table: the shape the selection proofs accept.
+    A primary-key range of a framework table: the shape the selection proofs accept.
 
     Used by the end-to-end scheduled-selection self-test, which needs a real
     queryset that passes authorship (defined here, inside the harness package),
-    the index verdict (a bare pk ordering discards nothing), and replica routing
+    the index verdict (its own condition, a range on the primary key, positions
+    the scan; a bare walk with no condition reads the whole index and is refused), and replica routing
     (the default database) — without borrowing any domain's production selection.
 
     The model import is deferred so importing this module does not require the
@@ -29,7 +30,7 @@ def reference_scheduled_selection_queryset() -> "QuerySet[ContentType]":
     """
     from django.contrib.contenttypes.models import ContentType
 
-    return ContentType.objects.order_by("pk")
+    return ContentType.objects.filter(pk__gt=0).order_by("pk")
 
 
 __all__ = ["reference_scheduled_selection_queryset"]

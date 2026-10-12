@@ -32,6 +32,7 @@ from pytest_obligation import (
     Profile,
     ReplaySafeEffect,
 )
+from pytest_obligation.completion import BoundedCompletion
 from pytest_obligation.host import Host, current_host, hosted
 from pytest_obligation.interleavings import (
     EvidenceArrival,
@@ -394,6 +395,26 @@ def recovery_failures(*, stop: bool = False) -> None:
             )
 
 
+@contextmanager
+def terminal_publication(run: Runner = inline) -> Iterator[BoundedCompletion[str]]:
+    # ARRANGE: admit a real product while dropping its optional notification.
+    # REAL PRODUCTION: use Catalog.recover through the chosen queue executor.
+    # EXTERNAL SEAM: the same observable remote catalog used by other histories.
+    # OBSERVE: require the requested remote value, not an acknowledged work flag.
+    with application() as state:
+        identity = state.catalog.admit("green")
+        state.publications.clear()
+        catalog = state.catalog
+        yield BoundedCompletion(
+            observe=lambda: state.remote.get(identity, ""),
+            expected="green",
+            recover=lambda: run(catalog.recover),
+            advance=lambda seconds: None,
+            within_seconds=1,
+            interval_seconds=1,
+        )
+
+
 def catalog_contract(name: str, run: Runner = inline, *, fixtures: tuple[str, ...] = ()) -> ObligationContract:
     """The same application guarantees through the chosen worker executor."""
     # Declaration-time guards run before application() enters its runtime host.
@@ -422,6 +443,7 @@ def catalog_contract(name: str, run: Runner = inline, *, fixtures: tuple[str, ..
                 ExtraProof(name="recovery-poison", run=recovery_failures),
                 ExtraProof(name="recovery-stop", run=partial(recovery_failures, stop=True)),
             ),
+            completions={"published catalog": partial(terminal_publication, run)},
             eligibility=partial(gate, run),
             replay=partial(replay, run),
             persistent_retry=partial(unavailable_provider, run),

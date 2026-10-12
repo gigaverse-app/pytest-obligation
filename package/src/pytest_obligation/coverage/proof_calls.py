@@ -57,22 +57,60 @@ def _harness_names(tree: ast.Module) -> tuple[set[str], set[str]]:
     return proofs, modules
 
 
+def _partial_wrappers(tree: ast.Module) -> set[str]:
+    """Unshadowed module imports of functools.partial, including import aliases.
+
+    Ambiguous bindings fail closed: a reassignment or a shadow in any scope leaves
+    the proof visible to the declaration policy rather than exempting it.
+    """
+    imported: dict[str, str] = {}
+    aliases: set[int] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "functools" and not node.level:
+            for alias in node.names:
+                if alias.name == "partial":
+                    imported[alias.asname or alias.name] = ""
+                    aliases.add(id(alias))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "functools":
+                    imported[alias.asname or alias.name] = ".partial"
+                    aliases.add(id(alias))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            imported.pop(node.id, None)
+        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            if parts := dotted_parts(node):
+                imported.pop(parts[0], None)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            imported.pop(node.name, None)
+        elif isinstance(node, ast.arg):
+            imported.pop(node.arg, None)
+        elif isinstance(node, ast.alias) and id(node) not in aliases:
+            imported.pop(node.asname or node.name.split(".", 1)[0], None)
+    return {name + suffix for name, suffix in imported.items()}
+
+
 def _extra_proof_runners(tree: ast.Module) -> set[int]:
     """
     Node ids of the runners passed to ``ExtraProof``: the sanctioned way to apply a configured proof.
 
     Only the module-level function the runner names, or the lambda itself, is
-    spared, never another function that happens to share the name.
+    spared, never another function that happens to share the name. Imported
+    ``functools.partial`` may configure that runner without creating a new proof.
     """
     module_functions = {
         node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    partials = _partial_wrappers(tree)
     runners: set[int] = set()
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and terminal_name(node.func) == "ExtraProof"):
             continue
         passed = [keyword.value for keyword in node.keywords if keyword.arg == "run"] + node.args[1:2]
         for runner in passed:
+            while isinstance(runner, ast.Call) and ast.unparse(runner.func) in partials and runner.args:
+                runner = runner.args[0]
             if isinstance(runner, ast.Lambda):
                 runners.add(id(runner))
             elif isinstance(runner, ast.Name) and runner.id in module_functions:
