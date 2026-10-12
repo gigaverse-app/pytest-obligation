@@ -170,3 +170,100 @@ def test_reviewed_proof_calls_must_exist_and_have_reasons():
 )
 def test_observation_equality_is_not_a_standalone_proof(source: str) -> None:
     assert list(proof_calls("test_product.py", source)) == []
+
+
+@pytest.mark.parametrize(
+    ("imports", "wrapper"),
+    [
+        ("from functools import partial", "partial"),
+        ("from functools import partial as bind", "bind"),
+        ("import functools", "functools.partial"),
+        ("import functools as ft", "ft.partial"),
+    ],
+)
+def test_configured_extra_proof_spares_only_its_runner(imports: str, wrapper: str) -> None:
+    source = f"""
+{imports}
+from pytest_obligation.contract import ExtraProof
+from pytest_obligation.poison import assert_poison_is_isolated
+
+def configured(kind):
+    assert_poison_is_isolated(kind)
+
+def undeclared():
+    assert_poison_is_isolated('other')
+
+EXTRA = ExtraProof('poison', {wrapper}(configured, 'channel'))
+"""
+    calls = list(proof_calls("adopter.py", source))
+    assert [(call.proof, call.line) for call in calls] == [("assert_poison_is_isolated", 10)]
+
+
+@pytest.mark.parametrize(
+    "wrapper",
+    [
+        "from another_library import partial",
+        "def partial(*args): return args",
+        "from functools import partial\npartial = another_callable",
+    ],
+)
+def test_an_unrecognized_or_rebound_partial_cannot_hide_a_proof(wrapper: str) -> None:
+    source = f"""
+{wrapper}
+from pytest_obligation.contract import ExtraProof
+from pytest_obligation.poison import assert_poison_is_isolated
+
+def configured(kind):
+    assert_poison_is_isolated(kind)
+
+EXTRA = ExtraProof('poison', partial(configured, 'channel'))
+"""
+    assert [call.proof for call in proof_calls("adopter.py", source)] == ["assert_poison_is_isolated"]
+
+
+@pytest.mark.parametrize(
+    "shadow",
+    [
+        "def configure(partial):\n    return ExtraProof('x', partial(configured))",
+        "def partial(*args): return args",
+        "from unrelated import partial",
+    ],
+)
+def test_shadowed_partial_is_not_a_declaration_escape(shadow: str) -> None:
+    source = f"""
+from functools import partial
+from pytest_obligation.contract import ExtraProof
+from pytest_obligation.poison import assert_poison_is_isolated
+
+def configured():
+    assert_poison_is_isolated(history)
+
+{shadow}
+EXTRA = ExtraProof('x', partial(configured))
+"""
+    assert [call.proof for call in proof_calls("adopter.py", source)] == ["assert_poison_is_isolated"]
+
+
+def test_partial_lambda_and_nested_binding_are_recognized() -> None:
+    source = """
+from functools import partial
+from pytest_obligation.contract import ExtraProof
+from pytest_obligation.poison import assert_poison_is_isolated
+EXTRA = ExtraProof('x', partial(partial(lambda h: assert_poison_is_isolated(h), history)))
+"""
+    assert list(proof_calls("adopter.py", source)) == []
+
+
+def test_replaced_module_partial_does_not_hide_a_proof() -> None:
+    source = """
+import functools
+from pytest_obligation.contract import ExtraProof
+from pytest_obligation.poison import assert_poison_is_isolated
+functools.partial = another_callable
+
+def configured():
+    assert_poison_is_isolated(history)
+
+EXTRA = ExtraProof('x', functools.partial(configured))
+"""
+    assert [call.proof for call in proof_calls("adopter.py", source)] == ["assert_poison_is_isolated"]
