@@ -431,11 +431,16 @@ def _body(binding: Callable[..., Any]) -> object:
     whose ``__call__`` runs its ``run``. Celery is recognised only when something
     already imported it, so the core stays framework-free.
     """
-    while isinstance(binding, functools.partial):
-        binding = binding.func
     body: object = binding
-    if callable(body) and not isinstance(body, MethodType):
-        body = inspect.unwrap(body)
+    seen: set[int] = set()
+    while callable(body) and not isinstance(body, MethodType):
+        if id(body) in seen:
+            raise ValueError("cycle in wrapped binding")
+        seen.add(id(body))
+        unwrapped = body.func if isinstance(body, functools.partial) else inspect.unwrap(body)
+        if unwrapped is body:
+            break
+        body = unwrapped
     celery_task = sys.modules.get("celery.app.task")
     if celery_task is not None and not inspect.isfunction(body) and not isinstance(body, MethodType):
         task_class: type[Any] = celery_task.Task

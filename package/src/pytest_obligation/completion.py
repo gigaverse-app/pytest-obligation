@@ -7,7 +7,7 @@ bounds describe the supplied scheduler, not a production latency SLA.
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, FiniteFloat, model_validator
 
 from pytest_obligation.models import HarnessModel
 
@@ -19,15 +19,17 @@ class BoundedCompletion(HarnessModel, Generic[ObservationT]):
     expected: ObservationT
     advance: Callable[[float], object]
     recover: Callable[[], object]
-    within_seconds: float = Field(gt=0)
-    interval_seconds: float = Field(gt=0)
-    not_before_seconds: float = Field(default=0, ge=0)
+    within_seconds: FiniteFloat = Field(gt=0)
+    interval_seconds: FiniteFloat = Field(gt=0)
+    not_before_seconds: FiniteFloat = Field(default=0, ge=0)
     remaining: Callable[[], int] | None = None
 
     @model_validator(mode="after")
     def valid_bounds(self):
         if self.not_before_seconds > self.within_seconds or self.interval_seconds > self.within_seconds:
             raise ValueError("completion bounds are inconsistent")
+        if self.within_seconds / self.interval_seconds > 10000:
+            raise ValueError("completion proof exceeds 10000 clock steps")
         return self
 
 

@@ -88,10 +88,24 @@ def test_generated_completion_runs_and_requires_expected_outcome():
     case = next(row.values[0] for row in contract_cases(contract) if row.id.startswith("completion-"))
     case.run()
     with pytest.raises(ValidationError):
-        BoundedCompletion(
-            observe=lambda: None,
-            advance=lambda seconds: None,
-            recover=lambda: None,
-            within_seconds=1,
-            interval_seconds=1,
+        BoundedCompletion.model_validate(
+            dict(
+                observe=lambda: None,
+                advance=lambda seconds: None,
+                recover=lambda: None,
+                within_seconds=1,
+                interval_seconds=1,
+            )
         )
+
+
+def test_decorated_partial_keeps_binding_annotations():
+    from functools import partial, wraps
+
+    from pytest_obligation.binding import callable_code
+
+    @wraps(partial(completed_in_time))
+    def bound():
+        return completed_in_time()
+
+    assert callable_code(bound) is completed_in_time.__code__
