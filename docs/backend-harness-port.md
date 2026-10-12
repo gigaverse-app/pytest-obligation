@@ -203,7 +203,10 @@ original harness directory. It recovered these additional owners:
 - Index verdicts reuse the SQL masking that lock-order observation already
   trusted. A column mentioned only inside escaped strings, dollar quotes,
   comments or a different quoted identifier cannot count as an index constraint.
-  Six negative controls failed before the fix; all 73 plan controls pass after it.
+  Six negative controls failed before the fix. Review reproduced two more
+  failures with numbered dollar tags and doubled quotes inside identifiers.
+  The repaired reader passes all 84 plan controls, including a real-key-positive
+  variant of every text counterexample.
 
 The SQL reader lives under `integrations._internal` and imports no framework or
 driver; public plan and lock-order interfaces remain in their existing modules.

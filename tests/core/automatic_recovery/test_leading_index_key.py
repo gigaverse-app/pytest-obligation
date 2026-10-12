@@ -1,5 +1,7 @@
 """A later B-tree key must not masquerade as a bounded scheduled selection."""
 
+from contextlib import nullcontext
+
 import pytest
 
 from pytest_obligation.integrations.postgres_plans import assert_plan_is_index_served
@@ -75,13 +77,20 @@ def test_valid_catalog_shapes(keys: list[str], condition: str, predicate: str | 
         r"(state = E'escaped\' campaign_id = 1')",
         "(state = $$campaign_id = 1$$)",
         "(state = $body$campaign_id = 1$body$)",
+        "(state = $tag1$campaign_id = 1$tag1$)",
+        '("campaign_id"" suffix" = 1)',
         '("other campaign_id" = 1)',
         "(state = 'UNKNOWN') /* campaign_id = 1 */",
         "(state = 'UNKNOWN') -- campaign_id = 1",
     ],
 )
-def test_a_column_named_only_in_sql_text_does_not_constrain_the_leading_key(condition: str) -> None:
-    with pytest.raises(AssertionError, match="leading key column 'campaign_id'"):
+@pytest.mark.parametrize("constrain_key", [False, True])
+def test_a_column_named_only_in_sql_text_does_not_constrain_the_leading_key(
+    condition: str, constrain_key: bool
+) -> None:
+    if constrain_key:
+        condition += "\n AND campaign_id = 7"
+    with nullcontext() if constrain_key else pytest.raises(AssertionError, match="leading key column 'campaign_id'"):
         assert_plan_is_index_served(
             name="literal",
             table="work",

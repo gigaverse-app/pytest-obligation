@@ -6,8 +6,8 @@ It is a bounded lexical reader, not a PostgreSQL parser or a query validator.
 
 import re
 
-_DOLLAR_TAG = re.compile(r"\$[A-Za-z_]*\$")
-_NAME = re.compile(r'"([^"]+)"|(\w+)')
+_DOLLAR_TAG = re.compile(r"\$(?:[^\W\d]\w*)?\$")
+_NAME = re.compile(r'"((?:[^"]|"")*)"|(\w+)')
 
 
 def blank_literals_and_comments(sql: str) -> str:
@@ -50,8 +50,16 @@ def blank_literals_and_comments(sql: str) -> str:
                 else:
                     end += 1
         elif sql[index] == '"':
-            closing = sql.find('"', index + 1)
-            index = len(sql) if closing < 0 else closing + 1
+            # Doubled quotes belong to this one identifier, not two names.
+            index += 1
+            while index < len(sql):
+                if sql.startswith('""', index):
+                    index += 2
+                elif sql[index] == '"':
+                    index += 1
+                    break
+                else:
+                    index += 1
             continue
         elif tag := _DOLLAR_TAG.match(sql, index):
             closing = sql.find(tag.group(), tag.end())
@@ -79,6 +87,7 @@ def bare_identifiers(sql: str) -> str:
         quoted, word = match.group(1), match.group(2)
         if word is not None:
             return word
+        quoted = quoted.replace('""', '"')
         return quoted if quoted.isidentifier() else " " * len(match.group(0))
 
     return _NAME.sub(bare, blank_literals_and_comments(sql))
