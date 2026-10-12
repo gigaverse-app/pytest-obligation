@@ -51,3 +51,19 @@ stuck in Python cannot leave row locks blocking test teardown. The shared helper
 also backs Due's work-table histories. Both psycopg drivers are exercised in CI.
 A connection setup failure is reported by the proof, rather than escaping as an
 unobserved thread exception.
+
+## Database visibility scopes without application models
+
+`pytest_obligation.integrations.django.transactions.transaction_in_progress()`
+holds an independent PostgreSQL transaction with an assigned xid while its body
+runs, then closes that connection on success or failure. The caller's connection
+and transaction ownership are unchanged. This reproduces old snapshot horizons
+that can make newly rebuilt indexes temporarily unusable in concurrent CI.
+It defines no Django models and imports no application registry.
+
+Due re-exports the same helper from its existing conformance database module;
+applications that only need the transaction scope should import it here directly.
+`worker_connections` separately owns bounded worker-thread connections, and
+`lock_order` owns the shared per-process lock-order ledger. Import those public
+owners instead of retaining private copies: two recorders with separate ledgers
+cannot detect ordering cycles across their callers.

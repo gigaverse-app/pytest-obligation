@@ -236,3 +236,13 @@ root regressions require committed histories to clean up their own rows. Exact
 edge aliases and an explicit fixed routing scope let that adopter expose precise
 lifecycle findings without disabling the proof. See the [adopter capability
 matrix](adopter-capabilities.md#integration-of-the-upstream-parity-changes-57).
+
+A coordinated consumer audit then found copies that had already been ported but
+were still used in BE: its worker connection scope, lock-order recorder and Beat
+driver. BE consumers now use the canonical public connection and lock-order
+owners (including one shared ledger); its Beat adapter only supplies the BE
+Celery application. The older-transaction visibility helper was promoted from
+Due's model-defining conformance module into the model-free Django transaction
+module here, with real-connection success/failure cleanup controls. Due retains
+an import alias for its existing callers. This distinguishes a missing upstream
+capability from incomplete consumer consolidation; both need to be closed.
