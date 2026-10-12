@@ -27,6 +27,7 @@ from pytest_obligation.contract import (
     scheduled_selection_cases,
     scheduled_selection_suite,
 )
+from pytest_obligation.integrations.django.owed_cases import retries_are_bounded
 from pytest_obligation.integrations.django.references import reference_scheduled_selection_queryset
 from pytest_obligation.references.in_memory import reference_derivation_binding
 
@@ -145,3 +146,17 @@ def test_a_hand_written_test_gets_the_hosts_database_marks() -> None:
 
     (mark,) = findings.pytestmark  # type: ignore[attr-defined]
     assert (mark.name, mark.kwargs) == ("django_db", {"transaction": True, "serialized_rollback": True})
+
+
+def test_only_a_bounded_retry_claim_ends_a_failing_owed_row_at_its_budget() -> None:
+    """A claimed persistent_retry proves the failing row stays owed, so owed-row cases must not expect it to end."""
+
+    def claiming_j(**binding: Any) -> ObligationContract:
+        return ObligationContract(
+            name="self-test retry",
+            profiles={**{profile: NotApplicable(_WHY) for profile in Profile}, Profile.J: Claim()},
+            **binding,
+        )
+
+    assert retries_are_bounded(claiming_j(retry=_annotated_never_built))
+    assert not retries_are_bounded(claiming_j(persistent_retry=_annotated_never_built))

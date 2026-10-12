@@ -141,8 +141,11 @@ from pytest_obligation.profiles.harmless_replay import (
 from pytest_obligation.profiles.indivisible_admission import AdmissionAtomicity, AdmissionPublication
 from pytest_obligation.profiles.job_retry_limits import (
     BOUNDED_RETRY_PROOFS,
+    PERSISTENT_RETRY_PROOFS,
     BoundedRetry,
+    PersistentRetry,
     assert_bounded_retry_contract,
+    assert_persistent_retry_contract,
 )
 
 __all__ = [
@@ -240,9 +243,12 @@ __all__ = [
     "assert_state_derived_contract",
     # Execution safety.
     "BOUNDED_RETRY_PROOFS",
+    "PERSISTENT_RETRY_PROOFS",
     "REPLAY_SAFETY_PROOFS",
     "BoundedRetry",
+    "PersistentRetry",
     "ReplaySafeEffect",
     "assert_bounded_retry_contract",
+    "assert_persistent_retry_contract",
     "assert_replay_safety_contract",
 ]

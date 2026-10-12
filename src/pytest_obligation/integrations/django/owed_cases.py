@@ -60,9 +60,10 @@ def _owed_row_runner(
 
 
 def retries_are_bounded(contract: ObligationContract) -> bool:
-    """Only a gapless J claim proves persistently failing work ends at its budget."""
+    """Only a gapless J claim over a bounded ``retry`` proves persistently failing work ends at its budget."""
     disposition = contract.profiles[Profile.J]
-    return isinstance(disposition, Claim) and not disposition.gaps
+    # A claimed persistent_retry proves the opposite: the failing row never ends.
+    return isinstance(disposition, Claim) and not disposition.gaps and contract.retry is not None
 
 
 def _owed_row_cases(contract: ObligationContract) -> list[Any]:

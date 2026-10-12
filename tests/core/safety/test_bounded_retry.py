@@ -1,16 +1,20 @@
-"""The generic bounded-retry proof, exercised against lifecycle mutations."""
+"""The generic retry-lifecycle proofs (bounded and persistent), exercised against lifecycle mutations."""
 
 import pytest
 
 from pytest_obligation.profiles.job_retry_limits import (
     assert_bounded_retry_contract,
+    assert_persistent_failure_stays_owed,
+    assert_persistent_retry_contract,
     assert_retry_runner_is_production_bound,
     assert_retryable_failures_reach_terminal_at_the_bound,
     assert_terminal_retry_is_a_no_op,
 )
 from pytest_obligation.references.in_memory import (
+    InMemoryPersistentLifecycle,
     InMemoryRetryLifecycle,
     reference_bounded_retry_binding,
+    reference_persistent_retry_binding,
 )
 
 
@@ -168,3 +172,45 @@ def test_terminal_attempt_is_detected_even_when_the_state_observation_is_narrow(
 
     with pytest.raises(AssertionError, match="terminal retry recorded another failure attempt"):
         assert_terminal_retry_is_a_no_op(reference_bounded_retry_binding(lifecycle, observe=observe_state))
+
+
+def test_the_conforming_persistent_lifecycle_passes() -> None:
+    assert_persistent_retry_contract(reference_persistent_retry_binding())
+
+
+def test_an_unbounded_lifecycle_that_gives_up_fails_stays_owed() -> None:
+    # The bounded reference exhausts after three executions: unbounded work must never do that.
+    with pytest.raises(AssertionError, match="became terminal after 3"):
+        assert_persistent_failure_stays_owed(reference_persistent_retry_binding(InMemoryRetryLifecycle()))
+
+
+def test_an_unbounded_lifecycle_that_retries_without_waiting_is_a_hot_loop() -> None:
+    class _NoWait(InMemoryPersistentLifecycle):
+        def run_once(self, operation_id: int) -> None:
+            row = self.rows[operation_id]
+            row.executions += 1  # failed, and due again at once
+
+    with pytest.raises(AssertionError, match="hot loop"):
+        assert_persistent_failure_stays_owed(reference_persistent_retry_binding(_NoWait()))
+    # A policy with no retry delay declares waits=False and is accepted.
+    assert_persistent_failure_stays_owed(reference_persistent_retry_binding(_NoWait(), waits=False))
+
+
+def test_an_unbounded_lifecycle_that_loses_the_obligation_fails_stays_owed() -> None:
+    class _Forgets(InMemoryPersistentLifecycle):
+        def run_once(self, operation_id: int) -> None:
+            row = self.rows[operation_id]
+            row.executions += 1
+            row.state = "LOST"  # neither terminal nor ever due again
+
+    with pytest.raises(AssertionError, match="never became due again"):
+        assert_persistent_failure_stays_owed(reference_persistent_retry_binding(_Forgets()))
+
+
+def test_a_retry_that_never_reaches_the_failing_dependency_fails_stays_owed() -> None:
+    class _SkipsDependency(InMemoryPersistentLifecycle):
+        def run_once(self, operation_id: int) -> None:
+            self.rows[operation_id].state = "WAITING"
+
+    with pytest.raises(AssertionError, match="recorded 0 new attempts"):
+        assert_persistent_failure_stays_owed(reference_persistent_retry_binding(_SkipsDependency()))

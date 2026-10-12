@@ -223,7 +223,9 @@ from pytest_obligation.profiles.harmless_replay import (
 from pytest_obligation.profiles.indivisible_admission import ADMISSION_PROOFS, AdmissionAtomicity
 from pytest_obligation.profiles.job_retry_limits import (
     BOUNDED_RETRY_PROOFS,
+    PERSISTENT_RETRY_PROOFS,
     BoundedRetry,
+    PersistentRetry,
 )
 
 
@@ -406,6 +408,7 @@ def _adopter_annotation_defect(owner: str, binding: Callable[..., Any]) -> str |
 #: One factory per independent effect; named bindings reuse the same profile engine.
 ReplayBinding: TypeAlias = Binding[ReplaySafeEffect]
 RetryBinding: TypeAlias = Binding[BoundedRetry]
+PersistentRetryBinding: TypeAlias = Binding[PersistentRetry]
 
 
 class SafetyContract(HarnessModel):
@@ -416,6 +419,7 @@ class SafetyContract(HarnessModel):
     adoption: Adoption = Adoption.NEW_FEATURE
     replay: ReplayBinding | Mapping[str, ReplayBinding] | None = None
     retry: RetryBinding | Mapping[str, RetryBinding] | None = None
+    persistent_retry: PersistentRetryBinding | Mapping[str, PersistentRetryBinding] | None = None
     fixtures: tuple[str, ...] = ()
     transactional: bool = False
 
@@ -476,7 +480,7 @@ _PROFILE_BINDINGS: dict[Profile, tuple[str, ...]] = {
     Profile.G: ("eligibility",),
     Profile.H: ("replay",),
     Profile.I: ("admission",),
-    Profile.J: ("retry",),
+    Profile.J: ("retry", "persistent_retry"),
 }
 
 #: The proofs each binding field is measured by. Each list opens with the
@@ -500,6 +504,7 @@ _BINDING_PROOFS: dict[str, tuple[Callable[[Any], None], ...]] = {
     "admission": ADMISSION_PROOFS,
     "replay": REPLAY_SAFETY_PROOFS,
     "retry": BOUNDED_RETRY_PROOFS,
+    "persistent_retry": PERSISTENT_RETRY_PROOFS,
     "derivation": (assert_derivation_bindings_are_production_bound, *STATE_DERIVED_PROOFS),
 }
 
@@ -601,6 +606,8 @@ class ObligationContract(HarnessModel):
     replay: ReplayBinding | Mapping[str, ReplayBinding] | None = None
     #: J: drive transient failures until the production retry budget is exhausted.
     retry: RetryBinding | Mapping[str, RetryBinding] | None = None
+    #: J, unbounded: drive persistent transient failures and require the obligation to stay owed.
+    persistent_retry: PersistentRetryBinding | Mapping[str, PersistentRetryBinding] | None = None
     #: I: standalone commands interrupted after partial product and obligation writes.
     admission: Mapping[str, Binding[AdmissionAtomicity]] = Field(default_factory=dict)
     #: Independent E-family assessments. Unbound, undecided families generate strict XFAILs.
@@ -826,6 +833,13 @@ def _profile_design_errors(contract: ObligationContract | SafetyContract, scope:
             f"no disposition for profile(s) {', '.join(p.name for p in missing)}. "
             f"Silence is not a disposition — claim it, decline it with a reason, "
             f"mark it not applicable, or record it as a known gap"
+        )
+
+    # One lifecycle either ends at a budget or keeps its obligation until success.
+    if contract.retry and contract.persistent_retry:
+        errors.append(
+            "profile J binds both retry (a bounded execution budget) and persistent_retry (no bound); "
+            "one lifecycle has exactly one of them"
         )
 
     for profile in scope:

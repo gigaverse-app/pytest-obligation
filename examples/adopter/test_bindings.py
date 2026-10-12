@@ -28,6 +28,7 @@ from pytest_obligation import (
     ExtraProof,
     NotApplicable,
     ObligationContract,
+    PersistentRetry,
     Profile,
     ReplaySafeEffect,
 )
@@ -38,6 +39,7 @@ from pytest_obligation.interleavings import (
     EvidenceExpectation,
     EvidenceRetry,
     EvidenceSession,
+    Fault,
     InFlightConvergence,
     InFlightSession,
     Intent,
@@ -325,6 +327,35 @@ def replay(run: Runner = inline) -> Iterator[ReplaySafeEffect]:
         )
 
 
+@contextmanager
+def unavailable_provider(run: Runner = inline) -> Iterator[PersistentRetry]:
+    # ARRANGE: one approved publication whose remote catalog refuses every write.
+    # REAL PRODUCTION: Catalog.recover selects eligible work and executes it, keeping the SQL owner on timeout.
+    # EXTERNAL SEAM: ProviderControl refuses each publish with a timeout before applying it.
+    # OBSERVE: provider publish calls per identity, and whether the SQL obligation is still retained.
+    with application() as state:
+        catalog, provider = state.catalog, state.provider
+        write = catalog.write
+
+        def refusing(identity: int, value: str) -> None:
+            provider.arm("publish", Fault.REFUSE)
+            write(identity, value)
+
+        catalog.write = refusing
+        yield PersistentRetry(
+            name="catalog reconciliation under a provider outage",
+            make_failing=lambda: catalog.admit("red"),
+            due_work=catalog.eligible,
+            run_once=lambda identity: run(catalog.recover),
+            advance_to_due=lambda identity: None,
+            is_terminal=lambda identity: identity not in catalog.owed(),
+            failure_attempt_count=lambda identity: provider.calls[("publish", str(identity))],
+            observe=catalog.reserved,
+            # Recovery is an explicit tick with no backoff: the next tick is the retry.
+            waits=False,
+        )
+
+
 def recovery_failures(*, stop: bool = False) -> None:
     # ARRANGE: two approved SQL obligations; the older one reaches the failing provider first.
     # REAL PRODUCTION: Catalog.recover selects and executes work, preserving SQL intent on failure.
@@ -383,7 +414,8 @@ def catalog_contract(name: str, run: Runner = inline, *, fixtures: tuple[str, ..
                 Profile.G: Claim(),
                 Profile.H: Claim(),
                 Profile.I: Claim(),
-                Profile.J: NotApplicable("Reconciliation has no retry limit; it retains intent until convergence."),
+                # No retry limit: a provider outage must keep the publication owed until it converges.
+                Profile.J: Claim(),
             },
             extras=(
                 ExtraProof(name="recovery-poison", run=recovery_failures),
@@ -391,6 +423,7 @@ def catalog_contract(name: str, run: Runner = inline, *, fixtures: tuple[str, ..
             ),
             eligibility=partial(gate, run),
             replay=partial(replay, run),
+            persistent_retry=partial(unavailable_provider, run),
             admission={"publish": admission},
             in_flight={
                 "catalog retirement": InFlightConvergence(
