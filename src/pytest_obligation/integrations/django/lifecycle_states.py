@@ -226,6 +226,17 @@ def _constrains_only(where: WhereNode, model: type[Model], field_name: str) -> b
     )
 
 
+def lifecycle_paths(selection: QuerySet[Any], fields: tuple[str, ...], *, name: str) -> dict[str, StatePath]:
+    """Resolve the declared state paths and require the production selection to compare each one."""
+    paths = {path: resolve_state_path(selection.model, path) for path in fields}
+    for state in paths.values():
+        assert state.field.name in filtered_fields(selection.query.where, state.model), (
+            f"{name}: the production selection does not filter on {state.model.__name__}.{state.field.name}, "
+            f"so {state.path!r} is not a state this selection decides on"
+        )
+    return paths
+
+
 def _admitted_values(where: WhereNode, model: type[Model], field_name: str, choices: set[str]) -> set[str] | None:
     """
     Values of ``field_name`` the predicate can admit, or ``None`` when it does not constrain them.
@@ -262,19 +273,6 @@ def _admitted_values(where: WhereNode, model: type[Model], field_name: str, choi
     if admitted is None or not _constrains_only(where, model, field_name):
         return None
     return choices - admitted
-
-
-def _state_values(model: type[Model], state_field: str) -> set[str]:
-    state = resolve_state_path(model, state_field)
-    assert not state.field.is_relation, (
-        f"{state.model._meta.label}.{state.field.name} is a relation, not a lifecycle field"
-    )
-    choices = state.field.flatchoices
-    assert choices, (
-        f"{state.model._meta.label}.{state.field.name} declares no choices, so the harness cannot enumerate its "
-        f"states from production. Name the field whose choices are the lifecycle"
-    )
-    return {str(value) for value, _label in choices}
 
 
 def _exclusions(sweep: DueWorkSweep, production_states: dict[str, set[str]]) -> dict[str, dict[str, str]]:
@@ -326,14 +324,8 @@ def assert_every_lifecycle_state_is_declared(sweep: DueWorkSweep) -> None:
     lifecycle = _lifecycle(sweep)
     selection = _queryset(sweep)
     model = selection.model
-    production_states: dict[str, set[str]] = {}
-    for name in lifecycle.state_fields:
-        state = resolve_state_path(model, name)
-        assert state.field.name in filtered_fields(selection.query.where, state.model), (
-            f"{sweep.name}: the production selection does not filter on {state.model.__name__}.{state.field.name}, "
-            f"so it is not the lifecycle this sweep recovers. Declare the field the selection compares"
-        )
-        production_states[name] = _state_values(model, name)
+    paths = lifecycle_paths(selection, lifecycle.state_fields, name=sweep.name)
+    production_states = {name: set(state.choices) for name, state in paths.items()}
 
     exclusions = _exclusions(sweep, production_states)
     thin = sorted(
@@ -349,8 +341,8 @@ def assert_every_lifecycle_state_is_declared(sweep: DueWorkSweep) -> None:
     admitted = {
         name: _admitted_values(
             selection.query.where,
-            resolve_state_path(model, name).model,
-            resolve_state_path(model, name).field.name,
+            paths[name].model,
+            paths[name].field.name,
             production_states[name],
         )
         for name in lifecycle.state_fields
@@ -664,6 +656,14 @@ class StatePath:
         for relation in self.relations:
             row = getattr(row, relation)
         return row
+
+    @property
+    def choices(self) -> tuple[str, ...]:
+        """Production-declared states, refusing a relation or an unenumerable field."""
+        assert not self.field.is_relation, f"{self.path} is a relation, not a lifecycle field"
+        choices = tuple(str(value) for value, _label in self.field.flatchoices)
+        assert choices, f"{self.model._meta.label}.{self.field.name} declares no choices"
+        return choices
 
 
 def resolve_state_path(model: type[Model], path: str) -> StatePath:

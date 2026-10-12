@@ -197,6 +197,9 @@ original harness directory. It recovered these additional owners:
 - Owed-row proofs consume `OwedRows` and `EdgeFamily` directly; the shared
   selected-row verdict accepts `RowExecution`. `EdgeFamily.target` rejects a
   mismatched model before writing an edge. See the [direct-call migration](selection-completeness.md#direct-proof-call-migration).
+- Lifecycle coverage and selection completeness share `lifecycle_paths` and
+  `StatePath.choices`, carrying over the earlier backend state-resolution
+  consolidation as well as its rejection of mismatched or unenumerable fields.
 - Index verdicts reuse the SQL masking that lock-order observation already
   trusted. A column mentioned only inside escaped strings, dollar quotes,
   comments or a different quoted identifier cannot count as an index constraint.
