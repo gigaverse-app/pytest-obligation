@@ -480,9 +480,10 @@ def _served_to_completion(name: str, selection: Callable[[], Iterable[Any]], row
         f"would measure that failure, not its edge value; fix the binding's fakes or the example"
     )
     assert identity not in _selected(selection, rows.identity_of), (
-        f"{name}: a valid owed row is still selected after the production step and its handoffs ran. Either "
-        f"`execute` is not what serves the row, or the sweep re-reads served rows: declare "
-        f"`polling=Polling(<why a served row stays selected>)` on the selection"
+        f"{name}: a valid owed row is still selected after the production step and its handoffs ran. Most "
+        f"often `execute` is not what serves the row, or the step forgets to settle it: fix that first. Only "
+        f"if the selection re-reads served rows by design (a sweep over long-lived active rows) declare "
+        f"`polling=Polling(<why a served row stays selected>)`, whose control then requires work on every tick"
     )
     return row
 
