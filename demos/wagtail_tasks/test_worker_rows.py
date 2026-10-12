@@ -97,8 +97,36 @@ READY_TASKS = ScheduledSelection(
     due_work=ready_selection,
     unscheduled_because="db_worker is a continuously polling process; this batch invocation uses its same query and loop.",
     owed_rows=worker_rows,
+    state_fields=("status",),
+    fixed_fields={
+        "backend_name": "This worker is configured for the default backend; routing to other backends has a different owner."
+    },
+    excluded_states={
+        "status:SUCCESSFUL": "The provider call completed; another execution would only replay the completed task.",
+        "status:FAILED": "django-tasks-db records terminal task failure; explicit resubmission owns another attempt.",
+    },
     owed_edges={"task": EdgeFamily(model=DBTaskResult)},
     gaps={
+        "assert_selection_is_complete[status:RUNNING]": (
+            "A task whose worker died remains RUNNING forever. The real task body can complete it, "
+            "but ready() never selects it at any recovery horizon and the backend schedules no reclaim."
+        ),
+        "assert_selection_is_complete[status:@blank]": (
+            "The database permits this exact status edge, but ready() skips it forever. "
+            "A delivered worker attempts to reconstruct the task and records FAILED instead."
+        ),
+        "assert_selection_is_complete[status:@whitespace]": (
+            "The database permits this exact status edge, but ready() skips it forever. "
+            "A delivered worker attempts to reconstruct the task and records FAILED instead."
+        ),
+        "assert_selection_is_complete[status:@max_length]": (
+            "The database permits this exact status edge, but ready() skips it forever. "
+            "A delivered worker attempts to reconstruct the task and records FAILED instead."
+        ),
+        "assert_selection_is_complete[status:@unknown_choice]": (
+            "The database permits this exact status edge, but ready() skips it forever. "
+            "A delivered worker attempts to reconstruct the task and records FAILED instead."
+        ),
         "assert_database_legal_owed_row_is_handled[task-queue_name-blank]": (
             "The all-queues worker claims a row with an empty queue name before InvalidTask escapes. "
             "The row leaves ready() without this light contract proving a terminal state or retry budget."

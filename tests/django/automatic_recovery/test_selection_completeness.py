@@ -69,6 +69,7 @@ def _reference(
     execute: Callable[[Any], Any] = schedule_batch,
     excluded_states: Mapping[str, str] | None = None,
     state_fields: tuple[str, ...] = ("state", "batch__status"),
+    fixed_fields: Mapping[str, str] | None = None,
 ) -> Callable[[], AbstractContextManager[CompletenessBinding]]:
     @contextmanager
     def enter() -> Iterator[CompletenessBinding]:
@@ -80,6 +81,7 @@ def _reference(
             identity_of=batch_of,
             state_fields=state_fields,
             excluded_states=excluded_states or {},
+            fixed_fields=fixed_fields or {},
         )
 
     return enter
@@ -257,3 +259,69 @@ def test_a_handoff_sql_failure_does_not_abort_the_proofs_transaction() -> None:
             celery_handoffs(sql_failure.delay)
         # The failed delivery is evidence, not a broken connection hiding the final observation.
         assert Batch.objects.count() == 0
+
+
+@pytest.mark.parametrize("declared_gap", [False, True])
+def test_committing_proofs_clean_up_examples_even_when_the_verdict_fails(declared_gap: bool) -> None:
+    existing = make_ready_item()
+    existing.state = BatchItem.State.DONE
+    existing.save(update_fields=["state"])
+    if declared_gap:
+        with pytest.raises(SelectionIncomplete):
+            assert_declared_gap_still_fails(
+                _reference(items_awaiting_dispatch, execute=schedule_completing_batch),
+                gap_key(FINISHED_BUT_RUNNING),
+                commits=True,
+            )
+    else:
+        assert_selection_is_complete(_reference(items_awaiting_dispatch), commits=True)
+    # Retain pre-existing application rows; no proof-created selected row may
+    # occupy the next example's recovery page, even after a failing verdict.
+    assert list(BatchItem.objects.values_list("pk", flat=True)) == [existing.pk]
+
+
+@pytest.mark.parametrize("kind", ["blank", "whitespace", "max_length", "unknown_choice"])
+def test_selection_gaps_can_name_exact_database_legal_state_edges(kind: str) -> None:
+    from pytest_obligation.integrations.django.edge_values import database_legal_edges
+    from pytest_obligation.integrations.django.selection_completeness import parse_combination
+
+    state = resolve_state_path(BatchItem, "state")
+    edge = next(edge for edge in database_legal_edges(state.field) if edge.kind == kind)
+    parsed = parse_combination(f"state:@{kind}", {"state": state})
+    assert parsed.assignment() == {"state": edge.value}
+    assert isinstance(edge.value, str)
+    assert parsed.matches({"state": edge.value})
+    assert not parsed.matches({"state": BatchItem.State.READY})
+
+
+def test_an_unknown_edge_alias_is_not_a_blanket_selection_gap() -> None:
+    from pytest_obligation.integrations.django.selection_completeness import parse_combination
+
+    state = resolve_state_path(BatchItem, "state")
+    with pytest.raises(AssertionError, match="not values"):
+        parse_combination("state:@anything", {"state": state})
+
+
+@pytest.mark.parametrize(
+    "field, reason",
+    [
+        ("missing", "A different worker owns this routing key."),
+        ("state", "A different worker owns this lifecycle state."),
+        ("attempts", ""),
+    ],
+)
+def test_fixed_selection_fields_require_a_compared_non_state_column_and_reason(field: str, reason: str) -> None:
+    with pytest.raises(AssertionError, match="fixed_fields"):
+        assert_selection_is_complete(_reference(items_awaiting_dispatch, fixed_fields={field: reason}))
+
+
+def test_fixing_a_compared_field_does_not_hide_a_missing_lifecycle_branch() -> None:
+    with pytest.raises(SelectionIncomplete, match="batch__status"):
+        assert_selection_is_complete(
+            _reference(
+                items_of_running_batches,
+                fixed_fields={
+                    "attempts": "This scenario starts with a newly admitted item; retry-budget boundaries have independent controls."
+                },
+            )
+        )
