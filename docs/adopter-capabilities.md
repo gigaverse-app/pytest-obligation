@@ -106,6 +106,8 @@ isolating cancellation as an ordinary failure.
 The whitespace catalog also exposes django-tasks-db’s unconfigured-queue failure: a whitespace-only queue is selected, `InvalidTask` escapes after the claim, and error reporting abandons the healthy tail. These two cases remain separate strict gaps alongside the blank and maximum-length queue findings. The upstream demo CI reproduced all three new whitespace findings before the declarations were added; no production predicate, worker or oracle was changed.
 
 
+
+
 ## Independent replay outcomes
 
 Every shipped replay binding declares `expected`, including Procrastinate indexing,

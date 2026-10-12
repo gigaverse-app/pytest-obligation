@@ -43,7 +43,9 @@ The generated catalog covers:
 
 Profiles outside this application's scope and the two other E families have
 explicit reasons in its contract. For example, the example has no periodic
-scheduler, leases, pruning policy or retry limit. It does not claim those guarantees.
+scheduler, leases or pruning policy. It does not claim those guarantees. It has
+no retry limit either, and claims J for exactly that: a provider that refuses
+every write leaves the publication owed and selected by reconciliation.
 
 ## Optional exploration and reproducible failures
 

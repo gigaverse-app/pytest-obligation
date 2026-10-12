@@ -117,7 +117,7 @@ pytest_obligation/
     gated_execution.py      profile G (ExecutionGate)
     harmless_replay.py      profile H (ReplaySafeEffect)
     indivisible_admission.py profile I (AdmissionAtomicity)
-    job_retry_limits.py     profile J (BoundedRetry)
+    job_retry_limits.py     profile J (BoundedRetry, PersistentRetry)
     catalog.py             canonical names and independent E-family identities
     coverage.py            derived assessment and executed proof evidence
     reporting.py           optional pytest JSON reporting, including xdist merge

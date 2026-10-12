@@ -20,6 +20,13 @@ properties:
    leaves ordinary due selection; and
 4. invoking the runner once more cannot change terminal observable state or
    reach the failing dependency again.
+
+An obligation with no execution bound binds :class:`PersistentRetry` instead,
+and the same evidence proves the other half of the profile: a persistent
+transient failure keeps the obligation owed. Every execution reaches the
+failing dependency exactly once, the obligation never becomes terminal, it is
+not due again until its wait elapses (no hot loop), and it is due again
+afterwards (never lost).
 """
 
 from collections.abc import Callable, Iterable
@@ -37,13 +44,10 @@ def _identity(value: Any) -> Any:
     return value
 
 
-class BoundedRetry(HarnessModel):
+class RetryLifecycle(HarnessModel):
     """One production retry lifecycle under a persistent transient failure."""
 
     name: str
-
-    #: Total failing executions allowed, including the initial execution.
-    max_executions: int
 
     #: Arrange one due operation whose dependency will fail transiently.
     make_failing: Callable[[], Any]
@@ -80,12 +84,32 @@ class BoundedRetry(HarnessModel):
     #: row.pk`` and arrange a real row.
     identity_of: Callable[[Any], Any] = _identity
 
+
+class BoundedRetry(RetryLifecycle):
+    """A retry lifecycle whose production budget ends it at a declared number of executions."""
+
+    #: Total failing executions allowed, including the initial execution.
+    max_executions: int
+
     def model_post_init(self, _context: Any) -> None:
         if self.max_executions < 1:
             raise ValueError("BoundedRetry.max_executions must be at least one")
 
 
-def assert_retry_runner_is_production_bound(retry: BoundedRetry) -> None:
+#: Executions the persistent-failure proof drives: enough to see the obligation
+#: survive repeated failure and several waits, without claiming any bound.
+PERSISTENT_EXECUTIONS = 6
+
+
+class PersistentRetry(RetryLifecycle):
+    """A retry lifecycle with no execution bound: the obligation is kept until it succeeds."""
+
+    #: Whether a failed execution waits before it is due again (a positive retry
+    #: delay). True makes an immediately due retry a hot-loop failure.
+    waits: bool = True
+
+
+def assert_retry_runner_is_production_bound(retry: RetryLifecycle) -> None:
     """The failing execution reaches production rather than a test state machine."""
     assert_binding_reaches_production(
         adopter=retry.name,
@@ -96,7 +120,7 @@ def assert_retry_runner_is_production_bound(retry: BoundedRetry) -> None:
     )
 
 
-def assert_retry_selection_is_production_bound(retry: BoundedRetry) -> None:
+def assert_retry_selection_is_production_bound(retry: RetryLifecycle) -> None:
     """The due-work predicate forwards to production rather than test logic."""
     assert_binding_reaches_production(
         adopter=retry.name,
@@ -107,13 +131,13 @@ def assert_retry_selection_is_production_bound(retry: BoundedRetry) -> None:
     )
 
 
-def _is_due(retry: BoundedRetry, operation: Any) -> bool:
+def _is_due(retry: RetryLifecycle, operation: Any) -> bool:
     identity = retry.identity_of(operation)
     return any(retry.identity_of(selected) == identity for selected in retry.due_work())
 
 
 def _assert_one_failure_attempt(
-    retry: BoundedRetry,
+    retry: RetryLifecycle,
     operation: Any,
     *,
     before: int,
@@ -130,7 +154,7 @@ def _assert_one_failure_attempt(
     return after
 
 
-def _drive_to_terminal(retry: BoundedRetry) -> Any:
+def _fresh_failing(retry: RetryLifecycle) -> tuple[Any, int]:
     operation = retry.make_failing()
     assert _is_due(retry, operation), (
         f"{retry.name}: make_failing() did not create due work, so the retry runner cannot be exercised"
@@ -141,7 +165,25 @@ def _drive_to_terminal(retry: BoundedRetry) -> Any:
         f"{retry.name}: make_failing() created work with {attempts} recorded "
         f"failure attempt(s). The contract drives a fresh lifecycle from zero"
     )
+    return operation, attempts
 
+
+def _advance_after_failure(retry: RetryLifecycle, operation: Any, *, attempts: int, execution: int) -> None:
+    retry.advance_to_due(operation)
+    after_advance = retry.failure_attempt_count(operation)
+    assert after_advance == attempts, (
+        f"{retry.name}: advance_to_due changed the failure-attempt "
+        f"count ({attempts} -> {after_advance}). Fault injection may "
+        f"advance only the wait condition; it cannot manufacture an "
+        f"execution the production runner never performed"
+    )
+    assert _is_due(retry, operation), (
+        f"{retry.name}: retryable failure {execution} never became due again after its wait condition elapsed"
+    )
+
+
+def _drive_to_terminal(retry: BoundedRetry) -> Any:
+    operation, attempts = _fresh_failing(retry)
     for execution in range(1, retry.max_executions + 1):
         retry.run_once(operation)
         attempts = _assert_one_failure_attempt(
@@ -156,17 +198,7 @@ def _drive_to_terminal(retry: BoundedRetry) -> Any:
                 f"{execution} execution(s), before the declared "
                 f"{retry.max_executions}-execution bound"
             )
-            retry.advance_to_due(operation)
-            after_advance = retry.failure_attempt_count(operation)
-            assert after_advance == attempts, (
-                f"{retry.name}: advance_to_due changed the failure-attempt "
-                f"count ({attempts} -> {after_advance}). Fault injection may "
-                f"advance only the wait condition; it cannot manufacture an "
-                f"execution the production runner never performed"
-            )
-            assert _is_due(retry, operation), (
-                f"{retry.name}: retryable failure {execution} never became due again after its wait condition elapsed"
-            )
+            _advance_after_failure(retry, operation, attempts=attempts, execution=execution)
 
     assert retry.is_terminal(operation), (
         f"{retry.name}: work is still non-terminal after the declared {retry.max_executions}-execution retry bound"
@@ -216,4 +248,35 @@ BOUNDED_RETRY_PROOFS: tuple[Callable[[BoundedRetry], None], ...] = (
 def assert_bounded_retry_contract(retry: BoundedRetry) -> None:
     """Run the production-binding guard and bounded retry invariants."""
     for proof in BOUNDED_RETRY_PROOFS:
+        proof(retry)
+
+
+def assert_persistent_failure_stays_owed(retry: PersistentRetry) -> None:
+    """With no execution bound, a persistent transient failure keeps the obligation owed and pacing itself."""
+    operation, attempts = _fresh_failing(retry)
+    for execution in range(1, PERSISTENT_EXECUTIONS + 1):
+        retry.run_once(operation)
+        attempts = _assert_one_failure_attempt(retry, operation, before=attempts, execution=execution)
+        assert not retry.is_terminal(operation), (
+            f"{retry.name}: a persistently failing obligation became terminal after {execution} "
+            f"execution(s). With no execution bound it must stay owed until it succeeds"
+        )
+        if retry.waits:
+            assert not _is_due(retry, operation), (
+                f"{retry.name}: failure {execution} left the obligation due again immediately. "
+                f"A persistent failure would be retried in a hot loop instead of after its retry delay"
+            )
+        _advance_after_failure(retry, operation, attempts=attempts, execution=execution)
+
+
+PERSISTENT_RETRY_PROOFS: tuple[Callable[[PersistentRetry], None], ...] = (
+    assert_retry_selection_is_production_bound,
+    assert_retry_runner_is_production_bound,
+    assert_persistent_failure_stays_owed,
+)
+
+
+def assert_persistent_retry_contract(retry: PersistentRetry) -> None:
+    """Run the production-binding guard and the persistent-failure invariant."""
+    for proof in PERSISTENT_RETRY_PROOFS:
         proof(retry)

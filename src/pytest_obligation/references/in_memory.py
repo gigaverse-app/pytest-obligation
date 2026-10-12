@@ -38,7 +38,7 @@ from pytest_obligation.profiles.eventual_convergence import (
 )
 from pytest_obligation.profiles.fact_derived_obligations import StateDerived
 from pytest_obligation.profiles.harmless_replay import ReplaySafeEffect
-from pytest_obligation.profiles.job_retry_limits import BoundedRetry
+from pytest_obligation.profiles.job_retry_limits import BoundedRetry, PersistentRetry
 
 # --- Stand-in shared proofs ----------------------------------------------------
 
@@ -175,6 +175,35 @@ def reference_bounded_retry_binding(
         is_terminal=lifecycle.is_terminal,
         failure_attempt_count=lifecycle.failure_attempt_count,
         observe=observe if observe is not None else lifecycle.observe,
+    )
+
+
+class InMemoryPersistentLifecycle(InMemoryRetryLifecycle):
+    """A conforming lifecycle with no execution bound: every failure waits, then is due again."""
+
+    def run_once(self, operation_id: int) -> None:
+        row = self.rows[operation_id]
+        if row.state != "DUE":
+            return
+        row.executions += 1
+        row.state = "WAITING"
+
+
+def reference_persistent_retry_binding(
+    lifecycle: InMemoryRetryLifecycle | None = None, *, waits: bool = True
+) -> PersistentRetry:
+    """A persistent-retry binding over the conforming reference or one mutant."""
+    lifecycle = lifecycle if lifecycle is not None else InMemoryPersistentLifecycle()
+    return PersistentRetry(
+        name="in-memory persistent retry",
+        make_failing=lifecycle.make_failing,
+        due_work=lifecycle.due_work,
+        run_once=lifecycle.run_once,
+        advance_to_due=lifecycle.advance_to_due,
+        is_terminal=lifecycle.is_terminal,
+        failure_attempt_count=lifecycle.failure_attempt_count,
+        observe=lifecycle.observe,
+        waits=waits,
     )
 
 

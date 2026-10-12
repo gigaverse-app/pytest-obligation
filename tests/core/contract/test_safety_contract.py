@@ -18,6 +18,7 @@ from pytest_obligation.contract import (
 from pytest_obligation.host import Host
 from pytest_obligation.references.in_memory import (
     reference_bounded_retry_binding,
+    reference_persistent_retry_binding,
     reference_replay_safety_binding,
 )
 
@@ -37,6 +38,22 @@ def _annotated_replay():
     # EXTERNAL SEAM — none; this is the harness's in-memory oracle.
     # OBSERVE — the reference binding reads the complete operation state.
     return reference_replay_safety_binding()
+
+
+def _annotated_bounded_retry():
+    # ARRANGE — the reference binding builds a fresh in-memory failing operation.
+    # REAL PRODUCTION — this self-test delegates to the harness reference lifecycle.
+    # EXTERNAL SEAM — none; the reference counts its own failing executions.
+    # OBSERVE — the reference binding reads state and execution count.
+    return reference_bounded_retry_binding()
+
+
+def _annotated_persistent_retry():
+    # ARRANGE — the reference binding builds a fresh in-memory failing operation.
+    # REAL PRODUCTION — this self-test delegates to the harness reference lifecycle.
+    # EXTERNAL SEAM — none; the reference counts its own failing executions.
+    # OBSERVE — the reference binding reads state and execution count.
+    return reference_persistent_retry_binding()
 
 
 def _unannotated_replay():
@@ -186,6 +203,33 @@ def test_each_named_effect_gets_its_own_replay_proofs() -> None:
     assert {case.id.split("-")[1] for case in cases} == {"image", "document"}
     for case in cases:
         case.run()
+
+
+def test_an_unbounded_lifecycle_claims_retry_through_the_persistent_proof() -> None:
+    """Profile J has two halves: work with no budget must stay owed, and that claim generates its proof."""
+    contract = SafetyContract(
+        name="unbounded retry",
+        profiles=_dispositions(BOUNDED_RETRY=Claim()),
+        persistent_retry=_annotated_persistent_retry,
+    )
+    cases = [row.values[0] for row in safety_contract_cases(contract) if row.values[0].profile is Profile.J]
+    assert {case.id for case in cases} == {
+        "BOUNDED_RETRY-assert_retry_selection_is_production_bound",
+        "BOUNDED_RETRY-assert_retry_runner_is_production_bound",
+        "BOUNDED_RETRY-assert_persistent_failure_stays_owed",
+    }
+    for case in cases:
+        case.run()
+
+
+def test_one_lifecycle_cannot_bind_both_a_budget_and_no_budget() -> None:
+    with pytest.raises(ObligationContractDesignError, match="binds both retry .* and persistent_retry"):
+        SafetyContract(
+            name="contradictory retry",
+            profiles=_dispositions(BOUNDED_RETRY=Claim()),
+            retry=_annotated_bounded_retry,
+            persistent_retry=_annotated_persistent_retry,
+        )
 
 
 @pytest.mark.parametrize("named", [False, True])
