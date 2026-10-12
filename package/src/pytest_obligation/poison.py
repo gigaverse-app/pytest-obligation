@@ -232,13 +232,18 @@ def assert_poison_is_isolated(
             f"{name}: the poisoned identity is no longer owed after the tick. Isolation must leave a "
             f"failing identity selectable (or held with backoff), not drop, settle or retire it"
         ) from escaped
+    assert_poison_is_reported(name, escaped)
+    return escaped
+
+
+def assert_poison_is_reported(name: str, escaped: BaseException | None) -> None:
+    """Every tick that encounters poison must report it, including later polling ticks."""
     if not carries_poison(escaped):
         raise PoisonUnreported(
             f"{name}: the tick isolated the poisoned identity but reported nothing (it raised {escaped!r}). "
             f"A loop that logs and moves on reports success, so the failure is invisible to the task, "
             f"Sentry and the alerts; report the failures the tick isolated"
         ) from escaped
-    return escaped
 
 
 def _ends_with(error: BaseException | None, kind: type[BaseException]) -> bool:

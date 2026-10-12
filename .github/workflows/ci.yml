@@ -116,7 +116,7 @@ jobs:
           enable-cache: true
       # pytest-django gives each xdist worker its own test database.
       - run: uv sync --all-packages --locked --no-default-groups --extra django --extra celery --extra exploration --group xdist
-      - run: uv run --no-sync pytest package/tests/django --ds=tests.django.settings -n 4
+      - run: uv run --no-sync pytest package/tests/django examples/adopter/tests_django --ds=tests.django.settings -n 4
 
   # The same suite on psycopg2, which Django uses when psycopg 3 is not installed: pretix and many older
   # projects run on it, and the host's autocommit-write probe once assumed psycopg 3.
@@ -143,7 +143,7 @@ jobs:
           enable-cache: true
       - run: uv sync --all-packages --locked --no-default-groups --extra django --extra celery --extra exploration --group xdist
       - run: uv pip uninstall psycopg psycopg-binary && uv pip install psycopg2-binary
-      - run: uv run --no-sync pytest package/tests/django --ds=tests.django.settings -n 4
+      - run: uv run --no-sync pytest package/tests/django examples/adopter/tests_django --ds=tests.django.settings -n 4
 
   # Redis-backed queues, and Celery's real worker as a child process on a Redis broker.
   redis:
