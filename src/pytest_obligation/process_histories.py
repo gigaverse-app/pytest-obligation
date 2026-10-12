@@ -31,9 +31,9 @@ guesses where a program can die.
 
 A child that exits with status 0 is taken to have run normally; any other
 status is a death. Normal operation (``None``) must exit 0, and each death
-point must not. Omission of ``expected`` preserves convergence-only proofs; it
-does not establish application correctness. Application integrations can call
-``history.require_expected_outcome()`` to reject that weaker declaration. A
+point must not. Standalone proofs permit omission of ``expected`` for convergence-only checks.
+Generated contracts require it and reject a missing outcome even on known gaps.
+Integrations can also call ``history.require_expected_outcome()`` at declaration time. A
 callback receives the handle before recovery and must derive its answer from
 independent input, never from the observed result.
 
@@ -54,20 +54,19 @@ histories are labelled with the point's own name, deaths with ``died at``.
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
 from pytest_obligation.crash_histories import (
     Findings,
     HistoryRun,
-    _ExpectedOutcome,
     assert_declared_outcome,
     assert_findings_hold,
     assert_histories_converge,
     assert_normal_operation_repeats,
     assert_runs_match_table,
 )
-from pytest_obligation.models import HarnessModel
+from pytest_obligation.outcomes import ExpectedOutcome
 
 #: The child's environment: the point to fail at, and the marker recording that it did.
 FAULT_VARIABLE = "DUE_WORK_FAULT"
@@ -114,7 +113,7 @@ HandleT = TypeVar("HandleT")
 ObservationT = TypeVar("ObservationT")
 
 
-class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
+class ProcessHistory(ExpectedOutcome[HandleT, ObservationT]):
     """One production transition run in a child process, with the points where it may die."""
 
     name: str
@@ -134,10 +133,6 @@ class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
     #: again and recovering, until the handle's work is settled or a bound passes.
     recover: Callable[[HandleT], object]
 
-    #: Independent product oracle; None is a valid expected observation.
-    #: Omission proves convergence only, not correctness of the normal result.
-    expected: ObservationT | Callable[[HandleT], ObservationT] | _ExpectedOutcome = _ExpectedOutcome.UNSPECIFIED
-
     #: The named points the child's entry point knows how to die at.
     death_points: tuple[str, ...]
 
@@ -147,15 +142,10 @@ class ProcessHistory(HarnessModel, Generic[HandleT, ObservationT]):
     #: Optional: what the histories leave, checked in the same run as the verdict.
     findings: Findings | None = None
 
-    def require_expected_outcome(self) -> None:
-        """Application bindings can require correctness as well as convergence."""
-        if self.expected is _ExpectedOutcome.UNSPECIFIED:
-            raise ValueError(f"{self.name}: declare expected independently of observe to prove application correctness")
-
 
 def _run(history: ProcessHistory[Any, Any], point: str | None) -> HistoryRun:
     handle, status = history.run(point)
-    expected = history.expected(handle) if callable(history.expected) else history.expected
+    expected = history.expected_for(handle)
     midway = history.observe(handle)
     history.recover(handle)
     if point is None:

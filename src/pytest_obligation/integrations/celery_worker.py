@@ -134,6 +134,7 @@ def worker_history(
     send: Callable[[], HandleT],
     observe: Callable[[HandleT], ObservationT],
     initial: ObservationT,
+    expected: ObservationT | Callable[[HandleT], ObservationT],
     settled: Callable[[HandleT], bool],
     death_points: Sequence[str] = DEATH_POINTS,
     failure_points: Sequence[str] = FAILURE_POINTS,
@@ -176,6 +177,7 @@ def worker_history(
     return ProcessHistory(
         name=name,
         initial=initial,
+        expected=expected,
         run=run,
         observe=observe,
         recover=recover,

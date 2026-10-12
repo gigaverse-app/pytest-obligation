@@ -130,6 +130,7 @@ def place_order(*death_points: str) -> ProcessHistory[int, tuple[str | None, int
     return ProcessHistory(
         name="place order",
         initial=(None, 0),
+        expected=("SENT", 1),
         run=place_order_in_a_child_process,
         observe=observe,
         recover=restart,
