@@ -26,15 +26,15 @@ def test_provider(provider): pass
     assert repaired.returncode == 0, repaired.stdout + repaired.stderr
 
 
-@pytest.mark.parametrize("indirect", [False, True])
-def test_only_indirect_parameters_require_fixtures(tmp_path: Path, indirect: bool) -> None:
+@pytest.mark.parametrize("indirect", [False, True, ["provider"]])
+def test_only_indirect_parameters_require_fixtures(tmp_path: Path, indirect: bool | list[str]) -> None:
     (tmp_path / "test_parameters.py").write_text(f"""import pytest
 @pytest.mark.skip(reason="external provider lane")
 @pytest.mark.parametrize("provider", [1], indirect={indirect!r})
 def test_provider(provider): pass
 """)
     result = _run(tmp_path, "--due-work-check-fixtures")
-    assert (result.returncode != 0) == indirect, result.stdout + result.stderr
+    assert (result.returncode != 0) == bool(indirect), result.stdout + result.stderr
 
 
 def test_deselected_missing_fixture_does_not_fail_a_targeted_run(tmp_path: Path) -> None:

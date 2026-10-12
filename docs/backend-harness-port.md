@@ -211,3 +211,28 @@ original harness directory. It recovered these additional owners:
 The SQL reader lives under `integrations._internal` and imports no framework or
 driver; public plan and lock-order interfaces remain in their existing modules.
 This remains a lexical proof over captured plans, not an arbitrary SQL parser.
+
+## Third pass: real adopters and adjacent tooling
+
+After #57 and Due #22 merged, the comparison was repeated against backend
+`e2c88be1a`, including the nested implementation bodies and the surrounding
+session helpers. The inventory covers 86 implementation modules and 804
+module-level definitions; name matches were only an index into the behavioral
+review, not a claim of equivalence.
+
+| Remaining difference | Disposition |
+| --- | --- |
+| Fixture validation before skipped-test setup | Ported as `--due-work-check-fixtures`, with subprocess/xdist controls and adopter CI usage; backend can remove its local plugin. |
+| Native completion/route wrappers | Intentionally dropped by the owner; they were unused. Generic ORM lifecycle proofs remain. |
+| Old commit observer, broker/death helpers and selected-row helpers | Public `integrations.django.writes`, `crash_histories`, Celery handoff runner and `RowExecution` own the equivalent behavior. Driver-independent cursor handling and guarded binding scopes are stronger public behavior. |
+| Beat and ambient-universe checks | Public scheduled-source and host scope hooks own the generic proof; backend retains its actual schedule and tenant policy. |
+| Plan/index helper names | Public PostgreSQL catalog and lexical plan readers own the proof, including the SQL-literal fixes from #57. |
+| Source walkers, real-provider guards, wiring snapshots, migration round trips and optimized transactional flush | Backend-wide test infrastructure with application-specific classification, credentials, migration/deployment and isolation policies; these are not missing due-work library implementations. |
+
+Integration also exposed defects that a source comparison could not: committing
+selection histories used an artificial transaction and left initial/gap example
+rows behind. The real Wagtail worker now runs with its normal connection behavior;
+root regressions require committed histories to clean up their own rows. Exact
+edge aliases and an explicit fixed routing scope let that adopter expose precise
+lifecycle findings without disabling the proof. See the [adopter capability
+matrix](adopter-capabilities.md#integration-of-the-upstream-parity-changes-57).
