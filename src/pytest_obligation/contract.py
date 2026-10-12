@@ -160,6 +160,12 @@ from pytest_obligation.binding import (
 from pytest_obligation.coherence import (
     assert_automatic_recovery_consumes_derived_obligations,
 )
+from pytest_obligation.completion import (
+    BoundedCompletion,
+    DeliveryReplay,
+    assert_completes_within,
+    assert_delivery_replay,
+)
 from pytest_obligation.crash_histories import (
     Delivery,
     HandoffHistory,
@@ -666,6 +672,9 @@ class ObligationContract(HarnessModel):
     #: Domain-specific applications of the standalone proofs.
     extras: tuple[ExtraProof, ...] = ()
 
+    completions: Mapping[str, Binding[BoundedCompletion]] = {}
+    delivery_replays: Mapping[str, Binding[DeliveryReplay]] = {}
+
     #: Production transitions that commit work and hand work off. Each
     #: generates one transactional case: with every notification lost, and with
     #: the worker dying right after each of the transition's commits, recovery
@@ -982,6 +991,14 @@ def _eligibility_errors(contract: ObligationContract) -> list[str]:
 def _design_errors(contract: ObligationContract) -> list[str]:
     """Every way the declaration fails to describe a complete contract."""
     errors: list[str] = _eligibility_errors(contract)
+    for family, bindings in (("completion", contract.completions), ("delivery-replay", contract.delivery_replays)):
+        for name, factory in bindings.items():
+            if not name.strip():
+                errors.append(f"{family} needs a nonempty name")
+            defect = _adopter_annotation_defect(f"{family} {name} binding", factory)
+            if defect:
+                errors.append(defect)
+
     if not contract.name.strip():
         errors.append("the contract has no name")
     if contract.handoffs and contract.handoff_delivery is None:
@@ -1445,6 +1462,15 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
         params.extend(current_host().require("selection_completeness_cases")(contract))
     params.extend(_coherence_cases(contract))
     params.extend(_handoff_cases(contract))
+    for family, bindings, proof in (
+        ("completion", contract.completions, assert_completes_within),
+        ("delivery-replay", contract.delivery_replays, assert_delivery_replay),
+    ):
+        for name, factory in bindings.items():
+            case = ContractCase(
+                id=f"{family}-{name}-{proof.__name__}", run=_proof_runner(factory, proof), fixtures=contract.fixtures
+            )
+            params.append(case.parameter(transactional=contract.transactional))
     params.extend(_extra_cases(contract.extras, contract.fixtures))
     return params
 
@@ -1865,6 +1891,9 @@ class ScheduledSelection(HarnessModel):
     #: calling a provider inside its transaction). Validated the same way; a gap
     #: on one is a gap the NEW_FEATURE policy forbids, like ``gaps``.
     extras: tuple[ExtraProof, ...] = ()
+
+    completions: Mapping[str, Binding[BoundedCompletion]] = {}
+    delivery_replays: Mapping[str, Binding[DeliveryReplay]] = {}
 
     #: Integration-owned loop and edge families (Django: OwedRows and EdgeFamily).
     owed_rows: Callable[[], Any] | None = None

@@ -32,6 +32,12 @@ except PackageNotFoundError:  # running from a source tree that was never instal
     __version__ = "0+unknown"
 
 
+from pytest_obligation.completion import (
+    BoundedCompletion,
+    DeliveryReplay,
+    assert_completes_within,
+    assert_delivery_replay,
+)
 from pytest_obligation.contract import (
     Adoption,
     Claim,
@@ -154,6 +160,10 @@ from pytest_obligation.profiles.job_retry_limits import (
 )
 
 __all__ = [
+    "BoundedCompletion",
+    "DeliveryReplay",
+    "assert_completes_within",
+    "assert_delivery_replay",
     "AdmissionAtomicity",
     "AdmissionPublication",
     "__version__",
