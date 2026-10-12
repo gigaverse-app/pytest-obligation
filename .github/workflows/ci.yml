@@ -279,7 +279,7 @@ jobs:
       # Saleor too: the README's demo GIF shows the coverage scan of its checkout. Wagtail's source is
       # what the Wagtail demo's coverage check reads; the demo itself runs the wheel from PyPI.
       - run: uv run --no-project python demos/fetch_upstream.py procrastinate dbos-demo-apps saleor wagtail
-      - run: uv sync --locked --no-default-groups --extra django --group demos
+      - run: uv sync --locked --no-default-groups --extra django --extra exploration --group demos
       # procrastinate's demos ship only in its source tree, pinned by fetch_upstream.py.
       - run: uv pip install -e demos/.upstream/procrastinate
       - name: Postgres without durability
