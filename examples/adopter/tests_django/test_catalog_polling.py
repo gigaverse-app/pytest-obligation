@@ -10,6 +10,10 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 
 import pytest
+
+# This existing example also runs without frameworks in the core/action lane.
+pytest.importorskip("django")
+
 from adopter_app.catalog import Catalog
 from test_bindings import application
 
