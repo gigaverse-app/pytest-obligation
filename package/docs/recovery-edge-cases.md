@@ -188,8 +188,12 @@ selection = ScheduledSelection(
 The binding guard, valid-identity control, order control, poison and
 stop-request cases are generated as for rows, reading `listed` wherever they
 would read `due_work`: a served orphan must leave the listing, and a poisoned
-one must still be listed after the tick. `due_work` keeps its selection proofs
-(authorship, index, primary) for whatever the loop reads from the database.
+one must still be listed after the tick. `due_work` is still required and
+still runs the selection proofs (authorship, index-served, primary), but no
+owed-row case reads it. Bind it to a narrowed, production-bound query the loop
+runs every tick. A loop whose only database read is "every known resource"
+fails the index-served proof, and one that reads nothing from the database
+cannot declare this yet; both are known limits of this first version.
 There is no row to give database-legal values, so `owed_edges` and
 `state_fields` are refused. The guard checks `listed` reaches production like
 `execute`; binding `listed` without the declaration, or declaring it without

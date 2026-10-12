@@ -1834,8 +1834,10 @@ class ExternalIdentities(HarnessModel):
     ``identity_of``; the control, order, poison and stop-request cases then
     read that listing where they would read ``due_work``. There is no row to
     give database-legal edge values, so ``owed_edges`` and ``state_fields``
-    are refused; ``due_work`` keeps its selection proofs for whatever the
-    loop does read from the database.
+    are refused. ``due_work`` is still required and still runs the
+    selection proofs, though no owed-row case reads it: bind the narrowed
+    query the loop runs each tick. A loop that reads no database selection
+    cannot declare this yet.
     """
 
     #: Why the owed identities are not rows, and which listing produces them.
