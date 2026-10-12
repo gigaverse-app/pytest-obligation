@@ -218,6 +218,7 @@ from pytest_obligation.profiles.gated_execution import (
 )
 from pytest_obligation.profiles.harmless_replay import (
     REPLAY_SAFETY_PROOFS,
+    ReplayDiverged,
     ReplaySafeEffect,
 )
 from pytest_obligation.profiles.indivisible_admission import ADMISSION_PROOFS, AdmissionAtomicity
@@ -1171,6 +1172,8 @@ def _proof_runner(factory: Callable[[], Any], proof: Callable[[Any], None]) -> C
     @wraps(proof)
     def run() -> None:
         with _entered(factory) as binding:
+            if isinstance(binding, ReplaySafeEffect):
+                binding.require_expected_outcome()
             proof(binding)
 
     return run
@@ -1354,7 +1357,7 @@ def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[P
                         if proof.__name__ == "assert_a_soft_time_limit_ends_the_tick"
                         else None
                     )
-                    failure = None
+                    failure = ReplayDiverged if proof.__name__ == "assert_replay_converges" else None
                     if specific is not None:
                         reason, failure = specific
                     params.append(

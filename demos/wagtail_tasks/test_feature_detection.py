@@ -78,6 +78,7 @@ def focal_point_replay(arrange: Callable[[], Any]) -> Iterator[ReplaySafeEffect]
         task = DBTaskResult.objects.get(task_path="wagtail.images.tasks.set_image_focal_point_task")
         yield ReplaySafeEffect(
             name="Wagtail automatic crop replay",
+            expected=(15, 15, 20, 20),
             prepare=lambda: task.args_kwargs["args"],
             execute=lambda args: set_image_focal_point_task.call(*args),
             observe=lambda _args: (

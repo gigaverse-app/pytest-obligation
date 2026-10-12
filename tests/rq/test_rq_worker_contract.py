@@ -89,6 +89,7 @@ def message_replay() -> ReplaySafeEffect:
     jobs.outbox.clear()
     return ReplaySafeEffect(
         name="RQ message task",
+        expected=1,
         prepare=lambda: Queue(QUEUE, connection=CONNECTION).enqueue(jobs.send_message, MESSAGE),
         execute=Job.perform,
         observe=lambda job: jobs.outbox.sent[job.args[0]],

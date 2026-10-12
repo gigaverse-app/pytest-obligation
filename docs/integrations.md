@@ -56,10 +56,13 @@ unobserved thread exception.
 
 A generated contract automatically runs its `handoffs`, `process_handoffs`, and
 claimed `replay` proofs. Attach the binding to the contract; a helper function
-that nothing references provides no coverage. Both history types require an
+that nothing references provides no coverage. History and replay bindings require an
 independently declared `expected` outcome when executed by a contract. A missing
 outcome fails even when a legacy divergence is a known gap. Standalone history
-functions still support convergence-only checks.
+and replay functions still support convergence-only checks. A generated replay
+gap accepts only `ReplayDiverged`: a correct first execution followed by a
+different result on replay. Missing declarations and wrong first results fail
+independently, even when the replay case has a known gap.
 
 Use `expected=` on `HandoffHistory`, `ProcessHistory`, and `ReplaySafeEffect`.
 It accepts a value (including `None`) or a callback from the arranged handle to

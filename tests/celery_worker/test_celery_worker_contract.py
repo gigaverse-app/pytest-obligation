@@ -87,6 +87,7 @@ def message_replay() -> Iterator[ReplaySafeEffect]:
     with hosted(Host(production_packages=frozenset({"celery"}))):
         yield ReplaySafeEffect(
             name="Celery message task",
+            expected=1,
             prepare=lambda: MESSAGE,
             execute=lambda message: Task.apply(reference.send_message, (message,), throw=True).get(propagate=True),
             observe=lambda message: reference.RECORDS.lrange("sent", 0, -1).count(message),

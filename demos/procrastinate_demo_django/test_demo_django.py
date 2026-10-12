@@ -164,6 +164,7 @@ def indexing_replay() -> ReplaySafeEffect:
     # OBSERVE: whether the book is indexed.
     return ReplaySafeEffect(
         name="index_book",
+        expected=True,
         prepare=lambda: Book.objects.create(title="Dune", author="Frank Herbert").id,
         execute=index_again,
         observe=lambda book_id: Book.objects.get(id=book_id).indexed,
@@ -195,6 +196,7 @@ def indexing_retry() -> BoundedRetry:
     # OBSERVE: the job's status and attempts, as procrastinate records them.
     return BoundedRetry(
         name="index_book",
+        expected=True,
         # The demo's tasks declare no retry: one execution, then failed for good.
         max_executions=1,
         make_failing=_failing_indexing,

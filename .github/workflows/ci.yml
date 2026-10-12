@@ -164,6 +164,7 @@ jobs:
         run: |
           uv run --no-sync python scripts/check_adoption_report.py profiles-redis.json --contract "catalog on RQ" --contract "catalog through Celery" --verified E G H I
           uv run --no-sync python scripts/check_adoption_report.py profiles-redis.json --contract "rq reference jobs" --verified G J --exercised H B
+          uv run --no-sync python scripts/check_adoption_cases.py adopters-redis.xml --replay "*TestRQWorkerContract*REPLAY_SAFE_EXECUTION" --replay "*TestCeleryWorkerContract*REPLAY_SAFE_EXECUTION" --replay "*TestCatalogOnRQ*REPLAY_SAFE_EXECUTION" --replay "*TestCatalogThroughCelery*REPLAY_SAFE_EXECUTION"
           uv run --no-sync python scripts/check_adoption_cases.py adopters-redis.xml --case "*TestCatalogOnRQ*extra-recovery-poison*" --case "*TestCatalogOnRQ*extra-recovery-stop*"
           uv run --no-sync python scripts/check_adoption_cases.py adopters-redis.xml --case "*TestCatalogThroughCelery*extra-recovery-poison*" --case "*TestCatalogThroughCelery*extra-recovery-stop*"
       - name: Keep executed profile evidence
@@ -290,9 +291,9 @@ jobs:
           PGDATABASE: procrastinate_demo
         run: >-
           uv run --no-sync pytest demos/procrastinate_demo_django --ds=demos.procrastinate_demo_django.settings
-          -rxX --durations=15 --due-work-require-assessed --due-work-profile-report=profiles-procrastinate.json
+          -rxX --durations=15 --due-work-require-assessed --due-work-profile-report=profiles-procrastinate.json --junitxml=adopters-procrastinate.xml
       - name: DBOS transactional-outbox
-        run: uv run --no-sync pytest demos/dbos_transactional_outbox -p no:django -rxX --durations=15 --due-work-require-assessed --due-work-profile-report=profiles-dbos.json
+        run: uv run --no-sync pytest demos/dbos_transactional_outbox -p no:django -rxX --durations=15 --due-work-require-assessed --due-work-profile-report=profiles-dbos.json --junitxml=adopters-dbos.xml
       # Migrating Wagtail's test database is most of its run, and depends only on the pinned packages
       # (uv.lock) and the demo's settings: restored from the cached dump when the key matches.
       - uses: actions/cache@v4
@@ -332,6 +333,9 @@ jobs:
 
       - name: Require the promised adopters and executed capabilities
         run: |
+          uv run --no-sync python scripts/check_adoption_cases.py adopters-procrastinate.xml --replay "*TestTheDemoAsShipped*REPLAY_SAFE_EXECUTION" --replay "*TestTheDemoWithItsFixes*REPLAY_SAFE_EXECUTION"
+          uv run --no-sync python scripts/check_adoption_cases.py adopters-dbos.xml --replay "*TestPlaceOrder*REPLAY_SAFE_EXECUTION"
+          uv run --no-sync python scripts/check_adoption_cases.py demos/wagtail_tasks/adopters-wagtail.xml --replay "*TestWagtailMedia*REPLAY_SAFE_EXECUTION-feature" --replay "*TestWagtailMedia*REPLAY_SAFE_EXECUTION-image" --replay "*TestWagtailMedia*REPLAY_SAFE_EXECUTION-document" --replay "*TestWagtailPublishing*REPLAY_SAFE_EXECUTION"
           uv run --no-sync python scripts/check_adoption_report.py profiles-procrastinate.json --contract "procrastinate demo_django: create book" --contract "procrastinate demo_django: create book, with its fixes" --exercised I
           uv run --no-sync python scripts/check_adoption_report.py profiles-dbos.json --contract "DBOS transactional-outbox: place order" --verified I --exercised H J
           uv run --no-sync python scripts/check_adoption_report.py demos/wagtail_tasks/profiles-wagtail.json --contract "wagtail: image and document lifecycle" --contract "wagtail: publishing a page behind a CDN" --exercised I --verified H J
@@ -404,6 +408,7 @@ jobs:
 
       - name: Require the promised adopters and executed capabilities
         run: |
+          demos/.upstream/saleor/.venv/bin/python scripts/check_adoption_cases.py demos/saleor_checkout/adopters-saleor.xml --replay "*TestCheckoutAsShipped*REPLAY_SAFE_EXECUTION" --replay "*TestCheckoutWithAutomaticCompletion*REPLAY_SAFE_EXECUTION"
           demos/.upstream/saleor/.venv/bin/python scripts/check_adoption_report.py demos/saleor_checkout/profiles-saleor.json --contract "saleor checkout" --contract "saleor checkout, Transactions API with automatic completion" --exercised H I
           demos/.upstream/saleor/.venv/bin/python scripts/check_adoption_report.py demos/saleor_checkout/profiles-saleor.json --contract "saleor payment event reports" --verified E --exercised I
           demos/.upstream/saleor/.venv/bin/python scripts/check_adoption_cases.py demos/saleor_checkout/adopters-saleor.xml --case "*TestCheckoutWithAutomaticCompletion*database_legal*" --case "*TestCheckoutWithAutomaticCompletion*inadmissible*" --case "*TestAutomaticCompletionRelatedRows*database_legal*" --case "*TestAutomaticCompletionRelatedRows*inadmissible*" --case "*TestAutomaticCompletionRelatedRows*poisoned_identity*" --case "*TestAutomaticCompletionRelatedRows*soft_time_limit*"

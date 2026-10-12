@@ -30,3 +30,22 @@ def test_required_adopter_cases(tmp_path: Path, result: str) -> None:
     else:
         with pytest.raises(AssertionError):
             check_cases(path, ["*TestWorker*proof*"])
+
+
+@pytest.mark.parametrize("missing", [None, "assert_first_execution_has_visible_effect", "assert_replay_converges"])
+def test_replay_evidence_requires_each_canonical_proof(tmp_path: Path, missing: str | None) -> None:
+    from pytest_obligation.profiles.harmless_replay import REPLAY_SAFETY_PROOFS
+    from scripts.check_adoption_cases import check_replays
+
+    cases = "".join(
+        f'<testcase classname="Demo" name="REPLAY_SAFE_EXECUTION-image-{proof.__name__}"/>'
+        for proof in REPLAY_SAFETY_PROOFS
+        if proof.__name__ != missing
+    )
+    report = tmp_path / "replays.xml"
+    report.write_text(f"<testsuite>{cases}</testsuite>")
+    if missing:
+        with pytest.raises(AssertionError, match="no executed adopter cases"):
+            check_replays(report, ["Demo*REPLAY_SAFE_EXECUTION-image"])
+    else:
+        check_replays(report, ["Demo*REPLAY_SAFE_EXECUTION-image"])

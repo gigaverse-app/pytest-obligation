@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 from fnmatch import fnmatchcase
 from pathlib import Path
 
+from pytest_obligation.profiles.harmless_replay import REPLAY_SAFETY_PROOFS
+
 
 def check_cases(path: Path, required: list[str]) -> None:
     cases = list(ET.parse(path).iter("testcase"))
@@ -18,12 +20,21 @@ def check_cases(path: Path, required: list[str]) -> None:
                 assert skipped.get("type") == "pytest.xfail", f"{identity}: skipped rather than exercised"
 
 
+def check_replays(path: Path, prefixes: list[str]) -> None:
+    """Require every canonical replay proof for each independent named effect."""
+    check_cases(path, [f"{prefix}-{proof.__name__}*" for prefix in prefixes for proof in REPLAY_SAFETY_PROOFS])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
-    parser.add_argument("--case", action="append", required=True, help="glob against classname::test name")
+    parser.add_argument("--case", action="append", default=[], help="glob against classname::test name")
+    parser.add_argument("--replay", action="append", default=[], help="glob prefix before a replay proof name")
     arguments = parser.parse_args()
+    if not arguments.case and not arguments.replay:
+        parser.error("declare --case or --replay evidence")
     check_cases(arguments.report, arguments.case)
+    check_replays(arguments.report, arguments.replay)
     print(f"Validated executed adoption for {len(arguments.case)} required case patterns")
 
 
