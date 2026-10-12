@@ -230,3 +230,92 @@ def test_one_lifecycle_cannot_bind_both_a_budget_and_no_budget() -> None:
             retry=_annotated_bounded_retry,
             persistent_retry=_annotated_persistent_retry,
         )
+
+
+@pytest.mark.parametrize("named", [False, True])
+@pytest.mark.parametrize("domain", [False, True])
+def test_generated_replay_requires_expected_even_for_a_known_gap(named: bool, domain: bool) -> None:
+    from pytest_obligation import ObligationContract, contract_cases
+    from pytest_obligation.profiles.harmless_replay import ReplaySafeEffect
+
+    def missing():
+        # ARRANGE: a real reference operation with its outcome deliberately omitted.
+        # REAL PRODUCTION: reference transition remains intact.
+        # EXTERNAL SEAM: reference effect counter.
+        # OBSERVE: independently stored result, without a declared requirement.
+        return ReplaySafeEffect(**reference_replay_safety_binding().model_dump(exclude={"expected"}))
+
+    profiles: dict[Profile, Claim | NotApplicable] = {
+        p: NotApplicable(_WHY) for p in (Profile if domain else (Profile.H, Profile.J))
+    }
+    profiles[Profile.H] = Claim(gaps={"assert_replay_converges": _WHY})
+    declaration = ObligationContract if domain else SafetyContract
+    contract = declaration(
+        name="missing outcome",
+        adoption=Adoption.LEGACY,
+        profiles=profiles,
+        replay={"effect": missing} if named else missing,
+    )
+    rows = contract_cases(contract) if isinstance(contract, ObligationContract) else safety_contract_cases(contract)
+    for row in rows:
+        if row.values[0].profile is not Profile.H:
+            continue
+        for mark in row.marks:
+            if mark.name == "xfail":
+                assert not issubclass(ValueError, mark.kwargs["raises"])
+        with pytest.raises(ValueError, match="declare expected independently"):
+            row.values[0].run()
+
+
+@pytest.mark.parametrize("wrong_first", [True, False])
+def test_legacy_replay_gap_cannot_hide_an_incorrect_first_result(wrong_first: bool) -> None:
+    from pytest_obligation.profiles.harmless_replay import ReplayDiverged
+    from pytest_obligation.references.in_memory import InMemoryReplayEffect
+
+    class WrongContent(InMemoryReplayEffect):
+        def execute(self, operation_id: int) -> None:
+            super().execute(operation_id)
+            if wrong_first or self.effect_count_for(operation_id) > 1:
+                self.outputs[operation_id] = "wrong"
+
+    def binding():
+        # ARRANGE: fresh reference input with an independent expected result.
+        # REAL PRODUCTION: execute reference with a corrupt external result.
+        # EXTERNAL SEAM: independent provider counter and storage.
+        # OBSERVE: actual stored content after first execution and replay.
+        return reference_replay_safety_binding(WrongContent())
+
+    contract = SafetyContract(
+        name="precise replay gap",
+        adoption=Adoption.LEGACY,
+        profiles=_dispositions(H=Claim(gaps={"assert_replay_converges": _WHY})),
+        replay=binding,
+    )
+    row = next(row for row in safety_contract_cases(contract) if row.id.endswith("assert_replay_converges"))
+    mark = next(mark for mark in row.marks if mark.name == "xfail")
+    assert mark.kwargs["raises"] is ReplayDiverged
+    with pytest.raises(AssertionError, match="declared product outcome") as error:
+        row.values[0].run()
+    assert isinstance(error.value, ReplayDiverged) is not wrong_first
+
+
+@pytest.mark.parametrize("callback", [False, True])
+def test_generated_replay_accepts_an_explicit_none_outcome(callback: bool) -> None:
+    from pytest_obligation.references.in_memory import InMemoryReplayEffect
+
+    def binding():
+        # ARRANGE: a pending reference operation, distinguishable from completion.
+        # REAL PRODUCTION: the real reference transition publishes its result.
+        # EXTERNAL SEAM: normal reference counter/storage.
+        # OBSERVE: None is the independent completion projection, not an omitted oracle.
+        effect = InMemoryReplayEffect()
+        return reference_replay_safety_binding(effect).model_copy(
+            update={
+                "observe": lambda identity: None if effect.observe(identity) == "result" else "pending",
+                "expected": (lambda identity: None) if callback else None,
+            }
+        )
+
+    contract = SafetyContract(name="None result", profiles=_dispositions(H=Claim()), replay=binding)
+    for row in safety_contract_cases(contract):
+        row.values[0].run()

@@ -448,6 +448,7 @@ def confirmation_replay(prepare: Callable[[], Handle]) -> ReplaySafeEffect:
     current_shop().confirmations[identity] = 0
     return ReplaySafeEffect(
         name="Saleor order confirmation",
+        expected=1,
         prepare=lambda: order,
         execute=lambda target: send_order_confirmation(
             fetch_order_info(target), "https://www.example.com", get_plugins_manager(allow_replica=False)

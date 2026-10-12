@@ -105,6 +105,19 @@ isolating cancellation as an ordinary failure.
 
 The whitespace catalog also exposes django-tasks-db’s unconfigured-queue failure: a whitespace-only queue is selected, `InvalidTask` escapes after the claim, and error reporting abandons the healthy tail. These two cases remain separate strict gaps alongside the blank and maximum-length queue findings. The upstream demo CI reproduced all three new whitespace findings before the declarations were added; no production predicate, worker or oracle was changed.
 
+
+
+
+## Independent replay outcomes
+
+Every shipped replay binding declares `expected`, including Procrastinate indexing,
+Wagtail deletion/crop/CDN effects, DBOS notifications, both Saleor confirmations,
+RQ/Celery message tasks and the catalog shared across executors. Generated flat,
+named and safety contracts require the outcome before running any replay proof.
+Known duplicate-send gaps accept only a divergence after a correct first result.
+CI requires every canonical replay case for each named demo effect, so removing
+one binding or filtering a proof cannot leave a passing aggregate profile.
+
 ## Integration of the upstream parity changes (#57)
 
 | Capability | Actual adopter evidence | Limits |

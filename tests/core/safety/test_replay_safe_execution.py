@@ -22,12 +22,12 @@ def test_visible_churn_on_the_second_execution_fails_replay_safety() -> None:
     class _ChurningEffect(InMemoryReplayEffect):
         def execute(self, operation_id: int) -> None:
             self.reach_effect(operation_id)
-            self.outputs[operation_id] = f"result-{self.executions + 1}"
+            self.outputs[operation_id] = "result" if self.executions == 0 else "wrong replay"
             self.executions += 1
 
     binding = reference_replay_safety_binding(_ChurningEffect())
     assert_first_execution_has_visible_effect(binding)
-    with pytest.raises(AssertionError, match="replaying the identical operation changed"):
+    with pytest.raises(AssertionError, match="declared product outcome"):
         assert_replay_converges(reference_replay_safety_binding(_ChurningEffect()))
 
 
@@ -42,7 +42,7 @@ def test_an_effect_that_never_runs_fails_the_positive_control() -> None:
     # Convergence used to PASS here, and this self-test asserted that it did:
     # an operation that never runs converges perfectly. That vacuous pass is
     # the whole counterfeit, so the replay proof now refuses it too.
-    with pytest.raises(AssertionError, match="reached the external effect boundary 0"):
+    with pytest.raises(AssertionError, match="declared product outcome"):
         assert_replay_converges(reference_replay_safety_binding(_NeverApplies()))
 
 
