@@ -13,16 +13,21 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 
 import pytest
-from adopter_app.catalog import Catalog
-from test_bindings import application
 
-from pytest_obligation.integrations.django.owed_rows import (
+# The project's own `test` action collects this directory without the Django extra, as it
+# skips Hypothesis-only cases; the django jobs run it with tests.django.settings.
+pytest.importorskip("django")
+
+from adopter_app.catalog import Catalog  # noqa: E402
+from test_bindings import application  # noqa: E402
+
+from pytest_obligation.integrations.django.owed_rows import (  # noqa: E402
     OwedRows,
     assert_a_polled_row_is_served_and_stays_selected,
     assert_the_loop_isolates_a_poisoned_row,
     owed_selection,
 )
-from pytest_obligation.poison import PoisonSwitch, PoisonUnreported
+from pytest_obligation.poison import PoisonSwitch, PoisonUnreported  # noqa: E402
 
 
 @contextmanager
