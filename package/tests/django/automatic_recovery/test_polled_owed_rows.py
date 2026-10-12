@@ -73,6 +73,7 @@ class _PollingTick:
         *,
         isolate: bool = True,
         silent: bool = False,
+        silent_after_first_failure: bool = False,
         retires_failures: bool = False,
         honours_stop: bool = True,
         once_per_identity: bool = False,
@@ -82,6 +83,7 @@ class _PollingTick:
         self.step = step
         self.isolate = isolate
         self.silent = silent
+        self.silent_after_first_failure = silent_after_first_failure
         self.retires_failures = retires_failures
         self.honours_stop = honours_stop
         self.once_per_identity = once_per_identity
@@ -117,7 +119,7 @@ class _PollingTick:
                 failures.append(error)
             else:
                 self.served.add(owner_id)
-        if failures and not self.silent:
+        if failures and not self.silent and not (self.silent_after_first_failure and failed_last_tick):
             raise ExceptionGroup("isolated polling failures", failures)
 
 
@@ -212,9 +214,10 @@ class TestAPollingLoopIsolatesAPoisonedRow:
         with pytest.raises(PoisonStalled, match="did not progress in the same tick"):
             _isolated(_polling_loop(isolate=False))
 
-    def test_rejects_a_loop_that_isolates_and_reports_nothing(self):
+    @pytest.mark.parametrize("options", [{"silent": True}, {"silent_after_first_failure": True}])
+    def test_rejects_a_loop_that_isolates_and_reports_nothing(self, options):
         with pytest.raises(PoisonUnreported, match="reported nothing"):
-            _isolated(_polling_loop(silent=True))
+            _isolated(_polling_loop(**options))
 
     def test_rejects_a_loop_that_retires_the_poisoned_row(self):
         with pytest.raises(PoisonDropped, match="no longer owed"):
