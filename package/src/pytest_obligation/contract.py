@@ -1849,6 +1849,30 @@ class Polling(HarnessModel):
         super().__init__(**with_positional(data, because=because))
 
 
+class ExternalIdentities(HarnessModel):
+    """
+    The owed identities are not database rows: a production listing seam produces them.
+
+    A reconciler that lists provider resources and deletes the orphans owes
+    work per resource, and nothing in the database names an orphan. Declaring
+    it lets the owed-row loop bind ``listed`` (the production listing, read
+    through the provider fake the binding installs) and its own
+    ``identity_of``; the control, order, poison and stop-request cases then
+    read that listing where they would read ``due_work``. There is no row to
+    give database-legal edge values, so ``owed_edges`` and ``state_fields``
+    are refused. ``due_work`` is still required and still runs the
+    selection proofs, though no owed-row case reads it: bind the narrowed
+    query the loop runs each tick. A loop that reads no database selection
+    cannot declare this yet.
+    """
+
+    #: Why the owed identities are not rows, and which listing produces them.
+    because: str
+
+    def __init__(self, because: str = MISSING, /, **data: Any) -> None:
+        super().__init__(**with_positional(data, because=because))
+
+
 class ScheduledSelection(HarnessModel):
     """
     A scheduled selection that is not a full due-work sweep.
@@ -1929,6 +1953,8 @@ class ScheduledSelection(HarnessModel):
     owed_edges: Mapping[str, Any] = Field(default_factory=dict)
     #: The owed-row loop serves an identity by polling it, so it stays selected (:class:`Polling`).
     polling: Polling | None = None
+    #: The owed identities come from a listing seam, not this selection's rows (:class:`ExternalIdentities`).
+    external_identities: ExternalIdentities | None = None
     #: Related lifecycle paths whose combinations the selection-completeness proof explores.
     state_fields: tuple[str, ...] = ()
     #: Combinations deliberately outside this recovery, with substantive reasons.
@@ -1946,8 +1972,21 @@ class ScheduledSelection(HarnessModel):
         )
         if annotation_defect:
             errors.append(annotation_defect)
-        if (self.owed_rows is None) != (not self.owed_edges):
+        if self.external_identities is None and (self.owed_rows is None) != (not self.owed_edges):
             errors.append("owed_rows and owed_edges come together")
+        if self.external_identities is not None:
+            if self.owed_rows is None:
+                errors.append("external_identities describes the owed-row loop; declare owed_rows with it")
+            if self.owed_edges or self.state_fields:
+                errors.append(
+                    "external_identities have no database row to perturb or combine; drop owed_edges and "
+                    "state_fields (declare the row-backed part of the loop as its own selection)"
+                )
+            if not self.external_identities.because.strip():
+                errors.append(
+                    "external_identities.because is empty. Why the owed identities are not rows is the substance "
+                    "of the declaration"
+                )
         if any(not name.strip() for name in self.owed_edges):
             errors.append("owed_edges family names must be nonempty")
         if self.polling is not None and self.owed_rows is None:

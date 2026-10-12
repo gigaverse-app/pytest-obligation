@@ -174,7 +174,9 @@ Django case enumeration without importing Django. The typed `EdgeFamily` and
 `OwedRows` declarations belong to that integration; the core `Polling`
 declaration on `ScheduledSelection` tells it the loop serves a row by keeping
 it selected, which swaps the leave-the-selection control for a work-per-tick
-control and adds a second poisoned tick. Core poison oracles import no
+control and adds a second poisoned tick. `ExternalIdentities` tells it the owed
+identities come from a listing seam the binding supplies (`OwedRows.listed`,
+read through a provider fake) rather than from `due_work`'s rows. Core poison oracles import no
 framework; the Celery publication seam lives only in `integrations/celery.py`.
 
 ## Adoption and policy interfaces
