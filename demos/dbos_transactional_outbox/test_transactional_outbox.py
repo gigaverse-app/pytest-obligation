@@ -345,6 +345,7 @@ def notification_replay() -> Iterator[ReplaySafeEffect]:
     ):
         yield ReplaySafeEffect(
             name="DBOS order notification step",
+            expected=1,
             prepare=lambda: demo.insert_order("replay customer", "widget", 1),
             execute=lambda identity: demo.send_order_notification(identity, "replay customer", "widget"),
             observe=lambda _identity: len(sends),
