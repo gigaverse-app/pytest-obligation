@@ -520,7 +520,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: gigaverse-app/due
-          ref: 331fbfa22d980afd35940fa2c9a89252659a2b14
+          ref: b19425eeda04c2a090e300faab733269caafcd53
           path: .upstream/due
       - uses: astral-sh/setup-uv@v7
         with:
@@ -542,6 +542,11 @@ jobs:
         run: |
           .venv/bin/python scripts/check_adoption_report.py profiles.json --contract "Due replay-safe work table" --verified A B D I J
           .venv/bin/python scripts/check_adoption_report.py profiles.json --contract publish_document --verified A B D E H I J --effect-report effects.json --effect publish_document
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract index_book --verified A B D H I J --effect-report effects.json --effect index_book --required-effect-case "test_immutable_inputs_hold[admission-create book]" --required-effect-case "test_immutable_inputs_hold[admission_failure-create book]"
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract publish_book --verified A B D H J --effect-report effects.json --effect publish_book --required-effect-case "test_immutable_inputs_hold[producer-index settlement]"
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract project_catalog --verified A B D E H I J --effect-report effects.json --effect project_catalog
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract print_order --verified A B C I J --effect-report effects.json --effect print_order
+          .venv/bin/python scripts/check_adoption_report.py profiles.json --contract publish_at_deadline --verified A B E H I J --effect-report effects.json --effect publish_at_deadline
       - uses: actions/upload-artifact@v7
         if: always()
         with:

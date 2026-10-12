@@ -35,7 +35,7 @@ def main() -> None:
         parser.error("declare --case or --replay evidence")
     check_cases(arguments.report, arguments.case)
     check_replays(arguments.report, arguments.replay)
-    print(f"Validated executed adoption for {len(arguments.case)} required case patterns")
+    print(f"Validated {len(arguments.case)} case patterns and {len(arguments.replay)} complete replay bindings")
 
 
 if __name__ == "__main__":
