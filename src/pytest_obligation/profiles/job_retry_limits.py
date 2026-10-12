@@ -27,9 +27,18 @@ transient failure keeps the obligation owed. Every execution reaches the
 failing dependency exactly once, the obligation never becomes terminal, it is
 not due again until its wait elapses (no hot loop), and it is due again
 afterwards (never lost).
+
+Both halves drive one failure repeatedly. :class:`ClassifiedFailure` instead
+names one provider outcome and the classification production must give it,
+so an application can declare its whole outcome matrix. A terminal
+classification must end the operation after one execution and never reach
+the dependency again. A retryable one must leave it owed and due again after
+its wait. Either can also declare the product-visible outcome the failure
+must leave behind.
 """
 
 from collections.abc import Callable, Iterable
+from enum import StrEnum
 from typing import Any
 
 from pytest_obligation.binding import (
@@ -280,3 +289,110 @@ def assert_persistent_retry_contract(retry: PersistentRetry) -> None:
     """Run the production-binding guard and the persistent-failure invariant."""
     for proof in PERSISTENT_RETRY_PROOFS:
         proof(retry)
+
+
+class FailureClass(StrEnum):
+    """How production must classify one definite failure."""
+
+    #: Transient: the operation stays owed and is executed again after its wait.
+    RETRYABLE = "retryable"
+    #: Permanent: the operation ends now; executing it again cannot succeed.
+    TERMINAL = "terminal"
+
+
+class ClassifiedFailure(RetryLifecycle):
+    """One named provider outcome, the classification production must give it, and what the product shows."""
+
+    #: The classification this outcome must receive from production.
+    classification: FailureClass
+
+    #: Whether a retryable failure waits before it is due again; ignored for a terminal one.
+    waits: bool = True
+
+    #: OBSERVE: the product-visible consequence of the failure (a status mirror, a
+    #: recorded reason). Bind it with ``expected_product_outcome``, or neither.
+    product_outcome: Callable[[Any], Any] | None = None
+
+    #: The reviewed product outcome this failure must leave, derived from the
+    #: arranged operation, never read back from the run.
+    expected_product_outcome: Callable[[Any], Any] | None = None
+
+    def model_post_init(self, _context: Any) -> None:
+        if (self.product_outcome is None) != (self.expected_product_outcome is None):
+            raise ValueError(
+                "ClassifiedFailure binds product_outcome and expected_product_outcome together: "
+                "an observation without its expected value proves nothing, and the reverse cannot run"
+            )
+
+
+def _assert_product_outcome(failure: ClassifiedFailure, operation: Any, *, after: str) -> None:
+    if failure.product_outcome is None or failure.expected_product_outcome is None:
+        return
+    actual = failure.product_outcome(operation)
+    expected = failure.expected_product_outcome(operation)
+    assert actual == expected, (
+        f"{failure.name}: {after}, the product shows {actual!r}, not the declared {expected!r}. "
+        f"The {failure.classification.value} classification is invisible to the product"
+    )
+
+
+def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
+    """One execution of the named outcome receives its declared classification, visibly and stably."""
+    operation, attempts = _fresh_failing(failure)
+    failure.run_once(operation)
+    attempts = _assert_one_failure_attempt(failure, operation, before=attempts, execution=1)
+
+    if failure.classification is FailureClass.RETRYABLE:
+        assert not failure.is_terminal(operation), (
+            f"{failure.name}: a failure declared retryable became terminal after one execution. "
+            f"Production gave up on a transient failure that a later execution could complete"
+        )
+        _assert_product_outcome(failure, operation, after="after one failing execution")
+        if failure.waits:
+            assert not _is_due(failure, operation), (
+                f"{failure.name}: the retryable failure left the operation due again immediately. "
+                f"It would be retried in a hot loop instead of after its retry delay"
+            )
+        _advance_after_failure(failure, operation, attempts=attempts, execution=1)
+        return
+
+    assert failure.is_terminal(operation), (
+        f"{failure.name}: a failure declared terminal was not terminal after one execution. "
+        f"Production classified a permanent failure as retryable, so it will repeat a call that cannot succeed"
+    )
+    _assert_product_outcome(failure, operation, after="after one failing execution")
+    assert not _is_due(failure, operation), (
+        f"{failure.name}: the terminally failed operation remains in ordinary due selection and will execute again"
+    )
+    failure.advance_to_due(operation)
+    assert failure.failure_attempt_count(operation) == attempts, (
+        f"{failure.name}: advance_to_due changed the failure-attempt count. Fault injection may advance "
+        f"only the wait condition; it cannot manufacture an execution"
+    )
+    assert not _is_due(failure, operation), (
+        f"{failure.name}: the terminally failed operation became due again once its wait elapsed"
+    )
+    before = failure.observe(operation)
+    failure.run_once(operation)
+    after = failure.failure_attempt_count(operation)
+    assert after == attempts, (
+        f"{failure.name}: a stale runner reached the failing dependency again ({attempts} -> {after}) "
+        f"after the failure was classified terminal"
+    )
+    assert failure.observe(operation) == before, (
+        f"{failure.name}: invoking the runner again changed the terminally failed operation"
+    )
+    _assert_product_outcome(failure, operation, after="after a stale runner invocation")
+
+
+CLASSIFIED_FAILURE_PROOFS: tuple[Callable[[ClassifiedFailure], None], ...] = (
+    assert_retry_selection_is_production_bound,
+    assert_retry_runner_is_production_bound,
+    assert_failure_takes_its_declared_class,
+)
+
+
+def assert_classified_failure_contract(failure: ClassifiedFailure) -> None:
+    """Run the production-binding guard and the classification invariant."""
+    for proof in CLASSIFIED_FAILURE_PROOFS:
+        proof(failure)
