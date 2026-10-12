@@ -159,6 +159,7 @@ DELETE_IMAGE = HandoffHistory(
     arrange=an_image,
     transition=delete_the_image,
     observe=image_left,
+    expected=DELETED,
     findings=Findings(DELETED, MEDIA_FINDINGS),
 )
 DELETE_DOCUMENT = HandoffHistory(
@@ -166,6 +167,7 @@ DELETE_DOCUMENT = HandoffHistory(
     arrange=a_document,
     transition=delete_the_document,
     observe=document_left,
+    expected=DELETED,
     findings=Findings(DELETED, MEDIA_FINDINGS),
 )
 
@@ -434,6 +436,7 @@ PUBLISH_PAGE = HandoffHistory(
     arrange=a_live_page,
     transition=publish_new_hours,
     observe=what_visitors_get,
+    expected=PURGED,
     findings=Findings(PURGED, PUBLISH_FINDINGS),
 )
 
@@ -541,6 +544,7 @@ DJANGO_TASKS_DB = worker_contract(
     name="django-tasks-db: the worker running Wagtail's tasks",
     enqueue=a_purge_owed,
     effect=purges,
+    expected=_task("SUCCESSFUL", 1),
     # EXTERNAL SEAM: the CDN's purge API.
     external_calls=(ExternalCall(owner=cdn.RecordingCDN, attribute="purge"),),
     delivery=WORKER,

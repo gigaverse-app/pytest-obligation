@@ -109,6 +109,7 @@ def worker_history(
     *,
     enqueue: Callable[[], str],
     effect: Callable[[str], Any],
+    expected: TaskOutcome | Callable[[str], TaskOutcome],
     external_calls: Sequence[ExternalCall] = (),
     name: str = "the worker runs a task",
     findings: Findings | None = None,
@@ -123,6 +124,7 @@ def worker_history(
     return task_queues.worker_history(
         enqueue=enqueue,
         effect=effect,
+        expected=expected,
         status_of=_status_of,
         run_worker=db_worker_once(),
         external_calls=external_calls,
@@ -210,6 +212,7 @@ def worker_contract(
     name: str,
     enqueue: Callable[[], str],
     effect: Callable[[str], Any],
+    expected: TaskOutcome | Callable[[str], TaskOutcome],
     external_calls: Sequence[ExternalCall] = (),
     delivery: Delivery | None = None,
     min_age_days: int = 14,
@@ -225,7 +228,9 @@ def worker_contract(
     and each worker signal receiver failing — are a legacy handoff gap. The
     contract is transactional: the worker commits for real.
     """
-    history = worker_history(enqueue=enqueue, effect=effect, external_calls=external_calls, findings=findings)
+    history = worker_history(
+        enqueue=enqueue, effect=effect, expected=expected, external_calls=external_calls, findings=findings
+    )
     return ObligationContract(
         name=name,
         adoption=Adoption.LEGACY,

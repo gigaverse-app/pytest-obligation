@@ -51,3 +51,35 @@ stuck in Python cannot leave row locks blocking test teardown. The shared helper
 also backs Due's work-table histories. Both psycopg drivers are exercised in CI.
 A connection setup failure is reported by the proof, rather than escaping as an
 unobserved thread exception.
+
+## Bind application outcomes once
+
+A generated contract automatically runs its `handoffs`, `process_handoffs`, and
+claimed `replay` proofs. Attach the binding to the contract; a helper function
+that nothing references provides no coverage. Both history types require an
+independently declared `expected` outcome when executed by a contract. A missing
+outcome fails even when a legacy divergence is a known gap. Standalone history
+functions still support convergence-only checks.
+
+Use `expected=` on `HandoffHistory`, `ProcessHistory`, and `ReplaySafeEffect`.
+It accepts a value (including `None`) or a callback from the arranged handle to
+the required outcome. Derive that value from the command's input, never by
+reading the result being judged. Replay proofs check it after both executions;
+crash proofs check normal operation before comparing interrupted histories.
+Existing proof names and contract wiring are unchanged.
+
+The [catalog binding](../examples/adopter/test_bindings.py) is reused by the
+inline, Celery and RQ suites: it admits `"red"`, executes the real worker,
+observes remote content, and declares `expected="red"`. Its
+[negative control](../examples/adopter/tests/test_catalog_failures.py) corrupts
+the provider payload and runs the generated contract case. Equal wrong results
+must fail. The Procrastinate, Wagtail, DBOS and Saleor demos similarly declare
+indexed books, deleted objects, sent events, or completed orders and money.
+`celery_worker.worker_history()` requires and forwards `expected=` as well.
+RQ and django-tasks worker contracts accept `expected=TaskOutcome(...)` and
+forward it through their shared task-queue binding, including two-queue histories.
+
+When copying a binding with `model_copy(update={"observe": ...})`, update
+`expected` to the new observation's contract too. These are bounded proofs of
+the declared outcomes and fault boundaries, not a proof of all application
+behavior or arbitrary provider failures.

@@ -515,7 +515,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: gigaverse-app/due
-          ref: 6e0c061c3a339e96803ffa3d81fb30817f5a6bcb
+          ref: 331fbfa22d980afd35940fa2c9a89252659a2b14
           path: .upstream/due
       - uses: astral-sh/setup-uv@v7
         with:
@@ -529,7 +529,7 @@ jobs:
         working-directory: .upstream/due
         run: >-
           .venv/bin/python -m pytest -p due.django.conformance.reporting
-          --due-work-require-assessed --due-work-profile-report=profiles.json
+          --due-work-debt-baseline=tests/conformance/debt_baseline.yaml --due-work-profile-report=profiles.json
           --durable-work-report=effects.json --durable-observation-report=observations.json
           --junitxml=results.xml
       - name: Require executed primitive and application guarantees

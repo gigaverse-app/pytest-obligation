@@ -38,10 +38,10 @@ from pytest_obligation.binding import (
     assert_test_binding_consumes_its_first_parameter,
 )
 from pytest_obligation.evidence.observation import assert_observation
-from pytest_obligation.models import HarnessModel
+from pytest_obligation.outcomes import ExpectedOutcome, assert_expected_outcome
 
 
-class ReplaySafeEffect(HarnessModel):
+class ReplaySafeEffect(ExpectedOutcome[Any, Any]):
     """One replayable production operation and its meaningful observation."""
 
     name: str
@@ -94,6 +94,7 @@ def assert_replay_transition_is_production_bound(effect: ReplaySafeEffect) -> No
 def assert_first_execution_has_visible_effect(effect: ReplaySafeEffect) -> None:
     """POSITIVE CONTROL: the bound operation changes its meaningful result."""
     operation = effect.prepare()
+    expected = effect.expected_for(operation)
     before = effect.observe(operation)
     assert effect.execution_count_for(operation) == 0, (
         f"{effect.name}: the effect boundary was already reached before the "
@@ -108,6 +109,7 @@ def assert_first_execution_has_visible_effect(effect: ReplaySafeEffect) -> None:
         f"storage write — not to calls of `execute`"
     )
     after = effect.observe(operation)
+    assert_expected_outcome(effect.name, expected, after)
     assert after != before, (
         f"{effect.name}: the first execution had no visible effect "
         f"({before!r} -> {after!r}). Replay convergence would therefore pass "
@@ -119,8 +121,10 @@ def assert_first_execution_has_visible_effect(effect: ReplaySafeEffect) -> None:
 def assert_replay_converges(effect: ReplaySafeEffect) -> None:
     """Repeating the identical logical operation leaves the same result."""
     operation = effect.prepare()
+    expected = effect.expected_for(operation)
     effect.execute(operation)
     after_first = effect.observe(operation)
+    assert_expected_outcome(effect.name, expected, after_first)
     effect.execute(operation)
     replayed = effect.execution_count_for(operation)
     assert replayed == 2, (
@@ -134,6 +138,7 @@ def assert_replay_converges(effect: ReplaySafeEffect) -> None:
         f"property that actually holds"
     )
     after_replay = effect.observe(operation)
+    assert_expected_outcome(effect.name, expected, after_replay)
     assert_observation(
         after_replay,
         after_first,
