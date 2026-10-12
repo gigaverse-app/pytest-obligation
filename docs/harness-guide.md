@@ -178,6 +178,7 @@ never when a join can discard what the partial index yields.
 ```text
 (parent_id) + Index Cond (parent_id = p.id), Filter (due_at <= now()) → join key only, refused
 (parent_id, due_at) + Index Cond on both                               → own condition narrows
+UNIQUE (parent_id) + Index Cond (parent_id = p.id), Filter on state   → one row per driving row, passes
 pkey walk, no Index Cond, no Filter, hash join on a filtered parent    → whole table, refused
 (id) WHERE status = 'pending', read whole beside a discarding join     → refused unless named
 ```
