@@ -16,8 +16,10 @@ from pytest_obligation.contract import (
     safety_contract_cases,
 )
 from pytest_obligation.host import Host
+from pytest_obligation.profiles.job_retry_limits import FailureClass
 from pytest_obligation.references.in_memory import (
     reference_bounded_retry_binding,
+    reference_classified_failure_binding,
     reference_persistent_retry_binding,
     reference_replay_safety_binding,
 )
@@ -54,6 +56,22 @@ def _annotated_persistent_retry():
     # EXTERNAL SEAM — none; the reference counts its own failing executions.
     # OBSERVE — the reference binding reads state and execution count.
     return reference_persistent_retry_binding()
+
+
+def _annotated_terminal_outcome():
+    # ARRANGE — the reference binding builds a fresh in-memory failing operation.
+    # REAL PRODUCTION — this self-test delegates to the harness reference lifecycle.
+    # EXTERNAL SEAM — none; the reference counts its own failing executions.
+    # OBSERVE — the reference binding reads state, execution count and the product mirror.
+    return reference_classified_failure_binding(classification=FailureClass.TERMINAL)
+
+
+def _annotated_retryable_outcome():
+    # ARRANGE — the reference binding builds a fresh in-memory failing operation.
+    # REAL PRODUCTION — this self-test delegates to the harness reference lifecycle.
+    # EXTERNAL SEAM — none; the reference counts its own failing executions.
+    # OBSERVE — the reference binding reads state, execution count and the product mirror.
+    return reference_classified_failure_binding(classification=FailureClass.RETRYABLE)
 
 
 def _unannotated_replay():
@@ -229,6 +247,32 @@ def test_one_lifecycle_cannot_bind_both_a_budget_and_no_budget() -> None:
             profiles=_dispositions(BOUNDED_RETRY=Claim()),
             retry=_annotated_bounded_retry,
             persistent_retry=_annotated_persistent_retry,
+        )
+
+
+def test_each_named_outcome_in_the_matrix_gets_its_own_classification_proof() -> None:
+    """A provider's outcome matrix: one passing outcome cannot cover a sibling's classification."""
+    contract = SafetyContract(
+        name="outcome matrix",
+        profiles=_dispositions(BOUNDED_RETRY=Claim()),
+        classified_failures={"not found": _annotated_terminal_outcome, "rate limited": _annotated_retryable_outcome},
+    )
+    cases = [row.values[0] for row in safety_contract_cases(contract) if row.values[0].profile is Profile.J]
+    assert {case.id for case in cases if "declared_class" in case.id} == {
+        "BOUNDED_RETRY-not found-assert_failure_takes_its_declared_class",
+        "BOUNDED_RETRY-rate limited-assert_failure_takes_its_declared_class",
+    }
+    assert len(cases) == 6
+    for case in cases:
+        case.run()
+
+
+def test_an_unnamed_outcome_is_refused() -> None:
+    with pytest.raises(ObligationContractDesignError, match="classified_failures name each provider outcome"):
+        SafetyContract(
+            name="unnamed outcome",
+            profiles=_dispositions(BOUNDED_RETRY=Claim()),
+            classified_failures={" ": _annotated_terminal_outcome},
         )
 
 

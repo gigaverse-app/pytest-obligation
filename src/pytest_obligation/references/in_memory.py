@@ -38,7 +38,12 @@ from pytest_obligation.profiles.eventual_convergence import (
 )
 from pytest_obligation.profiles.fact_derived_obligations import StateDerived
 from pytest_obligation.profiles.harmless_replay import ReplaySafeEffect
-from pytest_obligation.profiles.job_retry_limits import BoundedRetry, PersistentRetry
+from pytest_obligation.profiles.job_retry_limits import (
+    BoundedRetry,
+    ClassifiedFailure,
+    FailureClass,
+    PersistentRetry,
+)
 
 # --- Stand-in shared proofs ----------------------------------------------------
 
@@ -204,6 +209,56 @@ def reference_persistent_retry_binding(
         failure_attempt_count=lifecycle.failure_attempt_count,
         observe=lifecycle.observe,
         waits=waits,
+    )
+
+
+class InMemoryClassifyingLifecycle(InMemoryRetryLifecycle):
+    """A conforming lifecycle that classifies its one failure and mirrors it onto the product."""
+
+    def __init__(self, classification: FailureClass) -> None:
+        super().__init__()
+        self.classification = classification
+        self.product: dict[int, str] = {}
+
+    def run_once(self, operation_id: int) -> None:
+        row = self.rows[operation_id]
+        if row.state != "DUE":
+            return
+        row.executions += 1
+        if self.classification is FailureClass.TERMINAL:
+            row.state = "TERMINAL"
+            self.product[operation_id] = "failed"
+        else:
+            row.state = "WAITING"
+            self.product[operation_id] = "retrying"
+
+    def product_outcome(self, operation_id: int) -> str | None:
+        return self.product.get(operation_id)
+
+
+def reference_classified_failure_binding(
+    lifecycle: InMemoryClassifyingLifecycle | None = None,
+    *,
+    classification: FailureClass = FailureClass.TERMINAL,
+    waits: bool = True,
+    with_product: bool = True,
+) -> ClassifiedFailure:
+    """A classified-failure binding over the conforming reference or one mutant."""
+    lifecycle = lifecycle if lifecycle is not None else InMemoryClassifyingLifecycle(classification)
+    expected = "failed" if classification is FailureClass.TERMINAL else "retrying"
+    return ClassifiedFailure(
+        name=f"in-memory {classification.value} outcome",
+        classification=classification,
+        make_failing=lifecycle.make_failing,
+        due_work=lifecycle.due_work,
+        run_once=lifecycle.run_once,
+        advance_to_due=lifecycle.advance_to_due,
+        is_terminal=lifecycle.is_terminal,
+        failure_attempt_count=lifecycle.failure_attempt_count,
+        observe=lifecycle.observe,
+        waits=waits,
+        product_outcome=lifecycle.product_outcome if with_product else None,
+        expected_product_outcome=(lambda operation_id: expected) if with_product else None,
     )
 
 

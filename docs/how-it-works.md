@@ -63,7 +63,7 @@ source catalog; use the guide matching your installed release.
 | **G** gated execution | Does blocked work stay owed and untouched, then recover once eligible? |
 | **H** harmless replay | Does repeating one logical operation converge to one visible effect? |
 | **I** indivisible admission | Does a command commit product intent and follow-up work together? |
-| **J** job retry limits | Does failing work exhaust its budget and remain terminal? With no budget, does it stay owed without a hot loop? |
+| **J** job retry limits | Does failing work exhaust its budget and remain terminal? With no budget, does it stay owed without a hot loop? Does each named provider outcome get its declared retryable/terminal classification, visibly? |
 
 Profile E has independently assessed stale-snapshot, monotonic-result,
 in-flight, and evidence-confluence families. The harness generates
