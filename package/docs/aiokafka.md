@@ -45,4 +45,4 @@ Bind these aiokafka fault boundaries into an `ObligationContract` and a collecte
 `@due_work_contract_suite(CONTRACT)` class. The adapter does not generate a
 contract merely because a normal test uses it. Declare the histories and all
 profile dispositions, then execute the generated cases and retain their report;
-see [required adoption shape](../ADOPTING.md#required-adoption-shape).
+see [required adoption shape](adopting.md#required-adoption-shape).

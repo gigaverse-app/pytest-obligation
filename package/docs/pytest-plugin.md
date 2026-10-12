@@ -9,7 +9,7 @@ the Python package supplies the pytest integration and fault-injection engine.
 ## Install and discover
 
 Previously published as `due-work-harness`; see the
-[migration and release-status note](../README.md#get-started) before installing.
+[migration and release-status note](https://github.com/gigaverse-app/pytest-obligation/blob/main/README.md#get-started) before installing.
 New code imports `pytest_obligation.ObligationContract`; the compatibility shim
 preserves `due_work_harness.DueWorkContract` and existing pytest options.
 
@@ -46,8 +46,8 @@ keywords, and documentation/source/changelog links. The classifier helps people
 and catalogs identify it as a pytest plugin; the entry point makes pytest load
 it. Installing the plugin alone does not generate application tests: first
 declare a contract and expose a class decorated with
-`@due_work_contract_suite(CONTRACT)`. Follow the [adoption guide](../ADOPTING.md)
-and [runnable example](../examples/adopter/README.md).
+`@due_work_contract_suite(CONTRACT)`. Follow the [adoption guide](adopting.md)
+and [runnable example](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter/README.md).
 
 ## Binding lifetimes
 

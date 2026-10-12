@@ -37,7 +37,7 @@ adoption must put its histories in an `ObligationContract` and expose a collecte
 class with `@due_work_contract_suite(CONTRACT)`. The decorator generates pytest
 cases at collection time; it does not write Python test files. Histories can
 declare their expected `Findings`, including a strict gap for an observed
-divergence. See the [required adoption shape](../ADOPTING.md#required-adoption-shape).
+divergence. See the [required adoption shape](adopting.md#required-adoption-shape).
 
 When the production worker cannot be interrupted in-process, `process_histories`
 runs it in a child process, kills it at named points with `os._exit`, and
@@ -69,7 +69,7 @@ Profile E has independently assessed stale-snapshot, monotonic-result,
 in-flight, and evidence-confluence families. The harness generates
 deterministic competing-event histories; optional Hypothesis explores more
 schedules. See [interleavings](interleavings.md) and the [executed adopter
-capability map](adopter-capabilities.md).
+capability map](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md).
 
 `NotAssessed` creates a strict XFAIL with a remediation reason; it does not
 mean a production bug was demonstrated. A passing sibling profile or family

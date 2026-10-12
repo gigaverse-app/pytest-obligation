@@ -28,7 +28,7 @@ configure(django_host(production_packages={"myapp"}))
 The harness can test a Shopify integration or any other external API through
 the application's real Python call and observed effects. It does not ship a
 Shopify-specific adapter or claim every provider behavior is covered. See
-[the adopter capability map](adopter-capabilities.md) for what existing suites
+[the adopter capability map](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md) for what existing suites
 actually exercise.
 
 ## Bounded ownership racers
@@ -87,10 +87,10 @@ reading the result being judged. Replay proofs check it after both executions;
 crash proofs check normal operation before comparing interrupted histories.
 Existing proof names and contract wiring are unchanged.
 
-The [catalog binding](../examples/adopter/test_bindings.py) is reused by the
+The [catalog binding](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter/test_bindings.py) is reused by the
 inline, Celery and RQ suites: it admits `"red"`, executes the real worker,
 observes remote content, and declares `expected="red"`. Its
-[negative control](../examples/adopter/tests/test_catalog_failures.py) corrupts
+[negative control](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter/tests/test_catalog_failures.py) corrupts
 the provider payload and runs the generated contract case. Equal wrong results
 must fail. The Procrastinate, Wagtail, DBOS and Saleor demos similarly declare
 indexed books, deleted objects, sent events, or completed orders and money.

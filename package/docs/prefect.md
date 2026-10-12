@@ -40,5 +40,5 @@ Bind this flow callable and schedule evidence through an `ObligationContract` wi
 a collected `@due_work_contract_suite(CONTRACT)` class. Put histories in
 `handoffs=` and claim only profiles for which production bindings exist.
 Calling the adapter in ordinary tests alone is incomplete domain adoption; see
-[required adoption shape](../ADOPTING.md#required-adoption-shape) for generated
+[required adoption shape](adopting.md#required-adoption-shape) for generated
 cases and report artifacts.

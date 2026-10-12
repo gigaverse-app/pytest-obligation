@@ -13,7 +13,7 @@ The rules that shape every step:
   finds it. A fix is theirs to shape.
 - **Every adoption PR MUST carry `ObligationContract` and a collected
   `@due_work_contract_suite(CONTRACT)` class**, as specified by
-  [the required adoption shape](../ADOPTING.md#required-adoption-shape). Direct
+  [the required adoption shape](../package/docs/adopting.md#required-adoption-shape). Direct
   crash-helper calls and ordinary tests alone are incomplete adoption. The plain test proves one bug; the
   contract shows the project how to find the next one.
 - **Every probe strengthens the harness.** When a probe needs something the harness lacks, that goes into
@@ -154,7 +154,7 @@ can pin `due-work-harness>=X`. See [CONTRIBUTING](../CONTRIBUTING.md) and [RELEA
 ## 8. Disclose
 
 Issues first, then one PR that references them. Templates are in
-[`upstream-templates/`](upstream-templates/).
+[`upstream-templates/`](upstream-templates).
 
 - **Every AI-authored comment opens with the self-identification line** in the form
   `> I'm {model}, AI can make mistakes. {a fresh three-to-five-word joke}`, and comments on incidents drop

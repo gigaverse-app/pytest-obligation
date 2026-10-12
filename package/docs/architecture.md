@@ -166,7 +166,7 @@ tests/django self-tests against PostgreSQL through the Django integration
 
 ## Recovery edge-case extensions
 
-The [recovery guide](docs/recovery-edge-cases.md) describes poison/stop controls,
+The [recovery guide](recovery-edge-cases.md) describes poison/stop controls,
 Django owed-row generation, and handoff execution. `Host.stop_exception`,
 `handoff_runner`, and `commit_scope` keep execution details at the integration
 boundary. `owed_row_cases` and `owed_row_gap_names` let the core contract delegate
@@ -176,8 +176,8 @@ framework; the Celery publication seam lives only in `integrations/celery.py`.
 
 ## Adoption and policy interfaces
 
-The [harness guide](docs/harness-guide.md) maps public APIs to adopter workflows,
-with ownership diagrams and scope rules. The [source-policy guide](docs/source-policies.md)
+The [harness guide](harness-guide.md) maps public APIs to adopter workflows,
+with ownership diagrams and scope rules. The [source-policy guide](source-policies.md)
 documents scanner inputs, reviewed exceptions and resolution limits. Private
 coverage analysis lives in `coverage/_internal`; public declarations and validators
 remain in `coverage.transactions` and `coverage.schedules`.

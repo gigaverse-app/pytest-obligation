@@ -140,7 +140,7 @@ the result proves completeness within that backend, not across other backends.
 Unknown columns, lifecycle paths and empty reasons are rejected. All remaining
 compared fields and every declared lifecycle state still participate.
 
-See the [real Wagtail worker binding](../demos/wagtail_tasks/test_worker_rows.py):
+See the [real Wagtail worker binding](https://github.com/gigaverse-app/pytest-obligation/blob/main/demos/wagtail_tasks/test_worker_rows.py):
 it executes the unmodified worker, excludes terminal SUCCESSFUL/FAILED states,
 and reports stranded RUNNING and four invalid-status edges as separate strict
 findings. Its other queue-name and stop/failure findings remain independent.

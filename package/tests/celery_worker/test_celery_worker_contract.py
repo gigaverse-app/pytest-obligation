@@ -10,6 +10,7 @@ suite red until the table is updated.
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -74,6 +75,7 @@ SEND_MESSAGE = worker_history(
     expected=FINDINGS.delivered,
     settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
     findings=FINDINGS,
+    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
 )
 
 

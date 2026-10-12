@@ -40,7 +40,7 @@ E has four independent families: stale snapshots, monotonic results, in-flight
 completion, and evidence confluence. Claiming one does not certify the others.
 `NotAssessed` is strict-XFAIL assessment debt; `KnownGap` records a demonstrated
 or declared missing guarantee in legacy behavior. Neither is passing evidence.
-The [migration guide](../ADOPTING.md#migrating-an-existing-declaration) explains
+The [migration guide](adopting.md#migrating-an-existing-declaration) explains
 how to declare the distinction and produce an executed coverage report.
 
 The deterministic catalogs and optional Hypothesis explorer use the same

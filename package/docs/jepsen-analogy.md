@@ -25,7 +25,7 @@ whole workflow finishes correctly.
 pytest-obligation binds the real transition, observable effects, and production
 recovery path to an `ObligationContract`. It generates standardized tests that
 challenge those boundaries and check what remains after recovery. The
-[Saleor and DBOS demonstrations](../demos/README.md) reproduce concrete
+[Saleor and DBOS demonstrations](https://github.com/gigaverse-app/pytest-obligation/blob/main/demos/README.md) reproduce concrete
 examples of these failures against pinned upstream code.
 
 ## How the approaches relate
@@ -76,5 +76,5 @@ installed, ask:
 > and run crash, replay, and convergence tests, and show the exact history
 > behind each finding and the guarantees that remain unassessed.
 
-Follow the [adoption guide](../ADOPTING.md) for manual setup and the
+Follow the [adoption guide](adopting.md) for manual setup and the
 [pytest plugin guide](pytest-plugin.md) for running the generated suite in CI.

@@ -35,5 +35,5 @@ provider deduplication makes the same generated history detect a duplicate effec
 Use this host inside an `ObligationContract` adoption with a collected
 `@due_work_contract_suite(CONTRACT)` class. The adapter supplies fault injection;
 it does not replace the contract or generate cases on its own. See
-[required adoption shape](../ADOPTING.md#required-adoption-shape) for declarations
+[required adoption shape](adopting.md#required-adoption-shape) for declarations
 and generated test/report evidence.

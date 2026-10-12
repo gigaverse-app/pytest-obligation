@@ -5,15 +5,15 @@ to answer; the linked guides and examples own the details.
 
 | Goal | Guide or executable example |
 | --- | --- |
-| Enroll a new application | [Adoption walkthrough](../ADOPTING.md), [SQLite adopter](../examples/adopter/) |
+| Enroll a new application | [Adoption walkthrough](adopting.md), [SQLite adopter](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter) |
 | Choose claims and understand their limits | [Profile catalog](../src/pytest_obligation/profiles/catalog.py), [what a green result means](what-a-green-result-means.md) |
-| Connect database and worker boundaries | [Integrations](integrations.md), [Host contract](../ARCHITECTURE.md#the-host) |
+| Connect database and worker boundaries | [Integrations](integrations.md), [Host contract](architecture.md#the-host) |
 | Follow recovery through malformed rows and lost messages | [Recovery edge cases](recovery-edge-cases.md), [handoff API](../src/pytest_obligation/crash_histories.py) |
 | Exercise ordering and real process death | [Interleavings](interleavings.md), [process histories](../src/pytest_obligation/process_histories.py) |
 | Find unenrolled handoffs and source-policy debt | [Coverage](coverage.md), [source policies](source-policies.md) |
 | Test a Due work-table application | [Due authoring walkthrough](https://github.com/gigaverse-app/due/blob/main/docs/conformance.md), [Due API and module map](https://github.com/gigaverse-app/due/blob/main/docs/conformance-api.md) |
 | Replace the backend's local harness | [Completed port and ownership map](backend-harness-port.md), [package migration](package-migration.md) |
-| Change the harness itself | [Architecture](../ARCHITECTURE.md), [contributing](../CONTRIBUTING.md), [upstream adopter playbook](upstream-playbook.md) |
+| Change the harness itself | [Architecture](architecture.md), [contributing](https://github.com/gigaverse-app/pytest-obligation/blob/main/CONTRIBUTING.md), [upstream adopter playbook](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/upstream-playbook.md) |
 
 The Due API guide is introduced in [Due #9](https://github.com/gigaverse-app/due/pull/9);
 use that PR's version until it lands on `main`.
@@ -34,7 +34,7 @@ flowchart LR
 1. Inventory production handoffs with `pytest-obligation check`; a passing
    selected test cannot discover a capability whose suite was deleted.
 2. Declare an `ObligationContract` and an explicit disposition for each relevant
-   profile. The [adoption guide](../ADOPTING.md) explains `Claim`, `Decline`,
+   profile. The [adoption guide](adopting.md) explains `Claim`, `Decline`,
    `NotApplicable`, `KnownGap` and unassessed evidence.
 3. Bind real production selections and transitions. Test code may arrange data,
    inject failures and observe results; it must not supply a second recovery loop.
@@ -43,7 +43,7 @@ flowchart LR
 5. Run both healthy controls and injected histories. A fault that never fires is
    not evidence that recovery handled it.
 6. Enforce collected, selected and executed evidence. Consult the
-   [adoption CI workflow](../ADOPTING.md) and preserve report artifacts alongside
+   [adoption CI workflow](adopting.md) and preserve report artifacts alongside
    JUnit; a filtered green run cannot establish complete application coverage.
 
 ## Who owns what?

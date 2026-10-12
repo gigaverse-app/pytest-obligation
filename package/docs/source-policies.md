@@ -154,5 +154,5 @@ local reassignment of proof functions and reflective calls are outside this scan
 
 These tests build small source projects and exercise both accepted and rejected
 cases. AST implementation details live under
-[`coverage/_internal`](../src/pytest_obligation/coverage/_internal/); applications
+[`coverage/_internal`](../src/pytest_obligation/coverage/_internal); applications
 use the three public policy modules above.

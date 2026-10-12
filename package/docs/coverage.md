@@ -24,7 +24,7 @@ class TestOrderNotificationsDueWork:
 
 A declaration counts only if pytest would collect it;
 `pytest --due-work-verify` checks it actually ran. Existing projects can start
-with a baseline that only shrinks. [The adoption guide](../ADOPTING.md#2-configure-the-scan)
+with a baseline that only shrinks. [The adoption guide](adopting.md#2-configure-the-scan)
 has the configuration, supported site kinds, and CI actions.
 
 `due-work-harness in-transaction` also lists handoffs made lexically inside

@@ -1,13 +1,13 @@
 # Adopting due-work-harness
 
 For a guided map of interfaces, examples and debugging paths, see the
-[harness guide](docs/harness-guide.md). Application source-policy checks are
-covered separately in [source policies](docs/source-policies.md).
+[harness guide](harness-guide.md). Application source-policy checks are
+covered separately in [source policies](source-policies.md).
 
 
 This is the path from "we use Django/Celery, Procrastinate or DBOS" to "CI fails
 when background work can be lost or repeated". A complete, minimal adopter lives
-in [`examples/adopter/`](examples/adopter/); the harness's own CI runs it through
+in [`examples/adopter/`](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter); the harness's own CI runs it through
 the GitHub Actions below.
 
 ## Required adoption shape
@@ -38,7 +38,7 @@ remain explicit; new-feature contracts cannot waive gaps.
 
 This version requires Pydantic 2.11 or newer; the minimum is exercised in CI.
 The canonical names and enum values now follow the A–J vocabulary in the
-[profile table](docs/how-it-works.md#the-a-j-guarantees). This is an API migration:
+[profile table](how-it-works.md#the-a-j-guarantees). This is an API migration:
 
 - Move nested `safety.profiles` into `ObligationContract.profiles`: old
   `SafetyProfile.REPLAY_SAFE_EXECUTION` becomes `Profile.HARMLESS_REPLAY` (H),
@@ -65,9 +65,9 @@ outcomes. It supports xdist and never treats an XFAIL as a verified guarantee.
 This complements the static handoff scan and `--due-work-verify`; neither a
 collected declaration nor one passing test certifies a whole profile.
 
-See [interleavings](docs/interleavings.md) for generated competing-event tests,
+See [interleavings](interleavings.md) for generated competing-event tests,
 optional exploration and deterministic replay. Profile I's callbacks are documented
-in [`indivisible_admission.py`](src/pytest_obligation/profiles/indivisible_admission.py):
+in [`indivisible_admission.py`](../src/pytest_obligation/profiles/indivisible_admission.py):
 bind a real standalone command, independently observed product intent and work,
 an external-publication recorder, and a fault boundary reached after partial writes.
 The host must supply `in_transaction`; fault fixtures must not supply the transaction.
@@ -111,7 +111,7 @@ A project helper that hands work off for its callers (Zulip's
 `send_event_on_commit`, say) is declared in `bridges` with its own site count, so
 each call to it becomes a site in its caller. `exclude` adds name patterns to
 skip, and may never hide production code. See
-[`coverage/config.py`](src/pytest_obligation/coverage/config.py) for every key.
+[`coverage/config.py`](../src/pytest_obligation/coverage/config.py) for every key.
 
 ## 3. See what you have, and baseline the past
 
@@ -191,8 +191,8 @@ class TestOrderNotificationsDueWork:
 Start small by declaring a `HandoffHistory` in the contract's `handoffs=` with
 its real `handoff_delivery=`; the suite generates the crash proof. Direct helper
 calls may help discovery, but must be incorporated into the declaration before
-calling adoption complete. See [the README](README.md) and
-[what a green result means](docs/what-a-green-result-means.md).
+calling adoption complete. See [the README](https://github.com/gigaverse-app/pytest-obligation/blob/main/README.md) and
+[what a green result means](what-a-green-result-means.md).
 
 If the work can be owed but *blocked* by a product decision (a dependency has
 not settled, an owner is still active), add an `ExecutionGate` to a contract
@@ -204,7 +204,7 @@ the readiness notification lost. Native worker recovery can bind G without claim
 A. When A is also claimed, the contract's sweep must declare `dispatched_ids`,
 the recorder of what its dispatch path sends: the gate's recovery is shown to be
 the sweep's by the gate's identity being dispatched there while it runs. See
-[what a green result means](docs/what-a-green-result-means.md#execution-eligibility-owed-is-not-the-same-as-runnable).
+[what a green result means](what-a-green-result-means.md#execution-eligibility-owed-is-not-the-same-as-runnable).
 
 **Or exempt it, with proof**, when losing the handoff genuinely costs nothing:
 
@@ -277,7 +277,7 @@ xfail mark, using the harness's own decorator, `DueWorkSource` and contract.
 
 ### Executed adoption and optional search
 
-The [catalog example](examples/adopter/README.md) supplies working G/H/I bindings,
+The [catalog example](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter/README.md) supplies working G/H/I bindings,
 revision and retirement histories, delayed provider effects, lost/duplicate wakeups,
 and batched/duplicate receipts including retry turnover. The same bindings run
 through RQ, Celery and Prefect in this repository's integration suites.

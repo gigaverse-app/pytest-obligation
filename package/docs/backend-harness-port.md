@@ -89,7 +89,7 @@ contracts. Install the actual Celery stop exception and handoff/publication hook
 Give the public pytest plugin sole ownership of `--due-work-explore`; translate
 BE's `extended` setting to the public `deep` mode deliberately.
 
-The earlier [migration rehearsal](plans/backend-migration-audit.md) remains
+The earlier [migration rehearsal](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/plans/backend-migration-audit.md) remains
 historical evidence: native/light consumers matched 98 cases (90 passed, eight
 unchanged strict expected failures), but the work-table port did not exist then.
 The work-table gap is filled by Due #5 and #9. This completes the reusable harness extraction, not
@@ -235,7 +235,7 @@ rows behind. The real Wagtail worker now runs with its normal connection behavio
 root regressions require committed histories to clean up their own rows. Exact
 edge aliases and an explicit fixed routing scope let that adopter expose precise
 lifecycle findings without disabling the proof. See the [adopter capability
-matrix](adopter-capabilities.md#integration-of-the-upstream-parity-changes-57).
+matrix](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md#integration-of-the-upstream-parity-changes-57).
 
 A coordinated consumer audit then found copies that had already been ported but
 were still used in BE: its worker connection scope, lock-order recorder and Beat
