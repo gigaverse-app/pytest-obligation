@@ -74,6 +74,7 @@ def index_served_verdict(plan: dict[str, Any], *, table: str, predicate_indexes:
         )
     for node in scans:
         node_type = node.get("Node Type", "")
+        own = _own_names(node)
         if re_tested := _re_tested_predicate(node, constrained):
             index, columns = re_tested
             return (
@@ -113,29 +114,132 @@ def index_served_verdict(plan: dict[str, Any], *, table: str, predicate_indexes:
             for scan in bitmap_scans:
                 if "Index Cond" in scan and (failure := _index_condition_failure(scan, table, plan)):
                     return failure
+                if "Filter" in node and (failure := _join_key_failure(scan, own, constrained, table, plan)):
+                    return failure
             continue
-        if "Index Cond" in node and (failure := _index_condition_failure(node, table, plan)):
-            return failure
-        # A scan with no Filter discards nothing: every row the index yields is
-        # a result row. That is how a *partial* index serves a predicate — the
-        # narrowing lives in the index's own WHERE clause, which EXPLAIN does
-        # not surface as an Index Cond — and rejecting it would fail in the
-        # accusing direction, which this proof treats as worse than silence.
-        # The waste this invariant hunts is rows walked and then thrown away,
-        # and that always shows up as a Filter.
-        if "Filter" not in node:
+        if "Index Cond" in node:
+            if failure := _index_condition_failure(node, table, plan):
+                return failure
+            # A condition the selection itself states narrows the read; a Filter above it drops only the
+            # residual. A condition made only of join keys narrows nothing the selection's Filter asks for.
+            if "Filter" in node and (failure := _join_key_failure(node, own, constrained, table, plan)):
+                return failure
             continue
         # A named partial index narrows by its own predicate, as it does for a bitmap: the re-tested
-        # predicate is refused above, so the Filter left here drops only backlog the predicate cannot hold.
+        # predicate is refused above, so a Filter left here drops only backlog the predicate cannot hold.
         if node.get("Index Name") in constrained:
             continue
-        if not any(key in node for key in PRUNING_KEYS):
+        if "Filter" in node:
             return (
                 f"the selection reaches an index on {table!r} ({node_type}) but no index condition "
                 f"narrows it — every row is walked and filtered. That is a full scan by another name, "
                 f"on a schedule. Add an index whose leading columns match the selection's "
                 f"predicate.\n{_rendered(plan)}"
             )
+        if failure := _unconditioned_scan_failure(node, alone, table, plan):
+            return failure
+    return None
+
+
+def _own_names(scan: dict[str, Any]) -> frozenset[str]:
+    """The names a scan's own columns may be qualified with: its alias and its relation."""
+    return frozenset(str(scan[key]) for key in ("Alias", "Relation Name") if key in scan)
+
+
+#: A column qualified by a relation name or alias, as PostgreSQL prints another relation's column in a
+#: parameterized scan (``(parent_id = p.id)``); a qualified name followed by ``(`` is a function, not a column.
+_QUALIFIED = re.compile(r'(?<![\w$."])("[^"]+"|[A-Za-z_][\w$]*)\.(?:"[^"]+"|[A-Za-z_][\w$]*)(?!\s*\()')
+
+
+def _conjuncts(expression: str) -> list[str]:
+    """The top-level ``AND`` clauses of a condition PostgreSQL printed, literals and comments blanked."""
+    text = _CAST.sub("", blank_literals_and_comments(expression)).strip()
+    while text.startswith("(") and _closing_paren(text) == len(text) - 1:
+        text = text[1:-1].strip()
+    clauses, depth, start = [], 0, 0
+    for index, char in enumerate(text):
+        depth += {"(": 1, ")": -1}.get(char, 0)
+        if depth == 0 and text.startswith(" AND ", index):
+            clauses.append(text[start:index])
+            start = index + len(" AND ")
+    clauses.append(text[start:])
+    return [clause.strip() for clause in clauses if clause.strip()]
+
+
+def _closing_paren(text: str) -> int:
+    """The index of the parenthesis closing the one ``text`` opens with."""
+    depth = 0
+    for index, char in enumerate(text):
+        depth += {"(": 1, ")": -1}.get(char, 0)
+        if depth == 0:
+            return index
+    return -1
+
+
+def _borrowed_from_a_join(access: dict[str, Any], own: frozenset[str]) -> bool:
+    """
+    Whether every clause of ``access``'s Index Cond compares a key with another relation's column.
+
+    That condition positions the scan once per row of the relation driving the
+    join, so the rows it reads are those of every driving row: it narrows by the
+    join, not by anything the selection asks of this table. One clause the
+    selection states itself (a literal, a parameter, ``now()``) is a narrowing
+    condition, wherever the join keys sit in the index.
+    """
+    clauses = _conjuncts(str(access.get("Index Cond", "")))
+    return bool(clauses) and all(
+        any(qualifier.strip('"') not in own for qualifier in _QUALIFIED.findall(clause)) for clause in clauses
+    )
+
+
+def _join_key_failure(
+    access: dict[str, Any], own: frozenset[str], constrained: Mapping[str, Collection[str]], table: str, plan: dict
+) -> str | None:
+    """Refuse a scan whose only index condition is a join key while its Filter carries the selection's condition."""
+    if access.get("Index Name") in constrained or not _borrowed_from_a_join(access, own):
+        return None
+    return (
+        f"the selection reaches {table!r} through index {access.get('Index Name')!r} with only a join key as its "
+        f"index condition ({access['Index Cond']}), and filters the rows it reads. The join key narrows nothing the "
+        f"selection asks of {table!r}: each row driving the join reads every one of its rows here, and over realistic "
+        f"data that is the whole table. Index the selection's own condition on {table!r} (as the leading key, or "
+        f"after the join key in the same index), or name a partial index whose predicate it "
+        f"implies.\n{_rendered(plan)}"
+    )
+
+
+def _unconditioned_scan_failure(node: dict[str, Any], alone: bool, table: str, plan: dict[str, Any]) -> str | None:
+    """
+    Refuse a scan with no index condition and no Filter unless a partial index alone narrows it.
+
+    Such a scan reads every entry of its index. That is how a *partial* index
+    serves a predicate it implies — the narrowing lives in the index's own WHERE
+    clause, which EXPLAIN does not surface — so it is accepted when no other
+    relation in the plan can discard what it yields. A full index read that way
+    is the whole table, whatever the selection's condition elsewhere.
+    """
+    index = node.get("Index Name")
+    catalog = node.get(CATALOG_INDEX)
+    if catalog is None:
+        return (
+            f"the selection reads index {index!r} on {table!r} with no index condition, and the plan carries no "
+            f"catalog definition to say whether its own predicate narrows it; capture it with "
+            f"explain_index_eligibility.\n{_rendered(plan)}"
+        )
+    if catalog["Predicate"] is None:
+        return (
+            f"the selection reads index {index!r} on {table!r} with no index condition, and it is not a partial "
+            f"index: every entry is read, so nothing the selection asks narrows the read of {table!r}. A join that "
+            f"discards rows afterwards does not shorten it, and a table that holds only owed rows today does not "
+            f"stay that way. Index the selection's own condition on {table!r}.\n{_rendered(plan)}"
+        )
+    if not alone:
+        return (
+            f"the selection reads the partial index {index!r} on {table!r} whole, and joins another relation that "
+            f"can discard what it yields: the selection's narrowing is in the join, not in the index. Index that "
+            f"condition, or name the index in partial_indexes when its predicate bounds the read on its own and "
+            f"what the join discards is backlog.\n{_rendered(plan)}"
+        )
     return None
 
 
@@ -312,10 +416,42 @@ def assert_plan_is_index_served(
        index narrows by its predicate; a bitmap of one without a condition is
        accepted only when no Filter or other relation can discard its rows.
 
+    Three more false negatives came from an adopter audit that mutated real
+    selections and watched the verdict stay green:
+
+    6. *A join key is not the selection's condition.* A selection that filters
+       an unindexed time column and joins its parent reaches the table through
+       the foreign-key index, once per parent row::
+
+           Nested Loop
+             ->  Index Scan using parent_pkey on parent p
+                   Filter: (scope = 's1')
+             ->  Index Scan using child_parent_ix on child c
+                   Index Cond: (parent_id = p.id)          <- join key only
+                   Filter: (due_at <= now())               <- the selection's own condition
+
+       The leading key is constrained, but by the join: each parent reads all of
+       its children, which over realistic data is every row. An index condition
+       counts only when one of its clauses is the selection's own (a literal, a
+       parameter, ``now()``); ``(parent_id, due_at)`` with both clauses passes.
+
+    7. *A partial index read whole is not narrowed when a join discards.* With
+       no Filter on the table, a scan of a partial index looks like case 4, but
+       a hash join on a filtered parent then drops most of what it read. Plain
+       scans now follow the bitmap rule: accepted alone, or when named in
+       ``partial_indexes``.
+
+    8. *No condition at all is a full read.* A scan of a non-partial index with
+       neither an Index Cond nor a Filter reads every entry: the selection's
+       narrowing is elsewhere (a join) or gone (a condition deleted from the
+       query). Case 4 is now accepted only with catalog evidence that the index
+       is partial.
+
     So the verdict inspects only the nodes scanning the selection's own table,
-    requires each to be a non-sequential scan that either carries a pruning key
-    or discards nothing, and — for a bitmap heap node — looks past its Recheck
-    Cond to the Bitmap Index Scan that actually built the bitmap.
+    requires each to be a non-sequential scan narrowed by the selection's own
+    index condition or by a partial index's predicate, and — for a bitmap heap
+    node — looks past its Recheck Cond to the Bitmap Index Scan that actually
+    built the bitmap.
     """
     verdict = index_served_verdict(plan, table=table, predicate_indexes=predicate_indexes)
     assert verdict is None, f"{name}: {verdict}"

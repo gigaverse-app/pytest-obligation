@@ -166,6 +166,26 @@ the whole selection; joins and heap filters still need narrowing evidence.
 (id) WHERE state = 'UNKNOWN'                  → partial predicate bounds it
 ```
 
+The narrowing must be the selection's own. An `Index Cond` made only of join
+keys (`parent_id = p.id`) positions the scan once per driving row, so with a
+`Filter` left on the table (an unindexed due time) it reads every row of every
+parent: refused, while `(parent_id, due_at)` with both clauses passes, and a
+join-key scan with nothing to filter discards nothing and passes. A scan with
+no condition at all reads its whole index: accepted only for a partial index
+read on its own (or named in `partial_indexes`), never for a full index, and
+never when a join can discard what the partial index yields.
+
+```text
+(parent_id) + Index Cond (parent_id = p.id), Filter (due_at <= now()) → join key only, refused
+(parent_id, due_at) + Index Cond on both                               → own condition narrows
+pkey walk, no Index Cond, no Filter, hash join on a filtered parent    → whole table, refused
+(id) WHERE status = 'pending', read whole beside a discarding join     → refused unless named
+```
+
+Plans are statements about statistics. Seed a realistic shape in every table
+the selection joins (`ScheduledSelection.populate`), `ANALYZE` each, and start
+plan-sensitive cases from `TRUNCATE` or a fresh table rather than `DELETE`.
+
 Direct plan consumers must use
 `pytest_obligation.integrations.django.selection.explain_index_eligibility` or
 attach equivalent `CATALOG_INDEX` facts. Bare EXPLAIN JSON cannot establish key
