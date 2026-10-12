@@ -16,14 +16,9 @@ dev = [ { include-group = "lint" }, { include-group = "xdist" }]
 default-groups = ["dev"]
 
 [tool.ruff]
+extend = "package/pyproject.toml"
 src = ["package/src", "package/shims", "package", "."]
-line-length = 120
-target-version = "py311"
 extend-exclude = ["demos/.upstream", ".venv*"]
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["package/tests", "integration_tests"]
