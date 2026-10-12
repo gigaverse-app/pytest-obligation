@@ -114,8 +114,8 @@ from pytest_obligation.integrations.django.edge_values import CandidateEdge, mod
 from pytest_obligation.integrations.django.lifecycle_states import (
     StatePath,
     filtered_fields,
+    lifecycle_paths,
     new_entries,
-    resolve_state_path,
 )
 from pytest_obligation.integrations.django.owed_rows import (
     NOTHING_ENDS_A_FAILURE,
@@ -175,8 +175,6 @@ class CompletenessBinding(RowExecution):
     name: str
     #: REAL PRODUCTION: the unbounded selection the tick pages through.
     selection: Callable[[], Iterable[Any]]
-    #: OBSERVE: identities the ticks dispatched, recorded at the broker or a production record.
-    dispatched_ids: Callable[[], list[Any]] | None = None
     #: REAL PRODUCTION: one tick; with ``dispatched_ids``, a selected row must be one the tick dispatches.
     run_tick: Callable[[], Any] | None = None
     #: Lifecycle state paths of the selected model, related paths allowed.
@@ -213,7 +211,9 @@ class CompletenessBinding(RowExecution):
         )
 
 
-def completeness_of_sweep(sweep: DueWorkSweep, model: type[Model], *, retries_bounded: bool) -> CompletenessBinding:
+def completeness_of_sweep(
+    sweep: DueWorkSweep, model: type[Model] | None, *, retries_bounded: bool
+) -> CompletenessBinding:
     """A profile-A sweep with its :class:`Lifecycle`, as owed-row admissibility projects it."""
     rows = owed_rows_of_sweep(sweep, model)
     assert sweep.lifecycle is not None  # owed_rows_of_sweep requires it
@@ -258,10 +258,10 @@ def parse_combination(key: str, paths: Mapping[str, StatePath]) -> StateCombinat
         allowed = frozenset(value.strip() for value in values.split("|"))
         if path:
             assert path in paths, f"{key!r} names {path!r}, which is not a declared state path {sorted(paths)}"
-            unknown = allowed - set(_choices(paths[path]))
-            assert not unknown, f"{key!r}: {sorted(unknown)} are not values of {path} {_choices(paths[path])}"
+            unknown = allowed - set(paths[path].choices)
+            assert not unknown, f"{key!r}: {sorted(unknown)} are not values of {path} {paths[path].choices}"
         else:
-            assert len(allowed) == 1 and any(next(iter(allowed)) in _choices(state) for state in paths.values()), (
+            assert len(allowed) == 1 and any(next(iter(allowed)) in state.choices for state in paths.values()), (
                 f"{key!r} names no value of any declared state path"
             )
         conditions.append((path or None, allowed))
@@ -287,15 +287,6 @@ def gap_combination(gap: str) -> str | None:
     return inner
 
 
-def _choices(state: StatePath) -> tuple[str, ...]:
-    choices = tuple(str(value) for value, _label in state.field.flatchoices)
-    assert choices, (
-        f"{state.path}: {state.model._meta.label}.{state.field.name} declares no choices; a state path names a "
-        f"lifecycle field whose values production enumerates"
-    )
-    return choices
-
-
 @dataclass(frozen=True)
 class _Declaration:
     """The binding's declaration, resolved against the selected model once per case."""
@@ -310,12 +301,7 @@ def _declaration(binding: CompletenessBinding) -> _Declaration:
     selection = binding.selection()
     assert isinstance(selection, QuerySet), "selection completeness requires a Django QuerySet"
     model = selection.model
-    paths = {path: resolve_state_path(model, path) for path in binding.state_fields}
-    for state in paths.values():
-        assert state.field.name in filtered_fields(selection.query.where, state.model), (
-            f"{binding.name}: the production selection does not compare {state.model.__name__}.{state.field.name}, "
-            f"so {state.path!r} is not a state this selection decides on"
-        )
+    paths = lifecycle_paths(selection, binding.state_fields, name=binding.name)
     thin = sorted(key for key, reason in binding.excluded_states.items() if not is_real_reason(reason))
     assert not thin, f"{binding.name}: excluded_states {thin} carry no real reason"
     compared = filtered_fields(selection.query.where, model)
@@ -369,10 +355,10 @@ def _fixed_examples(declaration: _Declaration, gaps: tuple[StateCombination, ...
     elif _product_size(paths) <= _PRODUCT_LIMIT:
         states = [
             dict(zip((state.path for state in paths), values, strict=True))
-            for values in product(*(_choices(state) for state in paths))
+            for values in product(*(state.choices for state in paths))
         ]
     else:
-        states = [{state.path: value} for state in paths for value in _choices(state)]
+        states = [{state.path: value} for state in paths for value in state.choices]
     states = [assignment for assignment in states if not any(gap.matches(assignment) for gap in gaps)]
     edge_fields = {model_field.attname for model_field in declaration.fields} | {
         state.field.attname for state in paths if not state.relations
@@ -396,7 +382,7 @@ def _edge_key(declaration: _Declaration, edge: CandidateEdge) -> str:
 def _product_size(paths: list[StatePath]) -> int:
     size = 1
     for state in paths:
-        size *= len(_choices(state))
+        size *= len(state.choices)
     return size
 
 
@@ -411,7 +397,7 @@ def _assignments(declaration: _Declaration) -> st.SearchStrategy[Assignment]:
     def draw(draw_: st.DrawFn) -> Assignment:
         assignment: Assignment = {}
         for state in declaration.paths.values():
-            assignment[state.path] = draw_(st.sampled_from(_choices(state)))
+            assignment[state.path] = draw_(st.sampled_from(state.choices))
         for attname, strategy in strategies.items():
             if strategy is not None and draw_(st.booleans()):
                 assignment[attname] = draw_(strategy)
@@ -545,11 +531,7 @@ def _judge(binding: CompletenessBinding, declaration: _Declaration, row: Model, 
                 related=tuple(state.holder(row) for state in declaration.paths.values() if state.relations),
                 describe=f"{describe} (states {states})",
                 selection=binding.selection,
-                identity_of=binding.identity_of,
-                execute=binding.execute,
-                deliver=binding.deliver,
-                dispatched_ids=binding.dispatched_ids,
-                effect_calls_for=binding.effect_calls_for,
+                rows=binding,
                 ends=binding.ends,
             )
         return "selected"

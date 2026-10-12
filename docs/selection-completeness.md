@@ -94,3 +94,27 @@ whether work happened and which obligations were created. A delivery failure
 cannot make selection completeness silently use different evidence from the
 owed-row proof. Integrations can reuse this owner; ordinary adopters should keep
 using the generated contract declarations above.
+
+## Direct proof call migration
+
+Generated `ObligationContract` and `ScheduledSelection` declarations are unchanged.
+Low-level callers of `assert_database_legal_owed_row_is_handled` and
+`assert_inadmissible_owed_row_does_not_block_the_next` now pass the canonical
+`rows=OwedRows(...)` and `family=EdgeFamily(...)` instead of unpacking their
+callbacks and supplying optional `edge_model`/`edge_row` arguments:
+
+```python
+assert_database_legal_owed_row_is_handled(
+    name="batch recovery",
+    selection=items_awaiting_dispatch,
+    family=EdgeFamily(model=BatchItem),
+    edge=edge,
+    rows=rows,  # the same OwedRows binding the scheduled loop uses
+)
+```
+
+`assert_selected_owed_row_is_handled` similarly takes `rows=RowExecution(...)`.
+The optional `dispatched_ids` recorder belongs to `RowExecution`, so a
+`CompletenessBinding` carries the same observation into the selected-row verdict.
+`OwedRows` requires that recorder for its ordering proof. Its constructor and
+`CompletenessBinding`'s existing flat constructor remain compatible.

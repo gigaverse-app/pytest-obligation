@@ -116,7 +116,7 @@ from inspect import getattr_static, isasyncgen, isawaitable, iscoroutine, iscoro
 from typing import Any, NamedTuple, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
-from pytest_obligation.helpers import proof_context
+from pytest_obligation.helpers import Binding, entered_binding
 from pytest_obligation.host import CountedFaults, current_host
 from pytest_obligation.models import (
     MISSING,
@@ -215,7 +215,7 @@ class HandoffHistory(ExpectedOutcome[HandleT, ObservationT]):
     """
 
     name: str
-    arrange: Callable[[], HandleT | AbstractContextManager[HandleT]]
+    arrange: Binding[HandleT]
     transition: Callable[[HandleT], object]
     observe: Callable[[HandleT], ObservationT]
     external_calls: tuple[ExternalCall, ...] = ()
@@ -597,11 +597,7 @@ def _run(
     crash_after_call: int | None = None,
     inject: _Injection | None = None,
 ) -> HistoryRun:
-    arranged = history.arrange()
-    with ExitStack() as scope:
-        handle = (
-            scope.enter_context(proof_context(arranged)) if isinstance(arranged, AbstractContextManager) else arranged
-        )
+    with entered_binding(history.arrange) as handle:
         expected = history.expected_for(handle)
         before = history.observe(handle)
         with delivery.session() as session:

@@ -22,13 +22,26 @@ For what a passing or failing proof does and does not tell you, see
 import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from typing import Any, TypeVar
+from typing import Any, TypeAlias, TypeVar
 
 import pytest
 
 from pytest_obligation.host import current_host
 
 T = TypeVar("T")
+
+Binding: TypeAlias = Callable[[], T | AbstractContextManager[T]]
+
+
+@contextmanager
+def entered_binding(factory: Binding[T]) -> Iterator[T]:
+    """Keep a binding's scope alive without allowing cleanup to suppress a proof failure."""
+    built = factory()
+    if isinstance(built, AbstractContextManager):
+        with proof_context(built) as value:
+            yield value
+    else:
+        yield built
 
 
 def contract_params(

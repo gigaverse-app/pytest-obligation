@@ -37,3 +37,18 @@ Both driver paths now pass: **366 Django tests with psycopg2**, and the final
 **nine PostgreSQL claim-race controls with psycopg 3** in addition to the full
 365-test run before the late-transaction parameter was added. The paired Due
 suite remains **1,357 passed, four expected failures**.
+
+## Second audit: concurrent BE consolidation (now merged as #5361)
+
+- [x] Preserve generated case IDs, fixture requirements, host database marks and exception-limited strict gaps while centralizing parameter creation.
+- [x] Exercise binding authorship/delegation controls, including cycles and trusted harness boundaries.
+- [x] Preserve selected-row and handoff verdicts while passing canonical row/edge bindings.
+- [x] Exercise projection and scheduled receipt retention, stale repair, reaper isolation and settlement callbacks.
+- [x] Run standalone suites and the paired BE adopter/policy checks; retain every existing debt entry.
+
+Second-pass validation: **965 core passed, one optional skip; 366 Django passed,
+one expected failure; 84 final SQL/lock controls passed**. Paired Due had
+**1,364 passed, four expected failures** before its latest main merge.
+The paired BE selection passed **2,093 cases with 70 expected failures and six
+collection exclusions**. Final revision checks are published on the
+[follow-up PR](https://github.com/gigaverse-app/pytest-obligation/pull/57/checks).

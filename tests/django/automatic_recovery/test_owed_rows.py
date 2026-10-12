@@ -240,15 +240,18 @@ def _handled(
     dispatched_ids: Callable[[], list[int]] | None = None,
     ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
+    tick = _Tick(selection, worker, isolate=True)
     assert_database_legal_owed_row_is_handled(
         name="self-test sweep",
-        edge=edge,
-        make_owed=_owed,
         selection=selection,
-        identity_of=lambda owner: owner.pk,
-        execute=worker,
-        run_tick=_Tick(selection, worker, isolate=True).run,
-        dispatched_ids=dispatched_ids,
+        edge=edge,
+        family=EdgeFamily(model=PrimitiveOwner),
+        rows=OwedRows(
+            make_owed=_owed,
+            execute=worker,
+            run_tick=tick.run,
+            dispatched_ids=dispatched_ids if dispatched_ids is not None else lambda: tick.dispatched,
+        ),
         ends=ends,
     )
 
@@ -266,11 +269,9 @@ def _not_blocking(tick: _Tick, edge: CandidateEdge) -> None:
     assert_inadmissible_owed_row_does_not_block_the_next(
         name="self-test sweep",
         edge=edge,
-        make_owed=_owed,
         selection=tick.selection,
-        identity_of=lambda owner: owner.pk,
-        run_tick=tick.run,
-        dispatched_ids=lambda: tick.dispatched,
+        family=EdgeFamily(model=PrimitiveOwner),
+        rows=OwedRows(make_owed=_owed, execute=tick.worker, run_tick=tick.run, dispatched_ids=lambda: tick.dispatched),
     )
 
 

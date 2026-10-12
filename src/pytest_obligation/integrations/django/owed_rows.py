@@ -71,19 +71,6 @@ def _rows_as_persisted(rows: tuple[Model, ...]) -> tuple[dict[str, Any] | None, 
     return tuple(_persisted(type(row), row.pk) for row in rows)
 
 
-def _edge_target(row: Any, edge_row: Callable[[Any], Model] | None, edge_model: type[Model] | None) -> Model:
-    """The row whose field the edge value goes into: the selected row, or one it relates to."""
-    target = edge_row(row) if edge_row is not None else row
-    # A family whose model is not the written row's would enumerate one table's
-    # fields and write them into another: loud on a missing name, silent on a shared one.
-    assert edge_model is None or type(target)._meta.concrete_model is edge_model._meta.concrete_model, (
-        f"the edge values are {edge_model.__name__ if edge_model else None} fields, but they would be written into "
-        f"{type(target).__name__}. Name the related row the worker reads with `edge_row=`, or declare the model "
-        f"the selection returns"
-    )
-    return target
-
-
 class OwedRowNotHandled(AssertionError):
     """
     The invariant itself failed, as opposed to a positive control or a binding check.
@@ -192,46 +179,38 @@ def serve_row(
 
 
 def assert_database_legal_owed_row_is_handled(
-    *,
     name: str,
-    edge: CandidateEdge,
-    make_owed: Callable[[], Any],
     selection: Callable[[], Iterable[Any]],
-    identity_of: Callable[[Any], Any],
-    execute: Callable[[Any], Any],
-    run_tick: Callable[[], Any],
-    deliver: Callable[[Any], Any] | None = None,
-    dispatched_ids: Callable[[], list[Any]] | None = None,
-    effect_calls_for: Callable[[Any], int] | None = None,
-    edge_row: Callable[[Any], Model] | None = None,
-    edge_model: type[Model] | None = None,
+    family: EdgeFamily,
+    edge: CandidateEdge,
+    rows: OwedRows,
     ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
     """
     INVARIANT: one production delivery of a selected database-legal owed row neither raises nor idles on it.
 
-    ``edge_row`` maps the selected row to the row whose field the edge value
+    ``family.edge_row`` maps the selected row to the row whose field the edge value
     goes into, when the worker reads a related row (a chunk's campaign);
-    "unchanged" then covers both rows. ``edge_model`` is the model the edge
-    was enumerated from, checked against that row. ``dispatched_ids`` is read
+    "unchanged" then covers both rows. ``family.model`` is the model the edge
+    was enumerated from, checked against that row. ``rows.dispatched_ids`` is read
     for a recorder that patches a task instance, but an entry in it is not
     work: a run that reaches a row and skips it records one too. ``ends`` is
     what the contract says ends a row whose chain raised after moving it out
     of the selection.
     """
-    row = make_owed()
-    identity = identity_of(row)
-    target = _edge_target(row, edge_row, edge_model)
+    row = rows.make_owed()
+    identity = rows.identity_of(row)
+    target = family.target(row)
     # POSITIVE CONTROL: the unmodified example is selected, so an absent edge
     # row below means the selection excluded it, not that nothing was selected.
-    assert identity in _selected(selection, identity_of), (
+    assert identity in _selected(selection, rows.identity_of), (
         f"{name}: the owed example is not selected before any edge value is written; invariant 1 is the one to read"
     )
-    if not (write_unvalidated(type(target), target.pk, edge) and identity in _selected(selection, identity_of)):
+    if not (write_unvalidated(type(target), target.pk, edge) and identity in _selected(selection, rows.identity_of)):
         # Excluded, or a value the database rejects: the same tick still runs,
         # so no case passes without running production.
         try:
-            run_tick()
+            rows.run_tick()
         except Exception as error:
             raise AssertionError(
                 f"{name}: the tick raised {error!r} in a pass where the row with {edge.id} is not selected. "
@@ -246,45 +225,37 @@ def assert_database_legal_owed_row_is_handled(
         related=(target,),
         describe=f"with {edge.id} ({edge.value!r})",
         selection=selection,
-        identity_of=identity_of,
-        execute=execute,
-        deliver=deliver,
-        dispatched_ids=dispatched_ids,
-        effect_calls_for=effect_calls_for,
+        rows=rows,
         ends=ends,
     )
 
 
 def assert_inadmissible_owed_row_does_not_block_the_next(
-    *,
     name: str,
-    edge: CandidateEdge,
-    make_owed: Callable[[], Any],
     selection: Callable[[], Iterable[Any]],
-    identity_of: Callable[[Any], Any],
-    run_tick: Callable[[], Any],
-    dispatched_ids: Callable[[], Any],
-    edge_row: Callable[[Any], Model] | None = None,
-    edge_model: type[Model] | None = None,
+    family: EdgeFamily,
+    edge: CandidateEdge,
+    rows: OwedRows,
+    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
     """INVARIANT: an edge row first in selection order does not stop the tick before the valid row behind it."""
-    pair = _two_owed_in_selection_order(name, selection, make_owed, identity_of)
-    target = _edge_target(pair.rows[pair.head], edge_row, edge_model)
+    pair = _two_owed_in_selection_order(name, selection, rows.make_owed, rows.identity_of)
+    target = family.target(pair.rows[pair.head])
     write_unvalidated(type(target), target.pk, edge)
     # Excluded, rejected by the database, or sorted after the valid row, the
     # edge row cannot precede it; the tick still runs and must still reach it.
-    ahead = [identity for identity in _selected(selection, identity_of) if identity in pair.rows] == [
+    ahead = [identity for identity in _selected(selection, rows.identity_of) if identity in pair.rows] == [
         pair.head,
         pair.behind,
     ]
-    recorded = list(dispatched_ids())
+    recorded = list(rows.dispatched_ids())
     error: Exception | None = None
     try:
-        run_tick()
+        rows.run_tick()
     except Exception as raised:  # noqa: BLE001 - a loud tick is allowed; abandoning the next row is not
         error = raised
     # INVARIANT ENFORCEMENT: the valid row was dispatched by this tick, not before it.
-    if pair.behind not in new_entries(recorded, list(dispatched_ids())):
+    if pair.behind not in new_entries(recorded, list(rows.dispatched_ids())):
         raise OwedRowNotHandled(
             f"{name}: a database-legal owed row with {edge.id} ({edge.value!r}) "
             f"{'first in selection order' if ahead else 'in the same tick'} stopped the tick before the valid row "
@@ -312,6 +283,17 @@ class EdgeFamily(HarnessModel):
     model: type[Model]
     edge_row: Callable[[Any], Model] | None = None
 
+    def target(self, row: Any) -> Model:
+        """The row whose field the edge value goes into: selected or related."""
+        target = self.edge_row(row) if self.edge_row is not None else row
+        # Enumerating one table's fields and writing another's can silently match a shared name.
+        assert type(target)._meta.concrete_model is self.model._meta.concrete_model, (
+            f"the edge values are {self.model.__name__} fields, but they would be written into "
+            f"{type(target).__name__}. Name the related row the worker reads with `edge_row=`, or declare the model "
+            f"the selection returns"
+        )
+        return target
+
 
 class RowExecution(HarnessModel):
     """One fresh owed row and its real worker, shared by discovery and sweep proofs.
@@ -327,6 +309,8 @@ class RowExecution(HarnessModel):
     execute: Callable[[Any], Any]
     #: Stable identity used to compare selections and delivered work; defaults to the primary key.
     identity_of: Callable[[Any], Any] = _pk
+    #: OBSERVE: broker or production recorder used to distinguish dispatch from work.
+    dispatched_ids: Callable[[], list[Any]] | None = None
     #: Map the arranged row to worker input; None passes its ``identity_of`` value.
     deliver: Callable[[Any], Any] | None = None
     #: OBSERVE: the number of external effects for this row, when SQL alone cannot show work.
@@ -367,7 +351,7 @@ class OwedRows(RowExecution):
     still_owed: Callable[[Any], bool] | None = None
 
 
-def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model]) -> OwedRows:
+def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model] | None) -> OwedRows:
     """
     A profile-A sweep as the owed-row binding, so both contracts run the same proofs.
 
@@ -377,6 +361,8 @@ def owed_rows_of_sweep(sweep: DueWorkSweep, model: type[Model]) -> OwedRows:
     queryset = sweep.due_work()
     assert isinstance(queryset, QuerySet), "Django owed_model requires a QuerySet selection"
     selected = queryset.model
+    if model is None:
+        model = selected
     assert selected._meta.concrete_model is model._meta.concrete_model, (
         f"{sweep.name}: owed_model={model.__name__} but the production selection returns "
         f"{selected.__name__}. Declare the model `due_work()` selects"
@@ -489,54 +475,6 @@ def assert_the_tick_dispatches_owed_rows_in_selection_order(
     )
 
 
-def _owed_row_is_handled(
-    name: str,
-    selection: Callable[[], Iterable[Any]],
-    family: EdgeFamily,
-    edge: CandidateEdge,
-    rows: OwedRows,
-    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
-) -> None:
-    """Invariant 1 bound to an owed-row binding."""
-    assert_database_legal_owed_row_is_handled(
-        name=name,
-        edge=edge,
-        make_owed=rows.make_owed,
-        selection=selection,
-        identity_of=rows.identity_of,
-        execute=rows.execute,
-        run_tick=rows.run_tick,
-        deliver=rows.deliver,
-        dispatched_ids=rows.dispatched_ids,
-        effect_calls_for=rows.effect_calls_for,
-        edge_row=family.edge_row,
-        edge_model=family.model,
-        ends=ends,
-    )
-
-
-def _owed_row_does_not_block_the_next(
-    name: str,
-    selection: Callable[[], Iterable[Any]],
-    family: EdgeFamily,
-    edge: CandidateEdge,
-    rows: OwedRows,
-    ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
-) -> None:
-    """Invariant 2 bound to an owed-row binding; a stalled tick is not ended by anything, so ``ends`` is unread."""
-    assert_inadmissible_owed_row_does_not_block_the_next(
-        name=name,
-        edge=edge,
-        make_owed=rows.make_owed,
-        selection=selection,
-        identity_of=rows.identity_of,
-        run_tick=rows.run_tick,
-        dispatched_ids=rows.dispatched_ids,
-        edge_row=family.edge_row,
-        edge_model=family.model,
-    )
-
-
 def assert_the_loop_isolates_a_poisoned_row(name: str, selection: Callable[[], Iterable[Any]], rows: OwedRows) -> None:
     """
     INVARIANT 12 on the light contract: one poisoned row first in selection order does not stall the next.
@@ -634,8 +572,8 @@ OwedRowProof = Callable[[str, Callable[[], Iterable[Any]], EdgeFamily, Candidate
 #: The per-edge owed-row proofs both contracts generate, keyed by the invariant
 #: name their case ids and gap keys use.
 OWED_ROW_PROOFS: Mapping[str, OwedRowProof] = {
-    assert_database_legal_owed_row_is_handled.__name__: _owed_row_is_handled,
-    assert_inadmissible_owed_row_does_not_block_the_next.__name__: _owed_row_does_not_block_the_next,
+    assert_database_legal_owed_row_is_handled.__name__: assert_database_legal_owed_row_is_handled,
+    assert_inadmissible_owed_row_does_not_block_the_next.__name__: assert_inadmissible_owed_row_does_not_block_the_next,
 }
 
 
@@ -679,11 +617,7 @@ def assert_selected_owed_row_is_handled(
     related: tuple[Model, ...],
     describe: str,
     selection: Callable[[], Iterable[Any]],
-    identity_of: Callable[[Any], Any],
-    execute: Callable[[Any], Any],
-    deliver: Callable[[Any], Any] | None = None,
-    dispatched_ids: Callable[[], list[Any]] | None = None,
-    effect_calls_for: Callable[[Any], int] | None = None,
+    rows: RowExecution,
     ends: FailureEnds = NOTHING_ENDS_A_FAILURE,
 ) -> None:
     """
@@ -696,21 +630,21 @@ def assert_selected_owed_row_is_handled(
     the contract says ends a row whose chain raised after moving it out of the
     selection.
     """
-    identity = identity_of(row)
+    identity = rows.identity_of(row)
     # ARRANGE: what the tick would publish for this row now, read after the edge write.
-    delivery = deliver(row) if deliver is not None else identity
+    delivery = rows.deliver(row) if rows.deliver is not None else identity
     before = _rows_as_persisted((row, *related))
-    calls_before = effect_calls_for(row) if effect_calls_for is not None else 0
+    calls_before = rows.effect_calls_for(row) if rows.effect_calls_for is not None else 0
     try:
-        served = serve_row(execute, delivery, dispatched_ids=dispatched_ids)
+        served = serve_row(rows.execute, delivery, dispatched_ids=rows.dispatched_ids)
     except HandoffsNeverStop as endless:
         raise OwedRowNotHandled(
             f"{name}: delivering the row {describe} started a chain that {endless}; every tick would start it again"
         ) from endless
     failure, worked = served.failure, served.worked
-    if effect_calls_for is not None and effect_calls_for(row) > calls_before:
+    if rows.effect_calls_for is not None and rows.effect_calls_for(row) > calls_before:
         worked = True
-    still_selected = identity in _selected(selection, identity_of)
+    still_selected = identity in _selected(selection, rows.identity_of)
     unchanged = still_selected and _rows_as_persisted((row, *related)) == before
     # INVARIANT ENFORCEMENT: a row the next tick hands over again must not have
     # raised (whatever the attempt stamped first), and must not have been handed

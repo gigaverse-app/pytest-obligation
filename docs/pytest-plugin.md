@@ -49,6 +49,15 @@ declare a contract and expose a class decorated with
 `@due_work_contract_suite(CONTRACT)`. Follow the [adoption guide](../ADOPTING.md)
 and [runnable example](../examples/adopter/README.md).
 
+## Binding lifetimes
+
+`pytest_obligation.helpers.Binding[T]` names a factory returning either a value
+or a context manager yielding that value. `entered_binding` keeps that scope
+alive through the proof and uses `proof_context` to preserve failures: cleanup
+receives the original exception, but cannot turn a failed proof green by
+suppressing it. Profile cases, handoff histories and Due's work-table bindings
+share this entry path.
+
 ## Generated tests and selection
 
 The contract decorator generates pytest cases at collection time, rather than
@@ -121,3 +130,14 @@ call the named public generator and preserve its collection/outcome hooks; it
 must not replace proof logic. Without this declaration, an application function
 with the same name is rejected. The runtime suite guards still verify all generated
 proofs; a static coverage declaration alone cannot certify execution.
+
+### Generating additional contract cases
+
+Integration authors can collect a `ContractCase` through
+`case.parameter(transactional=True, gap=reason, raises=InvariantFailure)`.
+`transactional=None` requests no database marks, `False` asks for the host's
+ordinary database mode, and `True` asks for real commits. `gap=None` is an ordinary
+case; a reason creates a strict expected failure, limited to `raises` when
+supplied. A broken binding must not be hidden by an invariant-only gap. This
+method preserves the case's ID and fixture declaration; ordinary adopters should
+continue using contract decorators and `ExtraProof`.
