@@ -320,6 +320,7 @@ def replay(run: Runner = inline) -> Iterator[ReplaySafeEffect]:
         remote = state.remote
         yield ReplaySafeEffect(
             name="catalog assignment",
+            expected="red",
             prepare=lambda: catalog.admit("red"),
             execute=lambda identity: run(partial(catalog.execute, identity)),
             observe=lambda identity: remote.get(identity, ""),

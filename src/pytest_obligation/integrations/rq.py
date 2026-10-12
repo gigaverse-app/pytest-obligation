@@ -355,6 +355,7 @@ def worker_contract(
     queue: str,
     enqueue: Callable[[], str],
     effect: Callable[[str], Any],
+    expected: TaskOutcome | Callable[[str], TaskOutcome],
     enqueue_failing: Callable[[], str],
     failures: Callable[[str], int],
     max_retries: int,
@@ -388,6 +389,7 @@ def worker_contract(
         worker_history(
             enqueue=enqueue,
             effect=effect,
+            expected=expected,
             status_of=status_of,
             run_worker=run_worker,
             external_calls=external_calls,
@@ -400,6 +402,7 @@ def worker_contract(
             worker_history(
                 enqueue=enqueue,
                 effect=effect,
+                expected=expected,
                 status_of=status_of,
                 run_worker=worker_pass(connection, [other_queue, queue]),
                 external_calls=external_calls,

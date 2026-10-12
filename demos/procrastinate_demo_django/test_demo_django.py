@@ -125,6 +125,7 @@ CREATE_BOOK = HandoffHistory(
     arrange=lambda: f"Dune {uuid4().hex[:8]}",
     transition=create_book,
     observe=indexed,
+    expected=[True],
 )
 
 
@@ -264,6 +265,7 @@ INDEX_BOOK = HandoffHistory(
     arrange=lambda: Book.objects.create(title="follow-up", author="Frank Herbert").pk,
     transition=indexing_task,
     observe=lambda identity: Book.objects.get(pk=identity).indexed,
+    expected=True,
 )
 
 

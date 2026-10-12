@@ -190,6 +190,7 @@ CHARGE_HISTORY = HandoffHistory(
     arrange=new_charge,
     transition=charge_once,
     observe=money,
+    expected=Money(charged=Decimal(7), refunded=Decimal(0), events=1),
     findings=Findings(
         Money(charged=Decimal(7), refunded=Decimal(0), events=1),
         {"worker died after commit 1": Money(charged=Decimal(0), refunded=Decimal(0), events=1)},
