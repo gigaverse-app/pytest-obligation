@@ -49,6 +49,15 @@ declare a contract and expose a class decorated with
 `@due_work_contract_suite(CONTRACT)`. Follow the [adoption guide](../ADOPTING.md)
 and [runnable example](../examples/adopter/README.md).
 
+## Binding lifetimes
+
+`pytest_obligation.helpers.Binding[T]` names a factory returning either a value
+or a context manager yielding that value. `entered_binding` keeps that scope
+alive through the proof and uses `proof_context` to preserve failures: cleanup
+receives the original exception, but cannot turn a failed proof green by
+suppressing it. Profile cases, handoff histories and Due's work-table bindings
+share this entry path.
+
 ## Generated tests and selection
 
 The contract decorator generates pytest cases at collection time, rather than

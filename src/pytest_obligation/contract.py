@@ -139,8 +139,7 @@ honest shape for an index audit of a query that claims and runs work inline.
 """
 
 import inspect
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, contextmanager
+from collections.abc import Callable, Iterable, Mapping
 from enum import Enum
 from functools import partial, wraps
 from typing import Any, TypeAlias
@@ -168,7 +167,8 @@ from pytest_obligation.crash_histories import (
     assert_crash_at_every_commit_converges,
 )
 from pytest_obligation.debt import DebtEntry, debt_mismatch
-from pytest_obligation.helpers import proof_context
+from pytest_obligation.helpers import Binding
+from pytest_obligation.helpers import entered_binding as _entered
 from pytest_obligation.host import current_host
 from pytest_obligation.interleavings.adapters import integration as interleaving_integration
 from pytest_obligation.interleavings.bindings import EvidenceConfluence, InFlightConvergence
@@ -404,8 +404,8 @@ def _adopter_annotation_defect(owner: str, binding: Callable[..., Any]) -> str |
 
 
 #: One factory per independent effect; named bindings reuse the same profile engine.
-ReplayBinding: TypeAlias = Callable[[], ReplaySafeEffect | AbstractContextManager[ReplaySafeEffect]]
-RetryBinding: TypeAlias = Callable[[], BoundedRetry | AbstractContextManager[BoundedRetry]]
+ReplayBinding: TypeAlias = Binding[ReplaySafeEffect]
+RetryBinding: TypeAlias = Binding[BoundedRetry]
 
 
 class SafetyContract(HarnessModel):
@@ -602,9 +602,7 @@ class ObligationContract(HarnessModel):
     #: J: drive transient failures until the production retry budget is exhausted.
     retry: RetryBinding | Mapping[str, RetryBinding] | None = None
     #: I: standalone commands interrupted after partial product and obligation writes.
-    admission: Mapping[str, Callable[[], AdmissionAtomicity | AbstractContextManager[AdmissionAtomicity]]] = Field(
-        default_factory=dict
-    )
+    admission: Mapping[str, Binding[AdmissionAtomicity]] = Field(default_factory=dict)
     #: Independent E-family assessments. Unbound, undecided families generate strict XFAILs.
     convergence_families: Mapping[ConvergenceFamily, Disposition] = Field(default_factory=dict)
 
@@ -616,7 +614,7 @@ class ObligationContract(HarnessModel):
     adoption: Adoption = Adoption.NEW_FEATURE
 
     #: Profile A: the domain's recovery sweep.
-    sweep: Callable[[], DueWorkSweep | AbstractContextManager[DueWorkSweep]] | None = None
+    sweep: Binding[DueWorkSweep] | None = None
 
     #: ORM model selected by the sweep, interpreted only by the host integration.
     prove_selection_complete: bool = False
@@ -625,22 +623,22 @@ class ObligationContract(HarnessModel):
     owed_model: type | None = None
 
     #: Profile B: the domain's ownership mechanics.
-    ownership: Callable[[], FencedOwnership | AbstractContextManager[FencedOwnership]] | None = None
+    ownership: Binding[FencedOwnership] | None = None
 
     #: Profile C: the domain's ambiguity handling.
-    ambiguity: Callable[[], AmbiguityAware | AbstractContextManager[AmbiguityAware]] | None = None
+    ambiguity: Binding[AmbiguityAware] | None = None
 
     #: Profile D: the domain's retention pass.
-    retention: Callable[[], Retention | AbstractContextManager[Retention]] | None = None
+    retention: Binding[Retention] | None = None
 
     #: Profile E, state half: the domain's result-application function.
-    convergence: Callable[[], ConvergentWrite | AbstractContextManager[ConvergentWrite]] | None = None
+    convergence: Binding[ConvergentWrite] | None = None
 
     #: Profile E, worker half: the domain's superseded-snapshot guard.
-    snapshot: Callable[[], SupersededSnapshot | AbstractContextManager[SupersededSnapshot]] | None = None
+    snapshot: Binding[SupersededSnapshot] | None = None
 
     #: Profile F: the domain's derivation of obligations from product state.
-    derivation: Callable[[], StateDerived | AbstractContextManager[StateDerived]] | None = None
+    derivation: Binding[StateDerived] | None = None
 
     #: Optional execution gate: work that is owed but blocked by something the
     #: product decides (see :mod:`pytest_obligation.profiles.gated_execution`),
@@ -1167,17 +1165,6 @@ class ContractCase(HarnessModel):
 
     def __repr__(self) -> str:
         return self.id
-
-
-@contextmanager
-def _entered(factory: Callable[[], Any]) -> Iterator[Any]:
-    """The binding a factory produces, entering it when it is a context manager."""
-    built = factory()
-    if isinstance(built, AbstractContextManager):
-        with proof_context(built) as binding:
-            yield binding
-    else:
-        yield built
 
 
 def _proof_runner(factory: Callable[[], Any], proof: Callable[[Any], None]) -> Callable[[], None]:
