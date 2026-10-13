@@ -37,7 +37,7 @@ class ProviderControl(MutableHarnessModel):
     """At most one pending injection; only the matching seam consumes it."""
     reached: list[tuple[str, Fault]] = Field(default_factory=list)
     """Ordered audit of injections that actually reached the provider boundary."""
-    request_lifetime_seconds: int | None = None
+    request_lifetime_seconds: int | None = Field(default=None, ge=0)
     """
     Longest a held request can wait and still apply; None means it can apply at any time.
 
@@ -102,6 +102,8 @@ class ProviderControl(MutableHarnessModel):
 
     def elapse(self, seconds: int) -> None:
         """Age held requests by the simulated time the runner advanced the application clock."""
+        if seconds < 0:
+            raise ValueError(f"elapse needs non-negative seconds, got {seconds}: simulated time never runs backwards")
         self.elapsed_seconds += seconds
 
     def complete(self, index: int) -> None:
