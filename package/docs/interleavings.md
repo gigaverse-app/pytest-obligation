@@ -155,6 +155,18 @@ or repair application rows. A provider accepting a request is distinct from
 applying it and from the caller receiving its response. Production admission,
 revision changes, receipt consumption and recovery remain production code.
 
+A provider that drops requests after a bounded time (an SDK request timeout, a
+queue's message lifetime) declares `request_lifetime_seconds`. The runner ages held
+requests by each history interval, and completing one that outlived the lifetime
+resolves it without applying (`PendingRequest.expire()`, recorded in
+`ProviderControl.expired`). Without it, a held request can apply at any later
+point, which may report histories the provider cannot produce.
+
+`Bounds.repair_window_seconds` declares how long after an uncertain write the
+domain may still write defensively against it. The settled tail recovers through
+that window before it counts further provider calls as churn, so a projection
+that rewrites settled values inside its declared repair window is not reported.
+
 ## Optional search
 
 Fixed histories and saved replay need only the core installation. Install

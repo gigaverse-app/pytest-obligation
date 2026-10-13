@@ -37,6 +37,20 @@ class ProviderControl(MutableHarnessModel):
     """At most one pending injection; only the matching seam consumes it."""
     reached: list[tuple[str, Fault]] = Field(default_factory=list)
     """Ordered audit of injections that actually reached the provider boundary."""
+    request_lifetime_seconds: int | None = None
+    """
+    Longest a held request can wait and still apply; None means it can apply at any time.
+
+    A provider fact, such as an SDK request timeout bounding how long a request
+    can be in flight. Completing a held request after it means the provider
+    dropped it: the history's completion resolves it without applying.
+    """
+    elapsed_seconds: int = 0
+    """Simulated time the runner has advanced, used only to age held requests."""
+    accepted_at: list[int] = Field(default_factory=list)
+    """elapsed_seconds at which each pending request was accepted, by stable index."""
+    expired: list[int] = Field(default_factory=list)
+    """Indexes of held requests that outlived request_lifetime_seconds and never applied."""
 
     def arm(self, seam: str, fault: Fault) -> None:
         """Arm exactly one boundary; fail if a previous injection was never exercised."""
@@ -78,6 +92,7 @@ class ProviderControl(MutableHarnessModel):
                 apply()
 
             self.pending.append(self.accept(complete))
+            self.accepted_at.append(self.elapsed_seconds)
             raise TimeoutError("interleaving: accepted request is still pending")
         result = apply()
         # Losing the response must not roll back a provider effect already applied.
@@ -85,9 +100,18 @@ class ProviderControl(MutableHarnessModel):
             raise TimeoutError("interleaving: applied; response lost")
         return result
 
+    def elapse(self, seconds: int) -> None:
+        """Age held requests by the simulated time the runner advanced the application clock."""
+        self.elapsed_seconds += seconds
+
     def complete(self, index: int) -> None:
-        """Complete a previously accepted external request at its stable zero-based index."""
+        """Complete a previously accepted request, or expire it if it outlived the request lifetime."""
         assert index < len(self.pending), "history never reached the required accepted request"
+        lifetime = self.request_lifetime_seconds
+        if lifetime is not None and self.elapsed_seconds - self.accepted_at[index] > lifetime:
+            self.pending[index].expire()
+            self.expired.append(index)
+            return
         self.pending[index].complete()
 
     def assert_reached(self) -> None:
@@ -109,4 +133,9 @@ class AcceptedProviderRequest(MutableHarnessModel):
         """Apply exactly once; an accepted request cannot be completed twice."""
         assert not self.completed, "accepted request already completed"
         self.apply()
+        self.completed = True
+
+    def expire(self) -> None:
+        """The provider dropped this request after its lifetime; it never applies."""
+        assert not self.completed, "accepted request already completed"
         self.completed = True

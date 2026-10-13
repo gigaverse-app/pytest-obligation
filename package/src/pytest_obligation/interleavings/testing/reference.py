@@ -18,6 +18,7 @@ def reference(
     forget: bool = False,
     forget_at: int = 0,
     quiet_corruption: Literal["acknowledgement", "desired-revision"] | None = None,
+    repair_recoveries: int = 0,
     replay_safe: bool = True,
     receipt_only: bool = False,
     trust_receipts_from_revision: int = 0,
@@ -82,7 +83,15 @@ def reference(
         revisions[handle] += 1
         write(handle)
 
+    repairs_left = repair_recoveries
+
     def recover() -> None:
+        nonlocal repairs_left
+        if repairs_left:
+            # Bounded defensive repair: rewrite settled values for the first few recoveries.
+            repairs_left -= 1
+            for handle in finished:
+                write(handle)
         for handle in desired:
             if handle in receipts:
                 ack[handle] = revisions[handle]  # Counterfeit receipt consumer.

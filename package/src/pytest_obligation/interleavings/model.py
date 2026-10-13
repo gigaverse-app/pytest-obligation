@@ -117,6 +117,14 @@ class Bounds(HarnessModel):
     """Deterministic simulated-time recovery budget; this is not a wall-clock test timeout."""
 
     interval_seconds: int = Field(default=60, gt=0, description="Controlled clock advance before each recovery turn.")
+    repair_window_seconds: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Declared window after an uncertain write in which the domain may still repair against it. The settled "
+            "tail recovers through this window first; past it, any further provider call is churn."
+        ),
+    )
     recovery_steps: int = Field(
         default=30,
         gt=0,
