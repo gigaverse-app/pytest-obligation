@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.12.1...v0.13.0) (2026-10-13)
+
+
+### Features
+
+* interleavings model provider request lifetimes and declared repair windows ([#80](https://github.com/gigaverse-app/pytest-obligation/issues/80)) ([25bdbf0](https://github.com/gigaverse-app/pytest-obligation/commit/25bdbf047f0cbd0736cb54b32ab3e2a5ccecc1f4))
+
 ## [0.12.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.12.0...v0.12.1) (2026-10-12)
 
 
