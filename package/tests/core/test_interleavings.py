@@ -1,7 +1,7 @@
 """Root-owned controls discriminate behavior, rather than certify a reference as an adopter."""
 
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import partial
 
 import pytest
@@ -15,6 +15,7 @@ from pytest_obligation.interleavings.bindings import (
 from pytest_obligation.interleavings.engine.catalog import evidence_histories
 from pytest_obligation.interleavings.engine.provider import AcceptedProviderRequest, ProviderControl
 from pytest_obligation.interleavings.model import (
+    Bounds,
     Fault,
     History,
     HistoryTrace,
@@ -198,6 +199,35 @@ def test_provider_controls_distinguish_acceptance_application_and_caller_return(
     assert applied == ["lose_response", "hold"]
     assert sum(provider.effects.values()) == 2
     provider.assert_reached()
+
+
+@pytest.mark.parametrize("aged", [False, True], ids=["within-lifetime", "past-lifetime"])
+def test_held_request_outliving_its_lifetime_resolves_without_applying(aged: bool) -> None:
+    applied: list[str] = []
+    provider = ProviderControl(accept=lambda apply: AcceptedProviderRequest(apply=apply), request_lifetime_seconds=60)
+    provider.arm("write", Fault.HOLD)
+    with pytest.raises(TimeoutError):
+        provider.invoke("write", "held", lambda: applied.append("held"))
+    provider.elapse(61 if aged else 60)
+    provider.complete(0)
+    assert provider.pending[0].completed
+    assert applied == ([] if aged else ["held"])
+    assert sum(provider.effects.values()) == (0 if aged else 1)
+    assert provider.expired == ([0] if aged else [])
+
+
+@pytest.mark.parametrize("window_seconds", [0, 120, 180], ids=["no-window", "too-short", "covers-repair"])
+def test_settled_tail_tolerates_repair_only_inside_the_declared_window(window_seconds: int) -> None:
+    # Three recoveries of defensive rewrites after settlement: churn unless the window covers them.
+    declaration = scenario().model_copy(
+        update={
+            "bind": lambda: reference(repair_recoveries=3),
+            "bounds": Bounds(interval_seconds=60, repair_window_seconds=window_seconds),
+        }
+    )
+    control = next(history for history in declaration.histories() if history.id == "IF.control/normal")
+    with pytest.raises(InterleavingFailure, match="settled") if window_seconds < 180 else nullcontext():
+        declaration.run(control)
 
 
 def test_counterfeit_production_binding_fails_before_behavioral_assertions() -> None:
