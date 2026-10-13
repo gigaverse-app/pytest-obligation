@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.13.0...v0.13.1) (2026-10-13)
+
+
+### Bug fixes
+
+* reject a negative provider request lifetime or elapsed time ([#82](https://github.com/gigaverse-app/pytest-obligation/issues/82)) ([bbe0a10](https://github.com/gigaverse-app/pytest-obligation/commit/bbe0a1028d6d4035982abd52ff4760ee8cf73415))
+
 ## [0.13.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.12.1...v0.13.0) (2026-10-13)
 
 
