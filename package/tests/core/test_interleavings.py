@@ -204,7 +204,7 @@ def test_provider_controls_distinguish_acceptance_application_and_caller_return(
 def test_a_request_lifetime_or_elapsed_time_cannot_be_negative() -> None:
     # A negative lifetime would expire every held request before any time passed: an impossible history.
     with pytest.raises(ValueError, match="request_lifetime_seconds"):
-        ProviderControl(request_lifetime_seconds=-1)
+        ProviderControl.model_validate({"request_lifetime_seconds": -1})
     provider = ProviderControl(request_lifetime_seconds=0)
     with pytest.raises(ValueError, match="elapse"):
         provider.elapse(-1)
