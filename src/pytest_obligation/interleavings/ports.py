@@ -20,6 +20,10 @@ class PendingRequest(Protocol):
         """Apply the retained external effect using the host request owner's completion rules."""
         ...
 
+    def expire(self) -> None:
+        """Resolve the request without applying it: the provider dropped it after its request lifetime."""
+        ...
+
 
 @runtime_checkable
 class Transport(Protocol):

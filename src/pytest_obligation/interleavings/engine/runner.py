@@ -82,6 +82,7 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
 
         def recover() -> None:
             session.advance(scenario.bounds.interval_seconds)
+            session.provider.elapse(scenario.bounds.interval_seconds)
             session.recover()
             session.account_faults()
             check_receipts()
@@ -192,6 +193,9 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
                         "pending provider work lost its recovery owner",
                     )
                 case Op.QUIET:
+                    # Declared bounded repair may still write inside its window; recover through it first.
+                    for _ in range(-(-scenario.bounds.repair_window_seconds // scenario.bounds.interval_seconds)):
+                        recover()
                     before = dict(session.provider.calls)
                     for _ in range(2):
                         recover()
