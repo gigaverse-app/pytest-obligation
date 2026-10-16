@@ -95,7 +95,7 @@ def index_served_verdict(plan: dict[str, Any], *, table: str, predicate_indexes:
             # the bitmap, so reading it as evidence of pruning accepts a bitmap
             # assembled by scanning an entire index. The selectivity lives one
             # level down, on the Bitmap Index Scan.
-            bitmap_scans = [scan for scan in iter_plan_nodes(node) if scan.get("Node Type") == "Bitmap Index Scan"]
+            bitmap_scans = list(_bitmap_index_inputs(node))
             # Every input is read to build AND/OR bitmaps: one selective branch
             # cannot vouch for another that walks its entire unrelated index.
             if not bitmap_scans or not all(
@@ -297,9 +297,7 @@ def _re_tested_predicate(node: dict[str, Any], constrained: dict[str, frozenset[
     """The named partial index behind this scan whose predicate's columns its Filter tests again, if any."""
     if "Filter" not in node:
         return None
-    indexes = [node.get("Index Name")] + [
-        scan.get("Index Name") for scan in iter_plan_nodes(node) if scan.get("Node Type") == "Bitmap Index Scan"
-    ]
+    indexes = [node.get("Index Name")] + [scan.get("Index Name") for scan in _bitmap_index_inputs(node)]
     for index in indexes:
         if index in constrained and (columns := referenced_columns(node["Filter"], constrained[index])):
             return index, columns
@@ -337,12 +335,10 @@ def bitmap_overturns_the_walk(
 
     On a tiny table every index walk costs about the same, so with sequential
     scans off the planner may walk an unrelated index (a unique key) and filter
-    the due-time bound, whichever statistics autovacuum left. Asked again with
-    plain index scans off too, it must build a bitmap. The rule enforced: the
-    walked scan must filter at least one column by a range (otherwise it is not
-    a costing artifact and is never overturned); the bitmap plan must pass
-    :func:`index_served_verdict` with the same named partial indexes; and every
-    input the bitmap reads must narrow each of those range-bounded columns,
+    an equality or due-time filter, whichever statistics autovacuum left. Asked
+    again with plain index scans off too, it must build a bitmap. The bitmap
+    must pass :func:`index_served_verdict` with the same named partial indexes.
+    When range bounds exist, every input must additionally narrow those columns,
     either by naming it in its ``Index Cond`` (outside string literals) or by
     being a named partial index (whose Filter the verdict already checked).
     Arms of a ``BitmapAnd`` narrow together; each arm of a ``BitmapOr`` is read
@@ -358,8 +354,9 @@ def bitmap_overturns_the_walk(
         if "Index Cond" in node and CATALOG_INDEX in node and _leading_key_left_open(node) is not None
     ]
     bounded = _range_bounded_columns(_expressions(walked, table, "Filter") + unnarrowed)
-    if not bounded:
-        return False
+    # Equality-only selections can also favor an unrelated index after ANALYZE
+    # on an empty table. The bitmap must still genuinely narrow the selection;
+    # when range bounds exist, every arm must additionally narrow those bounds.
     if index_served_verdict(bitmap, table=table, predicate_indexes=predicate_indexes) is not None:
         return False
     constrained = _constrained_columns(predicate_indexes)
@@ -379,6 +376,15 @@ def _narrowed(node: dict[str, Any], bounded: set[str], constrained: Mapping[str,
 
 
 _BITMAP_INPUTS = frozenset({"Bitmap Index Scan", "BitmapAnd", "BitmapOr"})
+
+
+def _bitmap_index_inputs(node: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Walk this bitmap's inputs, excluding separately executed SubPlan/InitPlan scans."""
+    for child in node.get("Plans", ()):
+        if child.get("Node Type") == "Bitmap Index Scan":
+            yield child
+        elif child.get("Node Type") in _BITMAP_INPUTS:
+            yield from _bitmap_index_inputs(child)
 
 
 def _expressions(plan: dict[str, Any], table: str, key: str) -> list[str]:

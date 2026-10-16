@@ -611,8 +611,9 @@ def test_a_tiny_table_walking_an_unrelated_index_is_judged_by_the_bitmap_plan(
     assert bitmap_overturns_the_walk(_WALKS_AN_UNRELATED_INDEX, bitmap, table=_TABLE) is overturns
 
 
-def test_a_walk_that_filters_no_range_bound_is_not_overturned() -> None:
-    # Only a range bound on a tiny table makes the walk a costing artifact; an equality filter is no excuse.
+@pytest.mark.parametrize("indexed", [True, False])
+def test_equality_selection_requires_a_genuinely_narrowing_bitmap(indexed: bool) -> None:
+    # Empty-table statistics can favor a primary-key walk for equality filters too.
     walked = _index_scan(Filter="(state = 'ready')")
     bitmap = {
         "Node Type": "Bitmap Heap Scan",
@@ -626,7 +627,9 @@ def test_a_walk_that_filters_no_range_bound_is_not_overturned() -> None:
             }
         ],
     }
-    assert bitmap_overturns_the_walk(walked, bitmap, table=_TABLE) is False
+    if not indexed:
+        del bitmap["Plans"][0]["Index Cond"]
+    assert bitmap_overturns_the_walk(walked, bitmap, table=_TABLE) is indexed
 
 
 def test_the_bitmap_is_judged_with_the_named_partial_indexes() -> None:
@@ -748,3 +751,19 @@ def test_a_bitmap_only_of_named_partial_indexes_overturns_the_walk() -> None:
 def test_a_qualified_clock_is_not_a_join_column(clock: str) -> None:
     scan = _child(f"(due_at <= {clock})", ("due_at",), Filter="(status = 'pending'::text)")
     assert index_served_verdict(scan, table=_TABLE) is None
+
+
+@pytest.mark.parametrize("relationship", ["SubPlan", "InitPlan"])
+@pytest.mark.parametrize("bounded", [False, True])
+@pytest.mark.parametrize("relation", ["shop_related", _TABLE])
+def test_bitmap_inputs_are_separate_from_attached_subplans(relationship: str, bounded: bool, relation: str) -> None:
+    # PostgreSQL attaches hashed EXISTS subplans beside the actual bitmap input.
+    # Their scans are checked only when they read the selection's own table.
+    subplan = {
+        "Node Type": "Bitmap Heap Scan",
+        "Relation Name": relation,
+        "Parent Relationship": relationship,
+        "Plans": [_input("related_ix")],
+    }
+    plan = _bitmap(_input("due_ix", "(available_at <= $1)" if bounded else None), subplan)
+    assert (index_served_verdict(plan, table=_TABLE) is None) is (bounded and relation != _TABLE)
