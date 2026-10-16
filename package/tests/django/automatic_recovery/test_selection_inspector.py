@@ -102,6 +102,20 @@ def test_the_reference_selection_is_index_served_once_its_index_exists() -> None
     assert_selection_is_index_served(_scheduled(ref.due_for_recovery))
 
 
+def test_equality_index_eligibility_survives_empty_table_statistics() -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(f"CREATE INDEX lifecycle_attempt_status_ix ON {_TABLE} (status)")
+        cursor.execute(f"ANALYZE {_TABLE}")
+    selection = ref.LifecycleAttempt.objects.filter(status=Status.REQUESTED).distinct("id")
+    inspector = DjangoSelectionInspector()
+    served, evidence = inspector.index_served(selection)
+    assert served, evidence
+    with connection.cursor() as cursor:
+        cursor.execute("DROP INDEX lifecycle_attempt_status_ix")
+    served, evidence = inspector.index_served(selection)
+    assert not served, evidence
+
+
 def test_an_index_on_another_column_does_not_serve_the_selection() -> None:
     with connection.cursor() as cursor:
         cursor.execute(f"CREATE INDEX lifecycle_attempt_claimed_ix ON {_TABLE} (reconciliation_claimed_at)")
