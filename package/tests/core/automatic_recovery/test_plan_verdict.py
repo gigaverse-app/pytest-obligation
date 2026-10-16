@@ -612,9 +612,10 @@ def test_a_tiny_table_walking_an_unrelated_index_is_judged_by_the_bitmap_plan(
 
 
 @pytest.mark.parametrize("indexed", [True, False])
-def test_equality_selection_requires_a_genuinely_narrowing_bitmap(indexed: bool) -> None:
+@pytest.mark.parametrize("filtered", [True, False])
+def test_equality_selection_requires_a_genuinely_narrowing_bitmap(indexed: bool, filtered: bool) -> None:
     # Empty-table statistics can favor a primary-key walk for equality filters too.
-    walked = _index_scan(Filter="(state = 'ready')")
+    walked = _index_scan(**({"Filter": "(state = 'ready')"} if filtered else {}))
     bitmap = {
         "Node Type": "Bitmap Heap Scan",
         "Relation Name": _TABLE,
@@ -629,7 +630,7 @@ def test_equality_selection_requires_a_genuinely_narrowing_bitmap(indexed: bool)
     }
     if not indexed:
         del bitmap["Plans"][0]["Index Cond"]
-    assert bitmap_overturns_the_walk(walked, bitmap, table=_TABLE) is indexed
+    assert bitmap_overturns_the_walk(walked, bitmap, table=_TABLE) is (indexed and filtered)
 
 
 def test_the_bitmap_is_judged_with_the_named_partial_indexes() -> None:
@@ -759,7 +760,7 @@ def test_a_qualified_clock_is_not_a_join_column(clock: str) -> None:
 def test_bitmap_inputs_are_separate_from_attached_subplans(relationship: str, bounded: bool, relation: str) -> None:
     # PostgreSQL attaches hashed EXISTS subplans beside the actual bitmap input.
     # Their scans are checked only when they read the selection's own table.
-    subplan = {
+    subplan: dict[str, object] = {
         "Node Type": "Bitmap Heap Scan",
         "Relation Name": relation,
         "Parent Relationship": relationship,
