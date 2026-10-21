@@ -79,6 +79,29 @@ Normal pytest selection, fixtures, JUnit reports, and CI runners still apply.
 Summary and executed-profile reporting support pytest-xdist; findings recording
 requires a single process.
 
+### Recovery coverage without another test inventory
+
+Profile A uses the existing `DueWorkSweep` product and poison bindings to test
+a full failing page followed by healthy work. Each fault must fire; every tick
+encountering a fault must report it, preserve what remains owed and reach healthy
+work within two ticks. Once faults stop, failed work must progress. If retries
+use backoff, bind `resume_recovery` to a test clock/eligibility control; it must
+never perform a recovery transition or manufacture completion.
+
+The plugin automatically checks all generated cases when a whole module/class
+is collected. Removing a generated method or parameter fails collection even
+without a reporting or verification flag. Explicit node-level selections remain
+usable for debugging; `-k` and ordinary deselection operate after completeness
+is checked. No adopter maintains a second list of required test names.
+
+Runtime integrations use `pytest_obligation.recovery.validate_recovery_bindings`
+with an independently obtained executable inventory, and
+`assert_recovery_history` with product examples and runtime clock controls.
+Due supplies its actual registered steps; it does not delegate discovery to
+test authors. A generic opaque `run_tick` cannot reveal every internal loop:
+the native proof covers its supplied per-identity seam, not undisclosed stages.
+Prefer structured runtime registrations when extending a multi-step recovery.
+
 ## Options and reports
 
 | Option | Behavior |
