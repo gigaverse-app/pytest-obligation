@@ -183,6 +183,7 @@ from pytest_obligation.poison import poison_gap, poison_gap_names, stop_gap, sto
 from pytest_obligation.process_histories import ProcessHistory, assert_process_deaths_converge
 from pytest_obligation.profiles.automatic_recovery import (
     DUE_WORK_PROOFS,
+    RECOVERY_POISON_PROOF_NAMES,
     SELECTION_PROOFS,
     DueWorkSweep,
     assert_published_work_is_recoverable,
@@ -881,7 +882,8 @@ def _profile_design_errors(contract: ObligationContract | SafetyContract, scope:
                     selection_gaps, malformed = _selection_gaps(disposition.gaps)
                     valid |= set(selection_gaps)
                     errors.extend(malformed)
-                valid |= poison_gap_names("assert_one_poisoned_identity_does_not_stall_the_tick")
+                for proof_name in RECOVERY_POISON_PROOF_NAMES:
+                    valid |= poison_gap_names(proof_name)
                 valid |= stop_gap_names("assert_a_soft_time_limit_ends_the_tick")
             if profile is Profile.G:
                 valid.add("assert_gate_is_recovered_by_the_contract_sweep")
@@ -1397,7 +1399,7 @@ def _profile_cases(contract: ObligationContract | SafetyContract, scope: tuple[P
                     reason = disposition.gaps.get(proof.__name__)
                     specific = (
                         poison_gap(disposition.gaps, proof.__name__)
-                        if proof.__name__ == "assert_one_poisoned_identity_does_not_stall_the_tick"
+                        if proof.__name__ in RECOVERY_POISON_PROOF_NAMES
                         else stop_gap(disposition.gaps, proof.__name__)
                         if proof.__name__ == "assert_a_soft_time_limit_ends_the_tick"
                         else None
@@ -1591,6 +1593,9 @@ def _install_suite(cls: type, params: list[Any], test_name: str, doc: str) -> ty
     run_case.__qualname__ = f"{cls.__qualname__}.{test_name}"
     run_case.__doc__ = doc
     setattr(cls, test_name, run_case)
+    # Required even if the generated method is later removed entirely. The
+    # collection plugin reads this from the class before keyword filtering.
+    cls.__obligation_required_cases__ = staticmethod(lambda: {f"{test_name}[{parameter.id}]" for parameter in params})
     suite = f"{cls.__module__}.{cls.__qualname__}"
     cls.__due_work_debt__ = staticmethod(partial(debt_mismatch, suite, declared_debt(params)))
     return cls

@@ -526,7 +526,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: gigaverse-app/due
-          ref: db1378fb1fbf0750088a5f0bbcac98993b4885a4
+          # Paired recovery integration: Due PR #55 binds this shared API.
+          ref: a53c7366bd1db0edebc3bb2113a811323b8a3cdc
           path: .upstream/due
       - uses: astral-sh/setup-uv@v7
         with:

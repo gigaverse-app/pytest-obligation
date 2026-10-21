@@ -128,6 +128,7 @@ class _InMemorySweep:
         self.poisoned: set[int] = set()
         self.refusals = PoisonSwitch()
         self.claimed: set[int] = set()
+        self.held: set[int] = set()
         self.claim_on_dispatch = claim_on_dispatch
         #: What the in-memory "database" executed, for the statement proofs.
         self.statements: list[str] = []
@@ -150,12 +151,13 @@ class _InMemorySweep:
     def run_tick(self) -> int:
         self.last_dispatched = []
         failures: list[Exception] = []
-        for row in self.due_work()[:_PAGE_SIZE]:
+        for row in [row for row in self.due_work() if row.pk not in self.held][:_PAGE_SIZE]:
             try:
                 self._dispatch(row)
             except StopRequested:
                 raise
             except PoisonedIdentity as error:
+                self.held.add(row.pk)
                 failures.append(error)
                 continue
             except Exception:  # noqa: BLE001 - per-row isolation under test
@@ -187,6 +189,7 @@ class _InMemorySweep:
             observe_outstanding=lambda: float(len(self.due_work())),
             dispatched_ids=lambda: list(self.last_dispatched),
             poison=lambda row: self.refusals.poisoned(row.pk),
+            resume_recovery=self.held.clear,
             in_flight=InFlightExecution(
                 make_owed=self.make_owed,
                 start=self.hold_in_flight,

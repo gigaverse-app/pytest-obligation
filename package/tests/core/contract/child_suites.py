@@ -63,3 +63,26 @@ def run_child_session(directory: Path, pinned: str, *options: str) -> subprocess
         env={**os.environ, "PYTHONPATH": ""},
         check=False,
     )
+
+
+COLLECTION_SOURCE = """
+from pytest_obligation.contract import (
+    NotAssessed, Profile, SafetyContract, safety_contract_suite,
+)
+@safety_contract_suite(SafetyContract(name="control", profiles={
+    p: NotAssessed(because="The production seam has not been bound yet.") for p in (Profile.H, Profile.J)
+}))
+class TestDebt:
+    pass
+"""
+
+
+def run_collection_session(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", *args],
+        cwd=root,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[3] / "src")},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )

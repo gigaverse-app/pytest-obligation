@@ -784,6 +784,11 @@ CHECKOUT_WITH_AUTOMATIC_COMPLETION = ObligationContract(
                     "Saleor's trigger_automatic_checkout_completion_task publishes in a bare for-loop; "
                     "a broker refusal for the first checkout abandons the remaining checkouts"
                 ),
+                "assert_a_poisoned_page_does_not_starve_or_abandon_work[stalled]": (
+                    "The same previously demonstrated bare-loop broker refusal also blocks healthy work "
+                    "behind a full failed page. This is the existing isolation defect, now exercised by "
+                    "the full-page history; it is not a verified recovery guarantee."
+                ),
                 "assert_in_flight_work_is_not_duplicated": (
                     "the selection orders by last_automatic_completion_attempt but never excludes a recent one, "
                     "so a paid checkout whose completion is dispatched and not yet run is dispatched again by the "
