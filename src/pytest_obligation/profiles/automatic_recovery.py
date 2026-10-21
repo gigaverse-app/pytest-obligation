@@ -322,6 +322,9 @@ class DueWorkSweep(HarnessModel):
     progressed: Callable[[Any], bool] | None = None
     #: Observe owed work moved to a backoff or successor selection.
     still_owed: Callable[[Any], bool] | None = None
+    #: Test clock control making failed work eligible again after backoff; never
+    #: perform the recovery transition here. Immediate-retry runtimes need none.
+    resume_recovery: Callable[[], None] | None = None
 
 
 def declared_recovery_delay(sweep: DueWorkSweep) -> timedelta:
@@ -969,6 +972,49 @@ def assert_one_poisoned_identity_does_not_stall_the_tick(sweep: DueWorkSweep) ->
     assert_poison_is_isolated(name=sweep.name, run_tick=sweep.run_tick, **history)
 
 
+def assert_a_poisoned_page_does_not_starve_or_abandon_work(sweep: DueWorkSweep) -> None:
+    """Exercise a full page and eventual retry using the same product seams as invariant 12.
+
+    An unbounded inline loop uses one failing candidate. No second inventory or
+    copied fault seam is required for a native sweep: this proves the supplied
+    executable sweep, not undisclosed inner loops of an opaque callback.
+    """
+    from pytest_obligation.recovery import RecoveryExample, assert_recovery_history, poison_many
+
+    assert sweep.poison is not None, f"{sweep.name}: bind the real per-identity poison seam"
+    assert sweep.dispatched_ids is not None, f"{sweep.name}: bind dispatched_ids"
+    rows: dict[Any, Any] = {}
+    delay = declared_recovery_delay(sweep)
+
+    def make_pending():
+        row = sweep.make_owed(age=delay + timedelta(days=2) - timedelta(seconds=len(rows)))
+        identity = sweep.identity_of(row)
+        assert identity not in rows, "recovery examples must create independent candidates"
+        rows[identity] = row
+        return identity
+
+    def pending(identity):
+        return sweep.still_owed(rows[identity]) if sweep.still_owed else identity in _selected_identities(sweep)
+
+    def progressed(identity):
+        return sweep.progressed(rows[identity]) if sweep.progressed else identity in sweep.dispatched_ids()
+
+    example = RecoveryExample(
+        make_pending=make_pending,
+        pending=pending,
+        progressed=progressed,
+        poison=lambda identities: poison_many(sweep.poison, [rows[identity] for identity in identities]),
+    )
+    assert_recovery_history(
+        name=sweep.name,
+        example=example,
+        run_tick=sweep.run_tick,
+        page_size=sweep.page_size or 1,
+        poison=True,
+        resume=sweep.resume_recovery or (lambda: None),
+    )
+
+
 def assert_a_soft_time_limit_ends_the_tick(sweep: DueWorkSweep) -> None:
     """
     INVARIANT 12b: a cooperative stop request raised in one identity's step ends the tick there.
@@ -1465,6 +1511,14 @@ SELECTION_PROOFS: tuple[Callable[[SelectionAdapter], None], ...] = (
 #: runs them. The lifecycle-state proofs (2b, 2c) come from the Django
 #: integration's ``TERMINAL_OBLIGATION_PROOFS``; the ambient-context proof from
 #: :data:`AMBIENT_CONTEXT_PROOFS`.
+RECOVERY_POISON_PROOF_NAMES = frozenset(
+    {
+        assert_one_poisoned_identity_does_not_stall_the_tick.__name__,
+        assert_a_poisoned_page_does_not_starve_or_abandon_work.__name__,
+    }
+)
+
+
 DUE_WORK_PROOFS: tuple[Callable[[DueWorkSweep], None], ...] = (
     # First, because every proof below measures whatever `due_work` describes.
     assert_the_adapter_does_not_author_the_selection,
@@ -1478,6 +1532,7 @@ DUE_WORK_PROOFS: tuple[Callable[[DueWorkSweep], None], ...] = (
     assert_oldest_work_is_recovered_first,
     assert_selection_is_stable,
     assert_one_poisoned_identity_does_not_stall_the_tick,
+    assert_a_poisoned_page_does_not_starve_or_abandon_work,
     assert_a_soft_time_limit_ends_the_tick,
     assert_selection_is_index_served,
     assert_the_tick_is_actually_scheduled,

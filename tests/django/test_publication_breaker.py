@@ -7,12 +7,15 @@ runs in place, and what it publishes is a message of its own.
 """
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 from celery import Celery
 from kombu.exceptions import OperationalError
 
-from pytest_obligation.integrations.celery import celery_publication_breaker
+from pytest_obligation.integrations.celery import celery_publication_breaker, held_publications, refusing_publication
+from pytest_obligation.poison import PoisonedIdentity, PoisonSwitch
+from pytest_obligation.recovery import poison_many
 
 
 @pytest.fixture
@@ -64,3 +67,26 @@ def test_an_eager_tasks_own_publications_are_messages_of_their_own(eager_app: Ce
     with celery_publication_breaker(None) as publications:
         eager_app.tasks["self-test.place"].delay(1)
     assert publications.count == 2
+
+
+def test_single_identity_refusals_compose_without_shadowing_each_other(broker_app: Celery) -> None:
+    notify = broker_app.tasks["self-test.notify"]
+
+    @contextmanager
+    def refuse(identity):
+        switch = PoisonSwitch()
+        with refusing_publication(switch, notify), switch.poisoned(identity) as fired:
+            yield fired
+
+    with poison_many(refuse, [1, 2]) as fired:
+        # The innermost recorder still owns healthy deliveries.
+        with held_publications() as published:
+            for identity in [1, 2]:
+                with pytest.raises(PoisonedIdentity):
+                    notify.delay(identity)
+            notify.delay(3)
+        assert [message.args for message in published] == [(3,)]
+    assert [counter() for counter in fired.counters] == [1, 1]
+    with held_publications() as published:
+        notify.delay(1)
+    assert [message.args for message in published] == [(1,)]

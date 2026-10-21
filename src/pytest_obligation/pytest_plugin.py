@@ -70,8 +70,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     from pytest_obligation import _debt_plugin
+    from pytest_obligation._collection_coverage import CollectionCoverage
 
     config.pluginmanager.register(_debt_plugin, "due-work-debt")
+    config.pluginmanager.register(CollectionCoverage(config), "obligation-required-cases")
     if config.getoption("due_work_check_fixtures"):
         config.pluginmanager.register(
             import_module("pytest_obligation._internal.fixture_resolution"), "due-work-fixtures"
