@@ -73,6 +73,21 @@ def test_native_recovery_preserves_and_retries_a_poisoned_page(poison):
     )
 
 
+def test_product_observation_runs_outside_the_injected_runtime_fault():
+    loop = _Loop()
+
+    def pending(identity):
+        # A native observation may inspect the selection via the production
+        # callback with deliveries held. That is not a faulted recovery tick.
+        loop.switch.check(identity)
+        return identity in loop.owed
+
+    example = loop.example().model_copy(update={"pending": pending})
+    assert_recovery_history(
+        name="native", example=example, run_tick=loop.tick, page_size=2, poison=True, resume=loop.resume
+    )
+
+
 @pytest.mark.parametrize(
     "defect,poison,reason",
     [

@@ -129,31 +129,34 @@ def assert_recovery_history(
         return
 
     assert example.poison is not None, f"{name}: bind the real per-identity poison seam"
-    with example.poison(bad) as fired:
-        assert isinstance(fired, PoisonCounts) and len(fired.counters) == len(bad), (
-            f"{name}: use poison_many or poison_call to observe each candidate's fault"
-        )
-        for tick_index in range(2):
-            before = fired()
+    counts = [0] * len(bad)
+    for tick_index in range(2):
+        with example.poison(bad) as fired:
+            assert isinstance(fired, PoisonCounts) and len(fired.counters) == len(bad), (
+                f"{name}: use poison_many or poison_call to observe each candidate's fault"
+            )
             escaped: Exception | None = None
             try:
                 run_tick()
             except Exception as error:  # noqa: BLE001 - this is the production report under test
                 escaped = error
-            observe()
-            # Check every tick: an earlier loud report cannot hide a later silent failure.
-            if fired() > before:
-                assert_poison_is_reported(name, escaped)
-            elif escaped is not None:
-                raise escaped
-            if tick_index == 0:
-                assert fired() > 0, f"{name}: the poison never fired; bind the real per-identity action"
-            if not all(example.pending(identity) for identity in bad):
-                raise PoisonDropped(f"{name}: failed recovery work is no longer owed")
-    assert fired() > 0, f"{name}: the poison never fired; bind the real per-identity action"
+        # Faults belong to production execution, not product observation. Some
+        # native observations inspect the real selector with deliveries held.
+        # Their calls must neither trip the fault nor count as proof it fired.
+        counts = [total + counter() for total, counter in zip(counts, fired.counters, strict=True)]
+        # Check every tick: an earlier loud report cannot hide a later silent failure.
+        if fired() > 0:
+            assert_poison_is_reported(name, escaped)
+        elif escaped is not None:
+            raise escaped
+        if tick_index == 0:
+            assert fired() > 0, f"{name}: the poison never fired; bind the real per-identity action"
+        observe()
+        if not all(example.pending(identity) for identity in bad):
+            raise PoisonDropped(f"{name}: failed recovery work is no longer owed")
     if healthy not in progressed:
         raise PoisonStalled(f"{name}: healthy work behind a poisoned page did not progress within two ticks")
-    assert all(counter() > 0 for counter in fired.counters), f"{name}: the poison never fired for every page candidate"
+    assert all(count > 0 for count in counts), f"{name}: the poison never fired for every page candidate"
     if assert_held is not None:
         assert_held(bad)
         with example.poison(bad) as fired:

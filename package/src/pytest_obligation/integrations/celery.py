@@ -16,6 +16,7 @@ would. Each imports Celery when entered.
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import timedelta
 from typing import Any, NamedTuple
 from unittest import mock
@@ -217,6 +218,11 @@ def celery_publications() -> Iterator[list[str]]:
         yield names
 
 
+_publication_refusals: ContextVar[tuple[Callable[[Any, tuple[Any, ...], dict[str, Any]], None], ...]] = ContextVar(
+    "obligation_publication_refusals", default=()
+)
+
+
 @contextmanager
 def refusing_publication(
     switch: PoisonSwitch,
@@ -226,18 +232,29 @@ def refusing_publication(
     """Poison one task's publication, preserving the innermost publication recorder."""
     from celery import Task
 
-    def apply_async(args: Any = None, kwargs: Any = None, **options: Any) -> Any:
-        positional, keyword = tuple(args or ()), dict(kwargs or {})
+    def refuse(published_task: Any, positional: tuple[Any, ...], keyword: dict[str, Any]) -> None:
+        if published_task is not task:
+            return
         if key is None:
             assert positional, "keyword-only publication needs key="
             identity = positional[0]
         else:
             identity = key(positional, keyword)
         switch.check(identity, f"the broker refused {task.name}")
+
+    def apply_async(args: Any = None, kwargs: Any = None, **options: Any) -> Any:
+        # Nested single-row seams must remain armed together. Delegating to a
+        # captured task method would instead lose the innermost held recorder.
+        for refusal in _publication_refusals.get():
+            refusal(task, tuple(args or ()), dict(kwargs or {}))
         return Task.apply_async(task, args, kwargs, **options)
 
-    with mock.patch.object(task, "apply_async", apply_async):
-        yield
+    token = _publication_refusals.set((*_publication_refusals.get(), refuse))
+    try:
+        with mock.patch.object(task, "apply_async", apply_async):
+            yield
+    finally:
+        _publication_refusals.reset(token)
 
 
 def celery_handoffs(execute: Callable[[], object]) -> None:
