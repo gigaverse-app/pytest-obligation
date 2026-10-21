@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.13.1...v0.14.0) (2026-10-21)
+
+
+### Features
+
+* enforce recovery proof coverage and share failing-page histories ([#85](https://github.com/gigaverse-app/pytest-obligation/issues/85)) ([2f9009a](https://github.com/gigaverse-app/pytest-obligation/commit/2f9009a46952b582b3a8e6a65bb6be381341ceec))
+
 ## [0.13.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.13.0...v0.13.1) (2026-10-13)
 
 
