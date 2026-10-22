@@ -191,3 +191,8 @@ Alpha; the public API may change before 1.0. [Architecture](package/docs/archite
 <sub>Pull requests run only the [test lanes](.github/test-lanes.json) a change can
 affect: a package README edit skips every live framework lane. Every run gets a
 CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
+
+### How this project keeps CI fast
+
+See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
+environment caches, required gates and real dependency critical-path reports.
