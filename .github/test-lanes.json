@@ -143,7 +143,10 @@
         "demos/throwaway_postgres.sh",
         "package/src/**",
         "package/shims/**",
-        "scripts/check_adoption*.py"
+        "scripts/check_adoption*.py",
+        "docs/demo.tape",
+        "docs/demo_env.sh",
+        "demos/saleor_checkout/**"
       ]
     },
     "saleor": {
@@ -178,12 +181,22 @@
     },
     "due": {
       "inputs": [
-        "package/**",
-        "scripts/check_adoption*.py",
         "package/src/**",
         "package/shims/**",
         "scripts/check_adoption*.py"
       ]
     }
-  }
+  },
+  "global_inputs": [
+    "**/pyproject.toml",
+    "pyproject.toml",
+    "**/uv.lock",
+    "uv.lock",
+    ".github/**",
+    "scripts/**",
+    "check/**",
+    "test/**",
+    "package/docs/**",
+    "package/README.md"
+  ]
 }
