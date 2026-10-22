@@ -1,0 +1,202 @@
+{
+  "graph": {
+    "module_roots": [
+      "package/src",
+      "package/shims",
+      "package",
+      "package/tests_support",
+      "examples/adopter",
+      "."
+    ],
+    "test_roots": [
+      "package/tests",
+      "integration_tests",
+      "examples/adopter",
+      "demos"
+    ],
+    "pytest_policy": {
+      "pyproject.toml": "e22f1beebaa72b78345891da5d89dc21a513f9fd40c0f6e4367c844d8f505a92"
+    },
+    "global_modules": []
+  },
+  "lanes": {
+    "core": {
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core"
+      ],
+      "inputs": [
+        "package/src/pytest_obligation/**",
+        "package/shims/**",
+        "package/tests_support/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "minimum_models": {
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core",
+        "examples/adopter/tests"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "exploration": {
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "django": {
+      "roots": [
+        "package/tests/django",
+        "examples/adopter/tests_django"
+      ],
+      "inputs": [
+        "package/tests/django/**",
+        "examples/adopter/tests_django/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "django_psycopg2": {
+      "roots": [
+        "package/tests/django",
+        "examples/adopter/tests_django"
+      ],
+      "inputs": [
+        "package/tests/django/**",
+        "examples/adopter/tests_django/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "redis": {
+      "roots": [
+        "package/tests/rq",
+        "package/tests/celery_worker",
+        "integration_tests/rq",
+        "integration_tests/celery_worker"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "mongodb": {
+      "roots": [
+        "package/tests/mongodb"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "aiokafka": {
+      "roots": [
+        "package/tests/aiokafka"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "prefect": {
+      "roots": [
+        "package/tests/prefect",
+        "integration_tests/prefect"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "demos": {
+      "roots": [
+        "demos/procrastinate_demo_django",
+        "demos/dbos_transactional_outbox",
+        "demos/wagtail_tasks",
+        "demos/test_readme_gif.py"
+      ],
+      "inputs": [
+        "demos/procrastinate_demo_django/**",
+        "demos/dbos_transactional_outbox/**",
+        "demos/wagtail_tasks/**",
+        "demos/fetch_upstream.py",
+        "demos/cached_database.py",
+        "demos/throwaway_postgres.sh",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py",
+        "docs/demo.tape",
+        "docs/demo_env.sh",
+        "demos/saleor_checkout/**"
+      ]
+    },
+    "saleor": {
+      "roots": [
+        "demos/saleor_checkout"
+      ],
+      "inputs": [
+        "demos/saleor_checkout/**",
+        "demos/fetch_upstream.py",
+        "demos/cached_database.py",
+        "demos/throwaway_postgres.sh",
+        "check/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "actions": {
+      "roots": [
+        "examples/adopter/tests",
+        "examples/adopter/tests_django",
+        "examples/adopter/test_bindings.py"
+      ],
+      "inputs": [
+        "examples/adopter/**",
+        "check/**",
+        "test/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "due": {
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    }
+  },
+  "global_inputs": [
+    "**/pyproject.toml",
+    "pyproject.toml",
+    "**/uv.lock",
+    "uv.lock",
+    ".github/**",
+    "scripts/**",
+    "check/**",
+    "test/**",
+    "package/docs/**",
+    "package/README.md"
+  ]
+}

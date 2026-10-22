@@ -193,6 +193,17 @@ The harness core and pytest-selective support Python 3.11+; Due requires Python 
 Use a planner interpreter that understands your source syntax; planning can run
 separately from your tests.
 
+## CI measurement and validation reuse
+
+[CI-esta](https://github.com/gigaverse-app/ci-esta) measures GitHub Actions latency
+and runner costs and can reuse a previously completed lane with matching input
+and success evidence. It complements pytest-selective's affected-lane planning.
+Keep pytest-obligation's executed-profile checks inside each lane: selection,
+skipping and a CI receipt do not themselves establish conformance. See the
+[integration guide](https://github.com/gigaverse-app/ci-esta/blob/main/docs/integrations.md)
+for the boundary with [Due](https://github.com/gigaverse-app/due) and pytest-selective.
+CI-esta is optional; these links do not change this repository's CI admission.
+
 ## Documentation
 
 | You want to… | Read |
@@ -217,3 +228,16 @@ Generated expected failures can be enforced with an application-owned [debt base
 Recovery contracts can also [prove selection completeness](package/docs/selection-completeness.md), including related lifecycle states and strict per-combination debt.
 
 See [package ownership and subtree development](package/docs/development.md) for library edits made inside an adopter checkout.
+
+## Selective CI
+
+Pull requests use [pytest-selective](https://github.com/gigaverse-app/pytest-selective)
+to select complete affected test lanes before their services start. Selected lanes
+keep all existing tests and required conformance evidence checks. Main pushes,
+manual workflow runs, the `test:full` PR label, and unavailable planning proof run
+every lane. The adoption change itself runs the full suite.
+
+The repository owns the lane map and dynamic/subprocess inputs in
+[.github/test-lanes.json](.github/test-lanes.json). Update those inputs when adding
+a new runtime discovery path or external checkout; static imports cannot model
+every registration. Changes to CI and dependency metadata run all lanes.
