@@ -15,6 +15,12 @@
       "demos"
     ],
     "pytest_policy": {
+      "demos/dbos_transactional_outbox/pyproject.toml": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "demos/procrastinate_demo_django/pyproject.toml": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "demos/saleor_checkout/pyproject.toml": "8ea38dc8c6be4d9141ab7a42973b959a3d89ebcbabdf437101fc453c5cdd3c3a",
+      "demos/wagtail_tasks/pyproject.toml": "f6372835919285e1e863a46f0ca60c63ef45b205e4fa8f1f34851f03eef7901a",
+      "examples/adopter/pyproject.toml": "eb4f1244c75e948b593d2122599ad6c7db4326c2b56ba4902f22bd258ddcdb91",
+      "package/pyproject.toml": "197e7f7507e5e55187d99781b4c7a4532cd222fc4ebdda624bb6d62cd3ad60a3",
       "pyproject.toml": "e22f1beebaa72b78345891da5d89dc21a513f9fd40c0f6e4367c844d8f505a92"
     },
     "global_modules": []
