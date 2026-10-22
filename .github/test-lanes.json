@@ -195,8 +195,6 @@
     ".github/**",
     "scripts/**",
     "check/**",
-    "test/**",
-    "package/docs/**",
-    "package/README.md"
+    "test/**"
   ]
 }
