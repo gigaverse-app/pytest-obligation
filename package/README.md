@@ -27,7 +27,8 @@ tests before application startup. For conformance suites, select the complete
 lane so its collection and evidence checks remain intact; retain full-suite
 checkpoints.
 
-The harness does not require Due or the selector. Its core supports Python 3.11+;
-Due and the selector require Python 3.14+, and planning can run separately from
-tests. See [Due's binding guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md)
+The harness does not require Due or the selector. Its core and pytest-selective
+support Python 3.11+; Due requires Python 3.14+. Use a planner interpreter that
+understands your source syntax; planning can run separately from tests.
+See [Due's binding guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md)
 and [whole-lane action](https://github.com/gigaverse-app/pytest-selective/tree/main/.github/actions/plan-lanes).

@@ -189,8 +189,9 @@ for arbitrary application code. See
 [Due's conformance binding](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md)
 and the selector's
 [whole-lane action](https://github.com/gigaverse-app/pytest-selective/tree/main/.github/actions/plan-lanes).
-The harness core supports Python 3.11+; Due and the selector require Python 3.14+.
-Planning can run separately from your tests.
+The harness core and pytest-selective support Python 3.11+; Due requires Python 3.14+.
+Use a planner interpreter that understands your source syntax; planning can run
+separately from your tests.
 
 ## Documentation
 
