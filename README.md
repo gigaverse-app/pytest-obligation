@@ -244,3 +244,5 @@ The repository owns the lane map and dynamic/subprocess inputs in
 [.github/test-lanes.json](.github/test-lanes.json). Update those inputs when adding
 a new runtime discovery path or external checkout; static imports cannot model
 every registration. Changes to CI and dependency metadata run all lanes.
+
+<!-- Temporary README-only CI routing probe; never merge this branch. -->
