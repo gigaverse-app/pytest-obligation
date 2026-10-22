@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.0...v0.14.1) (2026-10-22)
+
+
+### Documentation
+
+* connect CI-esta observability and evidence reuse ([#90](https://github.com/gigaverse-app/pytest-obligation/issues/90)) ([920f138](https://github.com/gigaverse-app/pytest-obligation/commit/920f1380d20a18ad9d026d1a84c9d931c3138785))
+
 ## [0.14.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.13.1...v0.14.0) (2026-10-21)
 
 
