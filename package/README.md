@@ -32,3 +32,5 @@ support Python 3.11+; Due requires Python 3.14+. Use a planner interpreter that
 understands your source syntax; planning can run separately from tests.
 See [Due's binding guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md)
 and [whole-lane action](https://github.com/gigaverse-app/pytest-selective/tree/main/.github/actions/plan-lanes).
+
+<!-- CI selection benchmark: package documentation only. -->
