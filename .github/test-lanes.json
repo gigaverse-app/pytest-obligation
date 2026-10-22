@@ -30,8 +30,7 @@
         "package/shims/**",
         "package/tests_support/**",
         "package/src/**",
-        "package/shims/**",
-        "scripts/check_adoption*.py"
+        "scripts/check_core_is_framework_free.py"
       ]
     },
     "minimum_models": {
@@ -43,7 +42,7 @@
       "inputs": [
         "package/src/**",
         "package/shims/**",
-        "scripts/check_adoption*.py"
+        "scripts/check_core_is_framework_free.py"
       ]
     },
     "exploration": {
@@ -53,8 +52,7 @@
       ],
       "inputs": [
         "package/src/**",
-        "package/shims/**",
-        "scripts/check_adoption*.py"
+        "package/shims/**"
       ]
     },
     "django": {
@@ -66,8 +64,7 @@
         "package/tests/django/**",
         "examples/adopter/tests_django/**",
         "package/src/**",
-        "package/shims/**",
-        "scripts/check_adoption*.py"
+        "package/shims/**"
       ]
     },
     "django_psycopg2": {
@@ -79,8 +76,7 @@
         "package/tests/django/**",
         "examples/adopter/tests_django/**",
         "package/src/**",
-        "package/shims/**",
-        "scripts/check_adoption*.py"
+        "package/shims/**"
       ]
     },
     "redis": {
@@ -102,8 +98,7 @@
       ],
       "inputs": [
         "package/src/**",
-        "package/shims/**",
-        "scripts/check_adoption*.py"
+        "package/shims/**"
       ]
     },
     "aiokafka": {
@@ -112,8 +107,7 @@
       ],
       "inputs": [
         "package/src/**",
-        "package/shims/**",
-        "scripts/check_adoption*.py"
+        "package/shims/**"
       ]
     },
     "prefect": {
@@ -146,7 +140,8 @@
         "scripts/check_adoption*.py",
         "docs/demo.tape",
         "docs/demo_env.sh",
-        "demos/saleor_checkout/**"
+        "demos/saleor_checkout/**",
+        "check/**"
       ]
     },
     "saleor": {
@@ -185,6 +180,13 @@
         "package/shims/**",
         "scripts/check_adoption*.py"
       ]
+    },
+    "typecheck": {
+      "inputs": [
+        "**/*.py",
+        "pyrefly.toml",
+        "**/pyrefly.toml"
+      ]
     }
   },
   "global_inputs": [
@@ -192,11 +194,6 @@
     "pyproject.toml",
     "**/uv.lock",
     "uv.lock",
-    ".github/**",
-    "scripts/**",
-    "check/**",
-    "test/**",
-    "package/docs/**",
-    "package/README.md"
+    ".github/**"
   ]
 }
