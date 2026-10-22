@@ -79,6 +79,9 @@ Subscription lifecycle, plan eligibility, taxes, currency conversion and automat
 rejection decisions remain outside this simulator. Rejection codes are explicit
 scenario inputs, not guesses about which subscription state implies which code.
 
-The [library controls](../tests/core/test_shopify_billing.py) run without services.
+The [runnable SQLite billing example](../../examples/shopify_billing/README.md)
+binds real application SQL to generated evidence histories, with counterfeit
+confirmation controls and a lost-reply restart. The
+[library controls](../tests/core/test_shopify_billing.py) run without services.
 They cover burned keys, pending acceptance, visibility, signed/scoped totals,
 immutable evidence and invalid scenario construction.

@@ -12,9 +12,9 @@ NOW = datetime(2026, 1, 1, tzinfo=UTC)
 WINDOW = BillingWindow(start=NOW, end=NOW + timedelta(days=30))
 
 
-def event(key="one", **changes):
+def event(key="one", *, shop_id="shop-a", event_handle="usage", timestamp=NOW, quantity="10"):
     return BillingEvent(
-        **dict(shop_id="shop-a", event_handle="usage", timestamp=NOW, idempotency_key=key, quantity="10") | changes
+        shop_id=shop_id, event_handle=event_handle, timestamp=timestamp, idempotency_key=key, quantity=quantity
     )
 
 
@@ -91,7 +91,7 @@ def test_provider_records_cannot_be_rewritten_through_observations():
     provider = ShopifyBillingSimulator()
     provider.send(event())
     with pytest.raises(ValidationError):
-        provider.records[0].event.quantity = Decimal(99)
+        provider.records[0].event.quantity = Decimal(99)  # pyrefly: ignore [read-only] -- runtime mutation control
     assert total(provider) == 10
     provider.reset()
     assert provider.attempts == provider.records == ()
