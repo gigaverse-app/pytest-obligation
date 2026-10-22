@@ -26,8 +26,10 @@ configure(django_host(production_packages={"myapp"}))
 | `[aiokafka]` | `AIOKafkaConsumer` acknowledgement and offset-commit faults with broker replay. [Scope](aiokafka.md) |
 
 The harness can test a Shopify integration or any other external API through
-the application's real Python call and observed effects. It does not ship a
-Shopify-specific adapter or claim every provider behavior is covered. See
+the application's real Python call and observed effects. The optional-import,
+dependency-free [Shopify billing simulator](shopify.md) models accepted keys,
+rejections and delayed meter visibility; it is not a Shopify HTTP client or a
+complete provider emulator. See
 [the adopter capability map](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md) for what existing suites
 actually exercise.
 
