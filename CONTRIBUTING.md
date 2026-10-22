@@ -83,3 +83,15 @@ reads them. If tests begin consuming package documentation, declare that input.
 The planner JSON names the tests/inputs selecting each lane. An affected test
 outside all configured lane roots falls back to every lane and names the missing
 mapping. Add new test directories to a lane whose pytest command executes them.
+# Measured conformance execution
+
+The Wagtail and Due sessions run every conformance case with four isolated
+pytest workers. Wagtail migrates/restores one database and uses CI-esta to clone
+the exact schema and seed rows for each worker. Keep all required-case and
+profile validators after pytest; parallel reports must merge in the controller.
+
+In the recorded before/after pair, demos fell from 325 to 262 seconds and Due
+from 293 to 159 seconds. The overall gate fell from 506 to 422 seconds; Saleor
+became the critical path. All 1,183 demo/Due test identities and pass/skip
+outcomes matched. See [raw reports, inventories and the isolation tutorial](https://github.com/gigaverse-app/ci-esta/blob/main/docs/benchmarks/2026-10-23-critical-execution.md).
+
