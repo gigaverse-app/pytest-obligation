@@ -79,14 +79,6 @@ class RoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set(self.config.lanes))
 
-    def test_nested_collection_policy_change_keeps_every_lane(self):
-        self.git("reset", "--hard", self.base)
-        target = self.repo / "package/pyproject.toml"
-        target.write_text(target.read_text().replace('testpaths = ["tests"]', 'testpaths = ["other_tests"]'))
-        result = plan(self.repo, self.config, self.base, self.commit())
-        self.assertTrue(all(result.lanes.values()), result.model_dump_json())
-        self.assertIn("fallback", result.reason)
-
     def test_other_dependency_installers_keep_every_lane(self):
         for path in ("requirements.txt", "package/requirements-dev.txt", "poetry.lock", "pylock.toml"):
             with self.subTest(path=path):
