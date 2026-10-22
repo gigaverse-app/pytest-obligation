@@ -18,7 +18,9 @@ class RoutingTests(unittest.TestCase):
                 self.git("clean", "-fd")
                 target = self.repo / path
                 if target.exists():
-                    target.write_text(target.read_text().replace('testpaths = ["tests"]', 'testpaths = ["other_tests"]'))
+                    target.write_text(
+                        target.read_text().replace('testpaths = ["tests"]', 'testpaths = ["other_tests"]')
+                    )
                 else:
                     target.write_text("[pytest]\ntestpaths = other_tests\n")
                 result = plan(self.repo, self.config, self.base, self.commit())
