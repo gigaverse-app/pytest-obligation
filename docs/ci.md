@@ -48,9 +48,14 @@ consumer's routing; these repository-level regression checks cover that gap.
 ## Measure before changing execution
 
 Every CI run retains `test-lane-selection` with changed paths and the planning
-reason. The `ci-summary` job retains `ci-execution-timings` and renders measured
-job/step durations in its summary. Its own running job is not included in the
-completed-job total. Queue time and GitHub billing rounding are not represented.
+reason. After completion, the separate `CI observability` workflow uses
+[CI-esta](https://github.com/gigaverse-app/ci-esta) to retain
+`ci-esta-<run-id>-<attempt>` artifacts with measured job/step durations, a slowest
+step per job summary, versioned JSON and Prometheus metrics. The shared reporter
+also distinguishes job admission delay and estimated rounded runner minutes.
+Missing step times remain unavailable. Gate latency remains unassessed until
+required gates are explicitly configured. Reporting adds no job to CI's
+validation path and does not execute the observed PR's code.
 
 The [pre-change run](https://github.com/gigaverse-app/pytest-obligation/actions/runs/39842526610)
 used 1,735 summed runner-seconds for a README change. Its longest jobs were:

@@ -18,26 +18,6 @@ concurrency:
 # pyproject.toml fails CI instead of silently resolving something new.
 
 jobs:
-  ci-summary:
-    if: always()
-    needs: [select-tests, ci-contracts, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Report actual job and step timings
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > ci-jobs.json
-          python scripts/ci/report_timings.py ci-jobs.json >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ci-execution-timings
-          path: ci-jobs.json
-
   select-tests:
     runs-on: ubuntu-latest
     outputs:
