@@ -392,9 +392,13 @@ jobs:
       - name: Wagtail's test database, migrated once
         # As pytest-django creates a test database: every app's migrations, syncdb for the rest, no checks.
         run: >-
-          uv run --no-sync python demos/cached_database.py test_wagtail_tasks --dump demos/.ci-cache/wagtail_tasks.dump --workers 4
+          uv run --no-sync python demos/cached_database.py test_wagtail_tasks --dump demos/.ci-cache/wagtail_tasks.dump
           -- uv run --no-sync python -m django migrate --settings=demos.wagtail_tasks.settings
           --run-syncdb --skip-checks --no-input --verbosity 0
+      - name: Clone the migrated database for isolated pytest workers
+        run: >-
+          uv run --no-project --with "ci-esta[postgres] @ https://github.com/gigaverse-app/ci-esta/archive/e076f7310f11246f9912c1460e75c4f114ddd3fd.tar.gz"
+          ci-esta-postgres-clone --database test_wagtail_tasks --workers 4
       # Wagtail 8.0 on django-tasks-db, both from PyPI; the demo's own directory is pytest's rootdir.
       - name: Wagtail on django-tasks-db
         working-directory: demos/wagtail_tasks

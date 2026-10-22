@@ -63,24 +63,10 @@ def main(argv: Sequence[str]) -> None:
     parser = argparse.ArgumentParser(description=(__doc__ or "").strip().splitlines()[0])
     parser.add_argument("name")
     parser.add_argument("--dump", type=Path)
-    parser.add_argument("--workers", type=int, choices=range(1, 33), help="Clone the migrated test database for xdist workers")
     arguments = parser.parse_args(argv[:split])
     migrate = argv[split + 1 :]
     assert migrate, "give the migrate command after --"
     print(migrated_database(arguments.name, migrate, dump=arguments.dump))
-    if arguments.workers:
-        clone_workers(arguments.name, arguments.workers)
-
-
-def clone_workers(name: str, workers: int) -> None:
-    """Give each pytest-django worker its own copy, retaining all migrated seed rows."""
-    if not name.startswith("test_") or not 1 <= workers <= 32:
-        raise ValueError("Expected an explicit test_ database and between 1 and 32 workers")
-    with psycopg.connect(connection_string("postgres"), autocommit=True) as server:
-        for worker in range(workers):
-            clone = f"{name}_gw{worker}"
-            server.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(clone)))
-            server.execute(sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(sql.Identifier(clone), sql.Identifier(name)))
 
 
 if __name__ == "__main__":
