@@ -63,3 +63,23 @@ message).
 A new demo, an integration, or an upstream report follows [the upstream playbook](docs/upstream-playbook.md), with the templates in [`docs/upstream-templates`](docs/upstream-templates). With Claude Code, the `find-upstream-weaknesses` skill in `.claude/skills` runs the whole cycle.
 
 See [package ownership and subtree development](package/docs/development.md) for library edits made inside an adopter checkout.
+
+
+## Selective CI inputs
+
+`.github/test-lanes.json` selects complete framework/conformance lanes. A
+MongoDB-only test change runs MongoDB; changes to the shared plugin/runtime,
+shims, locks or CI configuration retain full testing. Main, `test:full` and
+planner failures retain full-suite execution.
+
+Changes confined to `package/README.md` or `package/docs/` need packaging checks,
+not live framework test services. Build, lint and type checks always run; the
+build job still builds the distribution, checks its contents, installs the wheel
+without framework dependencies and runs compatibility/identity controls. The
+package prose is not executed by the test lanes. Root `docs/demo.tape` and
+`docs/demo_env.sh` remain demo-lane inputs because the executable README demo
+reads them. If tests begin consuming package documentation, declare that input.
+
+The planner JSON names the tests/inputs selecting each lane. An affected test
+outside all configured lane roots falls back to every lane and names the missing
+mapping. Add new test directories to a lane whose pytest command executes them.
