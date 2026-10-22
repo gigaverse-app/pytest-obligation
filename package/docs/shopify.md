@@ -9,14 +9,19 @@ extra is required. This is a test dependency, not a billing client.
 ```python
 from datetime import UTC, datetime, timedelta
 from pytest_obligation.integrations.shopify import (
-    BillingEvent, BillingWindow, ShopifyBillingSimulator,
+    BillingEvent,
+    BillingWindow,
+    ShopifyBillingSimulator,
 )
 
 provider = ShopifyBillingSimulator()  # one app's idempotency namespace
 now = datetime(2026, 1, 1, tzinfo=UTC)
 event = BillingEvent(
-    shop_id="shop-a", event_handle="messages", timestamp=now,
-    idempotency_key="usage-1", quantity="10",
+    shop_id="shop-a",
+    event_handle="messages",
+    timestamp=now,
+    idempotency_key="usage-1",
+    quantity="10",
 )
 receipt = provider.send(event, rejection="NO_SUBSCRIPTION")
 assert receipt.status_code == 202
