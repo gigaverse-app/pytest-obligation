@@ -165,6 +165,17 @@ Open your application in Claude Code or Codex and ask:
 > generate and run the standard tests, then add focused crash/retry tests.
 > Report what passed, what failed, and which guarantees remain unassessed.
 
+## CI measurement and validation reuse
+
+[CI-esta](https://github.com/gigaverse-app/ci-esta) measures GitHub Actions latency
+and runner costs and can reuse a previously completed lane with matching input
+and success evidence. It complements pytest-selective's affected-lane planning.
+Keep pytest-obligation's executed-profile checks inside each lane: selection,
+skipping and a CI receipt do not themselves establish conformance. See the
+[integration guide](https://github.com/gigaverse-app/ci-esta/blob/main/docs/integrations.md)
+for the boundary with [Due](https://github.com/gigaverse-app/due) and pytest-selective.
+CI-esta is optional; these links do not change this repository's CI admission.
+
 ## Documentation
 
 | You want to… | Read |
