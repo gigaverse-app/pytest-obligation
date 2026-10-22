@@ -179,3 +179,6 @@ def test_writing_aggregation_counts_only_after_its_output_is_durable(client, col
         with pytest.raises(WorkerDied):
             list(collection.aggregate([{stage: output.name}]))
     assert output.find_one({"_id": "owed"}) == {"_id": "owed"}
+
+
+# CI selection benchmark: compare this identical head with and without test:full.
