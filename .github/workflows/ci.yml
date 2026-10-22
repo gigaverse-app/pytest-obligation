@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,6 +18,21 @@ concurrency:
 # pyproject.toml fails CI instead of silently resolving something new.
 
 jobs:
+  select-tests:
+    runs-on: ubuntu-latest
+    outputs:
+      lanes: ${{ steps.select.outputs.lanes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: select
+        uses: gigaverse-app/pytest-selective/.github/actions/plan-lanes@8205bed3c64be3cf9320b71a24ff6e48f37f5427
+        with:
+          config: .github/test-lanes.json
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          full: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'test:full') }}
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -43,6 +60,10 @@ jobs:
       - run: uv run --no-sync pyrefly check
 
   core:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).core) }}
     # The core must work with no framework installed: the package, pytest and pytest-xdist only.
     runs-on: ubuntu-latest
     strategy:
@@ -68,6 +89,10 @@ jobs:
       - run: uv run --python ${{ matrix.python }} --no-sync pytest package/tests/core integration_tests/core
 
   minimum-models:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).minimum_models) }}
     # Exercise nested generic declarations on the supported minimum, without Hypothesis or frameworks.
     runs-on: ubuntu-latest
     steps:
@@ -84,6 +109,10 @@ jobs:
       - run: uv run --no-sync pytest examples/adopter/tests --due-work-check-fixtures --due-work-require-assessed
 
   exploration:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).exploration) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -94,6 +123,10 @@ jobs:
       - run: uv run --no-sync pytest package/tests/core integration_tests/core
 
   django:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).django) }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -121,6 +154,10 @@ jobs:
   # The same suite on psycopg2, which Django uses when psycopg 3 is not installed: pretix and many older
   # projects run on it, and the host's autocommit-write probe once assumed psycopg 3.
   django-psycopg2:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).django_psycopg2) }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -147,6 +184,10 @@ jobs:
 
   # Redis-backed queues, and Celery's real worker as a child process on a Redis broker.
   redis:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).redis) }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -186,6 +227,10 @@ jobs:
           if-no-files-found: error
 
   mongodb:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).mongodb) }}
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://localhost:27017/?directConnection=true
@@ -206,6 +251,10 @@ jobs:
       - run: uv run --no-sync pytest package/tests/mongodb -q
 
   aiokafka:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).aiokafka) }}
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -235,6 +284,10 @@ jobs:
       - run: uv run --no-sync pytest package/tests/aiokafka -q
 
   prefect:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).prefect) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -261,6 +314,10 @@ jobs:
           if-no-files-found: error
 
   demos:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).demos) }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -360,6 +417,10 @@ jobs:
           if-no-files-found: error
 
   saleor:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).saleor) }}
     # Saleor's checkout, unmodified, in Saleor's own environment built from its uv.lock.
     runs-on: ubuntu-latest
     services:
@@ -450,6 +511,10 @@ jobs:
         run: /tmp/wheel/bin/python -m pytest package/tests/core/test_compatibility.py package/tests/core/test_package_identity.py -q
 
   actions:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).actions) }}
     # The published GitHub Actions, run against the example adopter the way a project would use them.
     runs-on: ubuntu-latest
     steps:
@@ -498,6 +563,10 @@ jobs:
           fi
 
   due:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).due) }}
     # The complete work-table harness lives with Due's runtime. Install this PR's
     # wheel over its locked obligation dependency and prove the packages together.
     runs-on: ubuntu-latest
