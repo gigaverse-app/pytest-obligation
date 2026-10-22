@@ -18,6 +18,26 @@ concurrency:
 # pyproject.toml fails CI instead of silently resolving something new.
 
 jobs:
+  ci-summary:
+    if: always()
+    needs: [select-tests, ci-contracts, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Report actual job and step timings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > ci-jobs.json
+          python scripts/ci/report_timings.py ci-jobs.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ci-execution-timings
+          path: ci-jobs.json
+
   select-tests:
     runs-on: ubuntu-latest
     outputs:
@@ -32,6 +52,29 @@ jobs:
           config: .github/test-lanes.json
           base: ${{ github.event.pull_request.base.sha || github.event.before }}
           full: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'test:full') }}
+      - name: Keep the changed paths and lane-selection reason
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-lane-selection
+          path: test-lanes.json
+          if-no-files-found: error
+
+  ci-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: '3.14'
+      - name: Prove consumer routing and documentation checks
+        # Resolve from the action pin above, so tests cannot silently use a different selector.
+        run: >-
+          uv run --no-project --python 3.14
+          --with "$(python scripts/ci/selector_requirement.py)"
+          python -m unittest discover -s ci_tests -v
+      - name: Check local documentation links
+        run: python scripts/ci/check_docs.py
 
   lint:
     runs-on: ubuntu-latest
@@ -47,6 +90,10 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
 
   typecheck:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).typecheck) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -295,7 +342,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-packages --locked --no-default-groups --extra prefect --extra exploration
-      - run: uv run --no-sync pytest package/tests/prefect integration_tests/prefect -q --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-prefect.json --junitxml=adopters-prefect.xml
+      - run: uv run --no-sync pytest package/tests/prefect integration_tests/prefect -q --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-prefect.json --junitxml=adopters-prefect.xml --durations=20
 
       - name: Require the promised adopters and executed capabilities
         run: |
@@ -503,6 +550,10 @@ jobs:
         with:
           enable-cache: true
       - run: uv build --project package --out-dir dist
+      - name: Validate package metadata and Markdown rendering
+        run: |
+          uvx --from twine==7.0.0 twine check --strict dist/*
+          python scripts/ci/check_metadata.py
       - run: unzip -l dist/*.whl | grep -q "pytest_obligation/py.typed"
       - run: unzip -l dist/*.whl | grep -q "due_work_harness/py.typed"
       - run: uv venv /tmp/wheel && uv pip install --python /tmp/wheel dist/*.whl
@@ -608,7 +659,7 @@ jobs:
         run: uv pip install --python .upstream/due/.venv/bin/python --no-deps --reinstall dist/*.whl
       - name: Run independent Due library controls
         working-directory: .upstream/due
-        run: .venv/bin/python -m pytest -c package/pyproject.toml package/tests --due-work-check-fixtures --due-work-profile-report=library-profiles.json
+        run: .venv/bin/python -m pytest -c package/pyproject.toml package/tests --due-work-check-fixtures --due-work-profile-report=library-profiles.json --durations=20
       - name: Run complete work-table and application conformance
         working-directory: .upstream/due
         run: >-
@@ -616,7 +667,7 @@ jobs:
           --due-work-check-fixtures --due-work-debt-baseline=integration_tests/conformance/debt_baseline.yaml
           --due-work-profile-report=profiles.json
           --durable-work-report=effects.json --durable-observation-report=observations.json
-          --junitxml=results.xml
+          --junitxml=results.xml --durations=20
       - name: Require executed primitive and application guarantees
         working-directory: .upstream/due
         run: |

@@ -206,6 +206,9 @@ CI-esta is optional; these links do not change this repository's CI admission.
 
 ## Documentation
 
+For CI lane routing, validation boundaries, and measured integration costs, see
+[CI selection and execution costs](docs/ci.md).
+
 | You want to… | Read |
 | --- | --- |
 | Find the right workflow or public interface | [Harness guide and module map](package/docs/harness-guide.md) |
