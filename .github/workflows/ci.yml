@@ -27,17 +27,11 @@ jobs:
         with:
           fetch-depth: 0
       - id: select
-        uses: gigaverse-app/pytest-selective/.github/actions/plan-lanes@5d13b3873d49f4714208d430c812957bf6c97b29
+        uses: gigaverse-app/pytest-selective/.github/actions/plan-lanes@99f9af2bbe92534074657664903a1ce03bdeb44f
         with:
           config: .github/test-lanes.json
           base: ${{ github.event.pull_request.base.sha || github.event.before }}
           full: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'test:full') }}
-      - name: Keep the changed paths and lane-selection reason
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-lane-selection
-          path: test-lanes.json
-          if-no-files-found: error
 
   ci-contracts:
     runs-on: ubuntu-latest
