@@ -2,8 +2,9 @@
 
 import re
 from collections import Counter
+from hashlib import sha256
 from pathlib import PurePosixPath
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import quote, urlparse
 
 from pytest_obligation.profiles.coverage import ProfileCoverage, SuiteCoverage
 
@@ -21,6 +22,7 @@ from .evidence import (
 from .evidence import (
     MAX_BODY as MAX_BODY,
 )
+from .graphics import application_svg, summary_svg
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = {
@@ -31,8 +33,7 @@ LABELS = {
     "gaps": "Coverage gaps",
     "rejected": "Rejected bindings",
 }
-WIDTHS = {"applications": 64, "passed": 76, "failed": 68, "blocked": 76, "gaps": 60, "rejected": 80}
-COMPACT_WIDTHS = {"passed": 70, "failed": 60, "blocked": 66, "gaps": 52, "rejected": 70}
+ASSET_URL = "https://pytest-obligation.invalid/assets/"
 
 
 def has_gap(profile: ProfileCoverage) -> bool:
@@ -70,37 +71,21 @@ def _priority(item: tuple[str, SuiteCoverage]) -> tuple[int, int, str]:
     return 4, 0, item[0]
 
 
-def _badge(kind: str, value: int, *, large: bool = False) -> str:
-    color = (
-        "238636"
-        if kind == "passed" or (kind != "applications" and value == 0)
-        else "b62324"
-        if kind in ("failed", "rejected")
-        else "9e6a03"
-        if kind != "applications"
-        else "30363d"
+def _picture(name: str, alt: str, *, row: bool = False) -> str:
+    width = "96%" if row else "100%"
+    return (
+        f'<picture><source media="(prefers-color-scheme: dark)" srcset="{ASSET_URL}{name}-dark.svg">'
+        f'<img alt="{cell(alt)}" src="{ASSET_URL}{name}-light.svg" width="{width}" align="middle"></picture>'
     )
-    label = ("app" if value == 1 else "apps") if kind == "applications" else kind
-    params = {
-        "label": str(value),
-        "message": label,
-        "color": "30363d",
-        "labelColor": color,
-        "style": "flat-square",
-    }
-    alt = f"{value} {LABELS[kind].lower()}"
-    width = WIDTHS[kind] if large else COMPACT_WIDTHS[kind]
-    size = f'width="{width}" height="{24 if large else 20}"'
-    return f'<img alt="{alt}" src="https://img.shields.io/static/v1?{urlencode(params)}" {size}>'
 
 
-def _totals(values: dict[str, int]) -> str:
-    badges = []
-    for kind in ("applications", *METRICS):
-        if kind == "failed":
-            badges.append("&#160;<sup>│</sup>&#160;")
-        badges.append(_badge(kind, values[kind], large=True))
-    return " ".join(badges)
+def _totals(values: dict[str, int], assets: dict[str, str] | None) -> str:
+    alt = " · ".join(f"{values[kind]} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
+    if assets is None:
+        return f"**{alt}**"
+    for theme in ("light", "dark"):
+        assets[f"totals-{theme}.svg"] = summary_svg(values, dark=theme == "dark")
+    return _picture("totals", alt)
 
 
 def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> str:
@@ -164,7 +149,7 @@ def _hypothesis(suite: SuiteCoverage) -> list[str]:
             "Example counts, shrinking statistics and replay histories are not recorded in this report; "
             "inspect the pytest log for a failing history.",
         ]
-    return ["<details>", f"<summary>Hypothesis · {summary}</summary>", "", *lines, "", "</details>"]
+    return ["<details>", f"<summary><strong>Hypothesis · {summary}</strong></summary>", "", *lines, "", "</details>"]
 
 
 def _profile_detail(letter: str, profile: ProfileCoverage, *, gap: bool = False) -> list[str]:
@@ -183,24 +168,26 @@ def _profile_detail(letter: str, profile: ProfileCoverage, *, gap: bool = False)
     return result
 
 
-def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str) -> str:
+def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, assets: dict[str, str] | None) -> str:
     values = counts(suite)
-    # Monospace nonbreaking padding and fixed-width badges survive GitHub's HTML
-    # sanitizer; custom CSS from a local preview does not.
-    name = suite.name[:13] + "…" if len(suite.name) > 14 else suite.name
-    name = cell(name) + "&#160;" * (14 - len(name))
-    badges = " ".join(_badge(kind, values[kind]) for kind in METRICS if kind != "passed")
+    description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
+    summary = f"{code(suite.name)} · {description}"
+    if assets is not None:
+        name = "app-" + sha256(key.encode()).hexdigest()[:16]
+        for theme in ("light", "dark"):
+            assets[f"{name}-{theme}.svg"] = application_svg(suite.name, values, dark=theme == "dark")
+        summary = _picture(name, f"{suite.name}: {description}", row=True)
     lines = [
         "<details>",
-        f"<summary><code>{name}</code> {_badge('passed', values['passed'])} │ {badges}</summary>",
-        "",
-        f"**Application:** {code(suite.name)}",
+        f"<summary>{summary}</summary>",
         "",
         _source_link(suite, repository_url, revision),
         "",
-        _time([suite]),
+        f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>",
         "",
     ]
+    if len(suite.name) > 24:
+        lines += [f"Application: {code(suite.name)}", ""]
     cases = all_cases(suite)
     for title, states in (
         ("Failures", {"Check failed"}),
@@ -213,34 +200,53 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str) -
         affected = [(name, c) for name, c in cases.items() if case_status(c) in states]
         if not affected:
             continue
-        lines += [f"#### {title}", ""]
+        lines += [f"**{len(affected)} {title.lower()}**", ""]
+        # Keep the first concrete observation visible, with full traces on demand.
+        observations = list(dict.fromkeys(f.message for _, c in affected for f in c.failures))
+        lines += [cell(message, 350) + "\n" for message in observations[:2]]
+        if title == "Rejected bindings":
+            lines += [
+                "Connect the binding to production code and rerun. These checks provide no supporting evidence.",
+                "",
+            ]
+        elif title == "Blocked checks":
+            lines += ["Run the missing checks, or repair their setup/cleanup.", ""]
+        lines += ["<details>", f"<summary><strong>{len(affected)} {title.lower()} · diagnostics</strong></summary>", ""]
         for name, case in affected[:10]:
             lines += [f"- {code(name)}: **{case_status(case)}**", *_failure_details(case)]
             guarantees = [GUARANTEES.get(letter, p.title) for letter, p in suite.profiles.items() if name in p.cases]
             if guarantees:
                 lines += [f"  - Guarantee: {cell('; '.join(guarantees))}"]
-        if title == "Rejected bindings":
-            lines += ["Repair the test binding. These rejected checks provide no evidence for their claims."]
-        elif title == "Blocked checks":
-            lines += [
-                "Run the missing checks, or repair their setup/cleanup. Expected failures also lack passing proof."
-            ]
         if len(affected) > 10:
             lines += [f"{len(affected) - 10} further checks are retained in the JSON artifact."]
-        lines += [""]
+        lines += ["", "</details>", ""]
     gaps = [(letter, p) for letter, p in sorted(suite.profiles.items()) if has_gap(p)]
     if gaps:
-        lines += ["#### Coverage gaps", ""]
+        lines += [f"**Coverage gaps · {len(gaps)} guarantees need review**", ""]
         for letter, profile in gaps:
-            lines += _profile_detail(letter, profile, gap=True)
+            lines += [
+                f"**{cell(GUARANTEES.get(letter, profile.title))}** · {assessment_status(profile.assessment)}",
+                "",
+            ]
+            if profile.assessment.because:
+                lines += [f"Application reason: {cell(profile.assessment.because)}", ""]
+        for recommendation in dict.fromkeys(advice(p) for _, p in gaps):
+            lines += [recommendation, ""]
+        if any(p.families for _, p in gaps):
+            lines += ["<details>", "<summary><strong>Missing scenario details</strong></summary>", ""]
+            for letter, profile in gaps:
+                lines += _profile_detail(letter, profile, gap=True)
+            lines += ["", "</details>"]
         lines += [""]
     supported = [(letter, p) for letter, p in sorted(suite.profiles.items()) if p.verified]
     excluded = [(letter, p) for letter, p in sorted(suite.profiles.items()) if p.assessment.state == "not applicable"]
-    lines += _hypothesis(suite)
+    lines += ["---", "", *_hypothesis(suite)]
     lines += [
         "",
+        "---",
+        "",
         "<details>",
-        f"<summary>{len(supported)} supported guarantees · {len(excluded)} not applicable</summary>",
+        f"<summary><strong>{len(supported)} supported guarantees · {len(excluded)} not applicable</strong></summary>",
         "",
     ]
     for letter, profile in supported:
@@ -263,16 +269,17 @@ def render(
     asset_ref: str = "main",
     repository_url: str = "",
     revision: str = "",
+    assets: dict[str, str] | None = None,
 ) -> str:
     ref = quote(asset_ref, safe="")
-    assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
+    banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
     totals: Counter[str] = Counter()
     for suite in reports.values():
         totals.update(counts(suite))
     totals["applications"] = len(reports)
     head = [
-        f'<a href="{PROJECT}"><picture><source media="(prefers-color-scheme: dark)" srcset="{assets}/sticky-banner-dark.svg">'
-        f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{assets}/sticky-banner-light.svg" width="640"></picture></a>',
+        f'<a href="{PROJECT}"><picture><source media="(prefers-color-scheme: dark)" srcset="{banner_assets}/sticky-banner-dark.svg">'
+        f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
         "",
     ]
     if test_outcome == "failure":
@@ -285,7 +292,7 @@ def render(
     if unavailable or not reports:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
     else:
-        head += [_totals(dict(totals)), ""]
+        head += [_totals(dict(totals), assets), ""]
         elapsed = next(iter(reports.values())).session_seconds
         timing = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
             _time(list(reports.values()), compact=True)
@@ -297,7 +304,7 @@ def render(
     footer = (["", "</details>"] if outer else []) + [
         "",
         "<details>",
-        "<summary>How to read this report · run details</summary>",
+        "<summary><strong>What do these numbers mean?</strong></summary>",
         "",
         "- **Failures:** an executed assertion failed. Inspect the behavior and test assumptions.",
         "- **Rejected bindings:** repair the connection to production code; these checks provide no supporting evidence.",
@@ -305,7 +312,7 @@ def render(
         "- **Coverage gaps:** guarantees not claimed, not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once.",
         "",
         "Pass/fail/blocked/rejected counts partition unique checks. Gaps count guarantees, not extra tests. "
-        "Not-applicable declarations remain separate. Zero issues are green; missing reports never show green zeroes.",
+        "Not-applicable declarations remain separate. Graphics show zero issues in green; missing reports never show green zeroes.",
         "",
         "Elapsed time covers the pytest session. Summed check time includes setup, execution and cleanup; parallel work overlaps.",
         "",
@@ -322,11 +329,11 @@ def render(
     ]
     sections = []
     for key, suite in sorted(reports.items(), key=_priority):
-        section = _suite(key, suite, repository_url, revision)
+        section = "---\n\n" + _suite(key, suite, repository_url, revision, assets)
         if len("\n".join([*head, *sections, section, *footer])) > MAX_BODY:
             sections.append(
                 "Further contract details omitted to fit GitHub's comment limit. See the full JSON artifact."
             )
             break
         sections.append(section)
-    return "\n".join([*head, *sections, *footer])
+    return "\n".join([*head, *sections, "", "---", *footer])

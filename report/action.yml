@@ -19,6 +19,9 @@ inputs:
   test-outcome:
     description: Outcome of the test step (steps.tests.outcome), so collection or unrelated failures remain visible.
     default: unknown
+  graphics:
+    description: Publish themed SVGs on the dedicated pytest-obligation-assets branch. Requires a public repository and contents write; otherwise retains the complete text report.
+    default: 'true'
 outputs:
   markdown-path:
     description: Rendered Markdown, also included in the job summary and uploaded artifact.
@@ -44,8 +47,9 @@ runs:
           --input "$REPORT_PATH" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
-          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA"
+          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" --graphics
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
+        echo "graphics-path=${output%.md}.graphics.json" >> "$GITHUB_OUTPUT"
     - name: Preserve full evidence and rendered report
       uses: actions/upload-artifact@v7
       with:
@@ -53,6 +57,7 @@ runs:
         path: |
           ${{ inputs.report-path }}
           ${{ steps.render.outputs.markdown-path }}
+          ${{ steps.render.outputs.graphics-path }}
         if-no-files-found: error
     - name: Update PR report
       if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -61,6 +66,8 @@ runs:
         OBLIGATION_MARKDOWN: ${{ steps.render.outputs.markdown-path }}
         OBLIGATION_STICKY_KEY: ${{ inputs.sticky-key }}
         OBLIGATION_ACTION_PATH: ${{ github.action_path }}
+        OBLIGATION_GRAPHICS: ${{ steps.render.outputs.graphics-path }}
+        OBLIGATION_USE_GRAPHICS: ${{ inputs.graphics }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |

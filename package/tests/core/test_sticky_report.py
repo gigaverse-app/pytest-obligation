@@ -87,7 +87,7 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
         elif mode == "binding":
             assert "Test binding rejected" in body
             assert "references no production" in body
-            assert "Repair the test binding" in body
+            assert "Connect the binding to production code" in body
         else:
             assert result.ret == pytest.ExitCode.TESTS_FAILED
             assert ("**Check failed**" if mode == "failed" else "Test setup/cleanup failed") in body
@@ -148,7 +148,7 @@ def test_failure_state_roundtrips_and_survives_worker_merge() -> None:
     }
     merge_reports(merged, restored)
     body = render(merged)
-    assert 'alt="1 failures"' in body
+    assert "1 failures" in body
     assert "resumed" in body and "**7**" in body and "order-17" in body and "status=pending" in body
     assert not merged["tests.Orders"].verified
 
@@ -219,7 +219,7 @@ def test_report_accepts_prior_version_without_optional_failure_metadata() -> Non
         }
     }
     body = render(TypeAdapter(dict[str, SuiteCoverage]).validate_json(json.dumps(data)))
-    assert 'alt="1 failures"' in body
+    assert "1 failures" in body
 
 
 def test_failed_test_step_remains_red_when_no_contract_failure_was_recorded() -> None:

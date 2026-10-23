@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const publish = require('./publish.cjs');
 
 function fixture(t) {
@@ -21,7 +22,7 @@ function fixture(t) {
     head:{sha:'abc', repo:{full_name:'owner/app'}}}}};
   const core = {info:x => notices.push(x), warning:x => notices.push(x)};
   const env = {OBLIGATION_MARKDOWN:file, OBLIGATION_STICKY_KEY:'python', GITHUB_RUN_ID:'100', GITHUB_RUN_ATTEMPT:'1'};
-  return {calls, comments, notices, state, context, env, run:() => publish({github, context, core}, env)};
+  return {calls, comments, notices, state, context, env, github, run:() => publish({github, context, core}, env)};
 }
 
 test('same key updates one bot-owned comment and carries source identity', async t => {
@@ -72,4 +73,40 @@ test('broken bot snapshot is repairable', async t => {
   const f = fixture(t); await f.run();
   f.comments.push({id:42, body:f.calls[0][1].body.replace(/snapshot:.*? -->/, 'snapshot:broken -->'), user:{login:'github-actions[bot]', type:'Bot'}});
   await f.run(); assert.equal(f.calls[1][0], 'update');
+});
+
+function graphics(f) {
+  f.context.payload.repository = {private:false};
+  f.env.OBLIGATION_USE_GRAPHICS = 'true';
+  f.env.OBLIGATION_GRAPHICS = path.join(path.dirname(f.env.OBLIGATION_MARKDOWN), 'graphics.json');
+  const bundle={version:1,markdown:'<img src="https://pytest-obligation.invalid/assets/totals-dark.svg">',assets:{'totals-dark.svg':'<svg xmlns="http://www.w3.org/2000/svg"><text>42</text></svg>'}};
+  fs.writeFileSync(f.env.OBLIGATION_GRAPHICS,JSON.stringify(bundle));
+  return bundle;
+}
+test('unavailable image permission still publishes the complete text report', async t=>{
+  const f=fixture(t); graphics(f);
+  f.github.rest.git={getRef:async()=>{throw {status:403};}};
+  await f.run();
+  assert.equal(f.calls.length,1);
+  assert.ok(f.calls[0][1].body.startsWith('actual rendered report'));
+  assert.ok(f.notices.some(x=>x.includes('Graphics unavailable')));
+});
+test('stale PR never attempts image publication', async t=>{
+  const f=fixture(t); graphics(f); f.state.head='new-head';
+  f.github.rest.git={getRef:async()=>assert.fail('stale run attempted to publish assets')};
+  await f.run(); assert.equal(f.calls.length,0);
+});
+test('the posted rich comment contains immutable images and source identity', async t=>{
+  const f=fixture(t), bundle=graphics(f), svg=bundle.assets['totals-dark.svg'];
+  const key=crypto.createHash('sha256').update('python').digest('hex').slice(0,24);
+  const sha=crypto.createHash('sha1').update(`blob ${Buffer.byteLength(svg)}\0${svg}`).digest('hex');
+  f.github.rest.git={
+    getRef:async()=>({data:{object:{sha:'a'.repeat(40)}}}),
+    getCommit:async()=>({data:{tree:{sha:'b'.repeat(40)}}}),
+    getTree:async()=>({data:{truncated:false,tree:[{path:`pr-12/${key}/totals-dark.svg`,type:'blob',sha}]}}),
+  };
+  await f.run();
+  assert.ok(f.calls[0][1].body.includes(`/${'a'.repeat(40)}/pr-12/`));
+  assert.ok(!f.calls[0][1].body.includes('pytest-obligation.invalid'));
+  assert.ok(f.calls[0][1].body.includes('"head":"abc","run":100,"attempt":1'));
 });

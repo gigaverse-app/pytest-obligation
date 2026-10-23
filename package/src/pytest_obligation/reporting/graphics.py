@@ -78,7 +78,7 @@ def application_svg(name: str, values: dict[str, int], *, dark: bool) -> str:
     parts = [
         f'<rect x="0" y="9" width="{min(164, len(display) * 7 + 10)}" height="23" rx="4" fill="{colors["code"]}"/>',
         '<g font-family="ui-monospace,SFMono-Regular,Consolas,monospace">',
-        _text(display, 5, 25, 12, colors["ink"], identifier="application", weight=600),
+        _text(display, 5, 25, 11 if len(display) > 21 else 12, colors["ink"], identifier="application", weight=600),
         "</g>",
         f'<path d="M258 10v22" stroke="{colors["line"]}"/>',
     ]

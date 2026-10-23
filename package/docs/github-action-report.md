@@ -11,17 +11,29 @@ to see its guarantees, missing evidence, failed checks and recovery state.
 The header counts applications and passing checks on the left, with failures,
 blocked checks, coverage gaps and rejected bindings after a divider. Zero issues
 are green. Missing evidence produces an unavailable message instead of green zeroes.
-Each application has an aligned compact row with its counts visible while closed.
-Long names are shortened in the row; opening it shows the full application name.
+Each application has an aligned row with its counts visible while closed.
+Names over 24 characters are shortened in the graphic; opening it shows the full name.
 One to three applications appear directly; larger reports use an outer disclosure.
 Applications sort by failed assertions, rejected bindings, blocked execution, then
 coverage gaps, with the largest count in the first applicable category first.
 
-GitHub strips custom CSS. The reporter uses fixed-width Shields count images,
-monospace application names and native disclosures. The header has no table grid;
-elapsed and summed check time share one compact line. Alt text retains the
-numbers if images cannot load. The images send only category names and counts to
-Shields; application names, reasons and diagnostics remain in GitHub Markdown.
+GitHub strips custom CSS. The reporter renders the number strip and application
+rows as themed SVGs, keeping the expanders, source links and diagnostics native.
+The graphics preserve large colored numbers, muted labels and aligned columns.
+No badge service is involved. Alt text includes the application name and counts.
+
+For rich graphics in a public repository, give the reporting job `contents: write`
+in addition to `pull-requests: write`. The publisher creates an assets-only branch
+named `pytest-obligation-assets`; it never writes to the default or PR branch.
+Images contain only application names and counts. Comment URLs use immutable
+asset commits, so an older comment cannot silently show a newer run's numbers.
+Updates preserve other PRs' images and replace this PR/key's current files. Git
+history retains previous images; identical graphics reuse the existing commit.
+
+Private repositories, forks, denied image permissions and publication errors
+retain a complete plain Markdown report. Private reports are never copied to a
+public hosting service. Set `graphics: 'false'` to use text-only reports explicitly.
+The JSON, fallback Markdown and graphics bundle are also saved as workflow artifacts.
 
 ## What the counts measure
 
@@ -67,12 +79,14 @@ name: Application contracts
 on: pull_request
 permissions:
   contents: read
-  pull-requests: write
 concurrency:
   group: obligation-${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
   contracts:
+    permissions:
+      contents: write # SVGs on the dedicated assets branch (public repositories).
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

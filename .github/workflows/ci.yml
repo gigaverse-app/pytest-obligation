@@ -55,7 +55,7 @@ jobs:
       - name: Check local documentation links
         run: python scripts/ci/check_docs.py
       - name: Test sticky publication controls
-        run: node --test report/publish.test.cjs
+        run: node --test report/*.test.cjs
 
   lint:
     runs-on: ubuntu-latest
@@ -556,7 +556,7 @@ jobs:
 
   actions:
     permissions:
-      contents: read
+      contents: write # Publish report SVGs on the dedicated assets branch.
       pull-requests: write # Dogfood the report; forks retain summary/artifact only.
     needs: select-tests
     if: >-
