@@ -13,8 +13,6 @@ from pytest_obligation.profiles.coverage import (
 )
 from pytest_obligation.profiles.reporting import merge_reports
 
-pytest_plugins = ["pytester"]
-
 
 def coverage() -> ProfileCoverage:
     return ProfileCoverage(
