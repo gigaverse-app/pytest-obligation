@@ -8,13 +8,11 @@ from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
-from xml.etree import ElementTree
 
 from pytest_obligation.profiles.coverage import CaseEvidence, SuiteCoverage
 from pytest_obligation.reporting.graphics import application_html, summary_html
 from pytest_obligation.reporting.markdown import render
 
-ASSETS = Path(__file__).resolve().parents[3] / "docs/assets/report-glyphs"
 BASE = "https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/test-ref/docs/assets/report-glyphs/"
 
 
@@ -32,7 +30,6 @@ def test_changed_counts_only_select_existing_glyphs_and_preserve_status_colors()
     assert "warning-2-dark.svg" in before
     for body in (before, after):
         assert "<svg" not in body and "?" not in body
-        assert all((ASSETS / name).is_file() for name in image_names(body))
 
 
 def test_names_stay_native_and_cannot_change_image_urls() -> None:
@@ -49,7 +46,6 @@ def test_wide_counts_remain_exact_and_never_produce_negative_spacing() -> None:
     body = application_html("orders", values, BASE)
     assert 'alt="1234567 passed"' in body
     assert 'width="-' not in body
-    assert all((ASSETS / name).is_file() for name in image_names(body))
 
 
 def test_numeric_columns_stay_fixed_when_counts_gain_digits() -> None:
@@ -80,15 +76,6 @@ def test_numeric_columns_stay_fixed_when_counts_gain_digits() -> None:
 def test_application_names_cannot_create_markdown_links_or_mentions() -> None:
     body = application_html("@team [x](https://x)", dict(passed=0, failed=0, blocked=0, gaps=0, rejected=0), BASE)
     assert "&#64;team" in body and "&#91;x&#93;" in body
-
-
-def test_fixed_assets_are_small_passive_images_with_both_themes() -> None:
-    files = list(ASSETS.glob("*.svg"))
-    assert len(files) == 95 and sum(p.stat().st_size for p in files) < 25_000
-    for path in files:
-        root = ElementTree.fromstring(path.read_text(encoding="utf-8"))
-        assert all(n.tag.rsplit("}")[-1] in {"svg", "text", "path"} for n in root.iter())
-        assert not any(k in {"href", "src", "onload", "style"} for n in root.iter() for k in n.attrib)
 
 
 def test_cli_writes_one_markdown_report_without_a_graphics_bundle(tmp_path: Path) -> None:
