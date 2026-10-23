@@ -3,6 +3,11 @@
 ## [0.14.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.1...v0.14.2) (2026-10-23)
 
 
+### Bug fixes
+
+* Support PyMongo 4.18 bulk-write and read-checkout boundaries while preserving 4.9 through 4.17 compatibility ([#109](https://github.com/gigaverse-app/pytest-obligation/pull/109)).
+* Adopt compatible CI-esta and pytest-selective releases, including the matching PostgreSQL client repair.
+
 ### Performance
 
 * **ci:** repair snapshots and reduce Saleor recovery overhead ([#108](https://github.com/gigaverse-app/pytest-obligation/issues/108)) ([ad67e0f](https://github.com/gigaverse-app/pytest-obligation/commit/ad67e0fe3911091ece8537b8b61a4436ef50b323))
