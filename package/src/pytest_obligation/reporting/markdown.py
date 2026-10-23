@@ -38,7 +38,11 @@ LABELS = {
 def has_gap(profile: ProfileCoverage) -> bool:
     return profile.assessment.state in ("known gap", "not assessed") or (
         profile.assessment.state == "claimed"
-        and (not profile.cases or any(f.state in ("known gap", "not assessed") for f in profile.families.values()))
+        and (
+            not profile.cases
+            or any(f.state in ("known gap", "not assessed") for f in profile.families.values())
+            or any(c.debt and c.debt.kind == "known-defect" for c in profile.cases.values())
+        )
     )
 
 

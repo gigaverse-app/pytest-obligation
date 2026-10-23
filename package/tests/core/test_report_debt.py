@@ -5,7 +5,7 @@ import pytest
 from pytest_obligation.debt import DebtEntry
 from pytest_obligation.profiles.coverage import Assessment, CaseEvidence, ProfileCoverage, SuiteCoverage
 from pytest_obligation.profiles.reporting import merge_reports
-from pytest_obligation.reporting.markdown import render
+from pytest_obligation.reporting.markdown import counts, render
 
 
 def specimen() -> SuiteCoverage:
@@ -56,6 +56,13 @@ def test_actionable_sections_preserve_reasons_and_ticket_links() -> None:
     assert "A database lock owns this work." in body
     assert "No retention process exists." in body
     assert "Run the missing checks, or repair their setup/cleanup." not in body
+
+
+def test_known_defect_still_counts_as_a_guarantee_gap_after_families_are_assessed() -> None:
+    suite = specimen()
+    suite.profiles = {"E": suite.profiles["E"]}
+    suite.profiles["E"].families = {}
+    assert counts(suite)["gaps"] == 1
 
 
 def test_undeclared_expected_failure_is_not_invented_as_a_known_defect() -> None:
