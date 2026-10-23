@@ -70,7 +70,15 @@ class RoutingTests(unittest.TestCase):
         return {name for name, enabled in result.lanes.items() if enabled}
 
     def test_prose_does_not_start_runtime_lanes(self):
-        for path in ("README.md", "package/README.md", "package/docs/adopting.md"):
+        for path in (
+            "README.md",
+            "package/README.md",
+            "package/docs/adopting.md",
+            "docs/guide.rst",
+            "md/guide.md",
+            ".github/pull_request_template.md",
+            ".github/ISSUE_TEMPLATE/bug.md",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set())
 
@@ -112,13 +120,14 @@ class RoutingTests(unittest.TestCase):
                 "actions",
                 "due",
                 "typecheck",
+                "contracts",
             },
         )
 
     def test_published_actions_only_start_their_consumers(self):
         self.assertEqual(self.selection("check/action.yml"), {"demos", "saleor", "actions"})
         self.assertEqual(self.selection("test/action.yml"), {"actions"})
-        self.assertEqual(self.selection("report/action.yml"), {"actions"})
+        self.assertEqual(self.selection("report/action.yml"), {"actions", "contracts"})
 
     def test_python_changes_still_typecheck(self):
         self.assertIn("typecheck", self.selection("package/src/pytest_obligation/host.py"))
@@ -129,6 +138,24 @@ class RoutingTests(unittest.TestCase):
             plan(self.repo, self.config, self.base, self.base, full=True),
         ):
             self.assertTrue(all(result.lanes.values()), result.model_dump_json())
+
+    def test_documentation_dependency_selects_its_declared_reader(self):
+        self.git("reset", "--hard", self.base)
+        reader = self.repo / "package/tests/core/test_declared_doc.py"
+        reader.parent.mkdir(parents=True, exist_ok=True)
+        reader.write_text("# gv:test-dependency: md/declared.md\ndef test_document(): pass\n")
+        doc = self.repo / "md/declared.md"
+        doc.parent.mkdir(parents=True, exist_ok=True)
+        doc.write_text("before\n")
+        base = self.commit()
+        doc.write_text("after\n")
+        result = plan(self.repo, self.config, base, self.commit())
+        self.assertTrue(result.lanes["core"], result.model_dump_json())
+        self.assertNotIn("fallback", result.reason)
+
+    def test_execution_helpers_select_contracts_and_wheel(self):
+        self.assertIn("contracts", self.selection("ci_tests/test_routing.py"))
+        self.assertIn("wheel", self.selection("scripts/check_core_is_framework_free.py"))
 
 
 if __name__ == "__main__":
