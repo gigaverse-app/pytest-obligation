@@ -87,8 +87,8 @@ nav:
 - Quickstart: package/docs/adopting.md
 - Guides:
   - Adopter capabilities: docs/adopter-capabilities.md
-  - Ci toolkit: docs/ci-toolkit.md
-  - Ci: docs/ci.md
+  - CI toolkit: docs/ci-toolkit.md
+  - CI: docs/ci.md
   - Aiokafka: package/docs/aiokafka.md
   - Architecture: package/docs/architecture.md
   - Completion: package/docs/completion.md

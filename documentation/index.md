@@ -10,12 +10,18 @@ Test background work against crashes, retries, and duplicate delivery with execu
 [Get started](../package/docs/adopting.md){ .md-button .md-button--primary }
 [Source on GitHub](https://github.com/gigaverse-app/pytest-obligation){ .md-button }
 
-## Apply it to your project
+## Exercise the failures normal tests miss
 
-Start with the quickstart, then use the guides to adapt the examples to your
-own dependencies and failure modes. Keep the documented safety checks enabled.
-The navigation includes configuration, practical examples, and the limits of
-what a successful result proves.
+Use pytest-obligation when your application's retry or recovery behavior needs
+an executable contract. Bind the harness to observable application outcomes,
+then exercise crashes, repeated delivery, and recovery against those outcomes.
+
+- [Adopt the harness](../package/docs/adopting.md): connect a real application and declare the proof boundary.
+- [Use the pytest plugin](../package/docs/pytest-plugin.md): collect and run the checks in your suite.
+- [Understand crash histories](../package/docs/how-it-works.md): follow the failures and recovery steps being exercised.
+- [Interpret a green result](../package/docs/what-a-green-result-means.md): separate verified, unassessed, and unsupported guarantees.
+- [Avoid false greens](../package/docs/false-greens.md): check the controls that make a passing result meaningful.
+- [Choose an integration](../package/docs/integrations.md): find the appropriate runtime and storage examples.
 
 ## Use the tools together
 
