@@ -38,8 +38,7 @@ preserves `-p due_work_harness` / `-p no:due_work_harness` behavior.
 
 ## Package-manager migration
 
-Keep using the old distribution until the first renamed release is published.
-For that release, replace the `due-work-harness` dependency with
+Replace the `due-work-harness` dependency with
 `pytest-obligation`, retaining the same extras. Remove the old distribution
 before installing the new one: both provide the old namespace and must not be
 installed together. Keep the prior release's adoption guide if remaining on
