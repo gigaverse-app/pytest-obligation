@@ -89,8 +89,8 @@ See [package ownership and subtree development](package/docs/development.md) for
 
 `.github/test-lanes.json` selects complete framework/conformance lanes. A
 MongoDB-only test change runs MongoDB; changes to the shared plugin/runtime,
-shims, locks or CI configuration retain full testing. Main, `test:full` and
-planner failures retain full-suite execution.
+shims, locks or CI configuration retain full testing. Explicit full runs and planner failures retain full-suite execution;
+ordinary main pushes use dependency selection.
 
 Changes confined to `package/README.md` or `package/docs/` need packaging checks,
 not live framework test services. Build, metadata and lint checks remain available; installed-wheel runtime and
@@ -154,4 +154,5 @@ installed-wheel smoke and public-action smoke. Metadata/link/build checks may
 still validate documentation without running runtime tests. Declare execution
 workflows, selector configuration, helpers, locks and non-import inputs; missing
 history or failed planning must execute the full affected lanes and fail the
-required planning gate. Main/manual/full checkpoints remain complete runs.
+required planning gate. Ordinary PRs and pushes use selection; manual/release/scheduled/full overrides
+remain complete checkpoints.
