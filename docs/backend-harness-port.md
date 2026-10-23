@@ -235,7 +235,7 @@ rows behind. The real Wagtail worker now runs with its normal connection behavio
 root regressions require committed histories to clean up their own rows. Exact
 edge aliases and an explicit fixed routing scope let that adopter expose precise
 lifecycle findings without disabling the proof. See the [adopter capability
-matrix](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md#integration-of-the-upstream-parity-changes-57).
+matrix](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md#capabilities-in-the-example-suites).
 
 A coordinated consumer audit then found copies that had already been ported but
 were still used in BE: its worker connection scope, lock-order recorder and Beat
