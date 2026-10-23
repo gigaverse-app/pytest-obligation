@@ -200,3 +200,5 @@ CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
 
 See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
 environment caches, required gates and real dependency critical-path reports.
+
+Documentation-only CI verification.
