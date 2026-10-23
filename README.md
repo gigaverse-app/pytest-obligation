@@ -6,6 +6,8 @@
 
 <img src="plugins/pytest-obligation/assets/icon.svg" alt="pytest-obligation logo" width="96">
 
+[PR evidence report: what passed, what is missing, what to fix](package/docs/github-action-report.md)
+
 [![CI](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pytest-obligation)](https://pypi.org/project/pytest-obligation/)
 [![Python](https://img.shields.io/pypi/pyversions/pytest-obligation)](https://pypi.org/project/pytest-obligation/)

@@ -118,6 +118,7 @@ class RoutingTests(unittest.TestCase):
     def test_published_actions_only_start_their_consumers(self):
         self.assertEqual(self.selection("check/action.yml"), {"demos", "saleor", "actions"})
         self.assertEqual(self.selection("test/action.yml"), {"actions"})
+        self.assertEqual(self.selection("report/action.yml"), {"actions"})
 
     def test_python_changes_still_typecheck(self):
         self.assertIn("typecheck", self.selection("package/src/pytest_obligation/host.py"))

@@ -66,6 +66,7 @@ extra:
   - package/docs/coverage.md
   - package/docs/debt-baseline.md
   - package/docs/false-greens.md
+  - package/docs/github-action-report.md
   - package/docs/harness-guide.md
   - package/docs/how-it-works.md
   - package/docs/integrations.md
@@ -97,6 +98,7 @@ nav:
   - Find every handoff: package/docs/coverage.md
   - Application source policies: package/docs/source-policies.md
 - Understanding results:
+  - Publish a PR evidence report: package/docs/github-action-report.md
   - What a green result means: package/docs/what-a-green-result-means.md
   - Avoid false greens: package/docs/false-greens.md
   - Track known test debt: package/docs/debt-baseline.md

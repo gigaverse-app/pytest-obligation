@@ -95,7 +95,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
-def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
     """Read the final normalized outcome, including teardown and strict known failures."""
     report = yield
     route = item.config.stash.get(_ITEMS, {}).get(item.nodeid)
@@ -108,6 +110,10 @@ def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, pytest.TestR
     for cases in item.config.stash[_REPORT][suite].case_groups():
         if case_id in cases:
             cases[case_id].outcomes.setdefault(report.when, []).append(outcome)
+            if report.failed and call.excinfo is not None:
+                from .failures import failure_evidence
+
+                cases[case_id].failures.append(failure_evidence(call.excinfo.value, report.when))
     return report
 
 
@@ -136,6 +142,7 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
                 old.selected |= case.selected
                 for phase, outcomes in case.outcomes.items():
                     old.outcomes.setdefault(phase, []).extend(outcomes)
+                old.failures.extend(case.failures)
 
 
 @pytest.hookimpl(optionalhook=True)
