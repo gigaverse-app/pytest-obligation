@@ -30,7 +30,18 @@ def test_adopter_report_checks_actual_evidence(tmp_path: Path, fault: str | None
         "verified": True,
     }
     path.write_text(
-        json.dumps({} if fault == "missing" else {"test.Adopter": {"name": "adopter", "profiles": {"I": profile}}})
+        json.dumps(
+            {}
+            if fault == "missing"
+            else {
+                "test.Adopter": {
+                    "name": "adopter",
+                    "profiles": {"I": profile},
+                    "verified": True,
+                    "additional_cases": {"extra": profile["cases"]["rollback"]},
+                }
+            }
+        )
     )
     reports = read_report(path)
     if fault is None:

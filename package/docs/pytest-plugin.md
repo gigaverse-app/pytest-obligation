@@ -106,7 +106,7 @@ Prefer structured runtime registrations when extending a multi-step recovery.
 
 | Option | Behavior |
 | --- | --- |
-| `--due-work-summary` | Lists each generated suite's cases, outcomes, and known-gap reasons. |
+| `--due-work-summary` | Lists generated cases and a VERIFIED/UNVERIFIED contract verdict, with missing proofs and assessment reasons. Works without a JSON destination. |
 | `--due-work-profile-report=profiles.json` | Writes declared, collected, selected, and executed A–J evidence, including setup/call/teardown results. |
 | `--due-work-require-assessed` | Rejects unassessed profiles and convergence families before pytest filters cases. |
 | `--due-work-verify` | Fails if a contract or exemption counted by the static handoff scan ran no case in this session. Requires scan configuration. |
@@ -117,6 +117,66 @@ Use `--junitxml=results.xml` for pytest's standard CI artifact. Known gaps are
 strict XFAILs; `NotAssessed` records unfinished assessment. Neither is a verified
 guarantee. The [green-result guide](what-a-green-result-means.md) explains the
 scope of a pass and how to assess findings.
+
+### Read the contract verdict
+
+```bash
+pytest tests/contracts --due-work-summary
+# Parallel runs merge the same evidence in the controller:
+pytest tests/contracts -n auto --due-work-summary --due-work-profile-report=profiles.json
+```
+
+The contract section names every profile, its assessment, and its passed/expected
+behavioral proof count. It lists uncollected, deselected and incomplete proofs,
+including setup, call and teardown outcomes. Convergence families have their own
+assessment and reason. A passing known-gap probe or decline never verifies a claim.
+
+`VERIFIED` requires at least one claimed profile, complete successful execution
+of every claimed profile and its required families, and passing extra proofs and
+assessment checks. Other profiles must be explicitly not applicable. A contract
+with a known gap, decline or unfinished assessment remains `UNVERIFIED`. A failed
+or deselected extra proof also blocks the contract verdict. The JSON report uses
+the same `verified` value and includes these checks under `additional_cases`.
+
+The scope is **collected contract suites**. This does not certify unimported
+contracts, undeclared application behavior or untested schedules. Existing case
+tallies describe individual execution outcomes; the contract verdict describes
+the completeness of the evidence. Focused debugging runs keep their normal pytest
+exit status even when the contract is unverified. For enforcement, use the existing
+assessment and static-coverage policies above as appropriate.
+
+### Diagnose a recovery failure
+
+Recovery histories attach a `Recovery diagnostics:` JSON note to the original
+exception. The note reports the stage (`arranging`, `control`, `poisoned`, `held`
+or `resumed`), attempted ticks and each arranged candidate's identity, role,
+cumulative fault count, last observed owed state and whether it ever progressed.
+`observed_after_tick` shows when each product observation was made. A reporting
+failure might stop a tick before observation; its earlier snapshot stays clearly
+dated. `null` means that observation has not completed.
+
+No extra recovery ticks or product observations run to construct this evidence.
+The original exception type, traceback and cause remain intact, so a strict
+known-gap classifier continues to match the same failure.
+
+Runtime integrations can add retry eligibility or another useful detail to an
+existing `RecoveryExample`:
+
+```python
+def retry_details(identity):
+    state = read_retry_state(identity)  # Your read-only runtime observation.
+    return {"retry_at": state.retry_at.isoformat(), "attempts": str(state.attempts)}
+
+
+example = example.model_copy(update={"diagnose": retry_details})
+```
+
+`diagnose` is optional and returns a mapping of strings to strings. It runs only
+on failure, once per candidate, after fault injection has ended. It must not run
+recovery or mutate eligibility. Return only details safe to include in test logs.
+A failed or invalid metadata callback records `diagnostic_error` for that candidate
+without replacing the proof failure. These optional details are captured at failure
+time; the core owed/progress fields retain their own observation timestamps.
 
 ## Host configuration
 

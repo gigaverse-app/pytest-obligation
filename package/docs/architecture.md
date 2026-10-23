@@ -120,7 +120,7 @@ pytest_obligation/
     job_retry_limits.py     profile J (BoundedRetry, PersistentRetry, ClassifiedFailure)
     catalog.py             canonical names and independent E-family identities
     coverage.py            derived assessment and executed proof evidence
-    reporting.py           optional pytest JSON reporting, including xdist merge
+    reporting.py           shared terminal/JSON evidence, including xdist merge
   interleavings/
     bindings.py, model.py, ports.py  public scenario, replay and callback contracts
     engine/                deterministic catalogs, provider controls and invariant runner
