@@ -556,7 +556,7 @@ jobs:
 
   actions:
     permissions:
-      contents: write # Publish report SVGs on the dedicated assets branch.
+      contents: read
       pull-requests: write # Dogfood the report; forks retain summary/artifact only.
     needs: select-tests
     if: >-

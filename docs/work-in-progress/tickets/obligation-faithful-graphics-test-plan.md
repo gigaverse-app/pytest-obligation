@@ -1,7 +1,8 @@
-# Faithful sticky graphics
+# Fixed glyph sticky validation
 
-- [ ] Generate themed, accessible SVG totals and aligned application rows from evidence; preserve zero/nonzero semantics and escape application text.
-- [ ] Verify image-based native expanders in GitHub itself, including click behavior and three application rows.
-- [ ] Publish immutable images on a dedicated assets branch; retain plain Markdown when image publication is unavailable.
-- [ ] Exercise publication races, changed PR heads, forks, and unavailable permissions without overwriting newer evidence.
-- [ ] Run reporting integration tests, publisher tests and CI; compare the actual sticky with the approved concept.
+- [x] Changing evidence selects existing digit assets; status colors, accessible full counts and native application names remain intact.
+- [x] The CLI writes one Markdown report with no generated SVG bundle.
+- [x] Large reports retain applications through a plain-text fallback before reaching the comment budget.
+- [x] Publication uses only comment APIs, with no Git storage access; stale-head, fork and bot-ownership checks remain enforced.
+- [x] Preview actual GitHub rendering with three aligned applications and both short and wider counts.
+- [ ] Verify the real bot sticky from this revision with content-read permission and run the full CI gate.

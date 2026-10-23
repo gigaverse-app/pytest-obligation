@@ -1,51 +1,97 @@
-"""Report graphics preserve readable evidence and contain application text safely."""
+"""Real reports compose fixed assets without storing evidence in image files."""
 
 import json
+import re
 import subprocess
 import sys
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlparse
 from xml.etree import ElementTree
 
-import pytest
-
 from pytest_obligation.profiles.coverage import CaseEvidence, SuiteCoverage
-from pytest_obligation.reporting.graphics import application_svg, summary_svg
+from pytest_obligation.reporting.graphics import application_html, summary_html
+from pytest_obligation.reporting.markdown import render
+
+ASSETS = Path(__file__).resolve().parents[3] / "docs/assets/report-glyphs"
+BASE = "https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/test-ref/docs/assets/report-glyphs/"
 
 
-@pytest.mark.parametrize("dark", [False, True])
-def test_summary_retains_all_counts_and_colors_zero_issues_as_good(dark: bool) -> None:
+def image_names(body: str) -> set[str]:
+    return {Path(urlparse(unescape(url)).path).name for url in re.findall(r'(?:src|srcset)="([^"]+)"', body)}
+
+
+def test_changed_counts_only_select_existing_glyphs_and_preserve_status_colors() -> None:
     values = dict(applications=3, passed=251, failed=2, blocked=0, gaps=2, rejected=1)
-    root = ElementTree.fromstring(summary_svg(values, dark=dark))
-    texts = {n.attrib.get("id"): n for n in root.iter("{http://www.w3.org/2000/svg}text")}
-    for key, value in values.items():
-        assert texts[key].text == str(value)
-    assert texts["blocked"].attrib["fill"] == texts["passed"].attrib["fill"]
-    assert texts["failed"].attrib["fill"] != texts["passed"].attrib["fill"]
-    assert texts["gaps"].attrib["fill"] not in (texts["passed"].attrib["fill"], texts["failed"].attrib["fill"])
+    before = summary_html(values, BASE)
+    after = summary_html(dict(values, passed=1251, failed=0), BASE)
+    assert 'alt="251 checks passed"' in before
+    assert 'alt="1251 checks passed"' in after
+    assert "bad-2-dark.svg" in before and "good-0-dark.svg" in after
+    assert "warning-2-dark.svg" in before
+    for body in (before, after):
+        assert "<svg" not in body and "?" not in body
+        assert all((ASSETS / name).is_file() for name in image_names(body))
 
 
-def test_application_name_cannot_introduce_svg_elements_or_links() -> None:
-    name = '<script>alert("x")</script> & orders'
-    source = application_svg(name, dict(passed=42, failed=2, blocked=0, gaps=0, rejected=0), dark=True)
-    root = ElementTree.fromstring(source)
-    assert name in "".join(root.itertext())
-    assert not list(root.iter("{http://www.w3.org/2000/svg}script"))
-    assert "href=" not in source
-
-
-def test_application_metrics_do_not_shift_with_the_name() -> None:
+def test_names_stay_native_and_cannot_change_image_urls() -> None:
     values = dict(passed=42, failed=2, blocked=0, gaps=0, rejected=0)
+    name = '<script>alert("x")</script> & orders'
+    body = application_html(name, values, BASE)
+    assert "<script>" not in body and "&lt;script&gt;" in body
+    assert image_names(body) == image_names(application_html("orders", values, BASE))
+    assert "title=" in body
+
+
+def test_wide_counts_remain_exact_and_never_produce_negative_spacing() -> None:
+    values = dict(passed=1234567, failed=0, blocked=0, gaps=0, rejected=0)
+    body = application_html("orders", values, BASE)
+    assert 'alt="1234567 passed"' in body
+    assert 'width="-' not in body
+    assert all((ASSETS / name).is_file() for name in image_names(body))
+
+
+def test_numeric_columns_stay_fixed_when_counts_gain_digits() -> None:
+    class Images(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.x = 0
+            self.columns: list[int] = []
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            if tag != "img":
+                return
+            values = dict(attrs)
+            if values.get("alt"):
+                self.columns.append(self.x)
+            self.x += int(values.get("width") or "0")
+
     positions = []
-    for name in ("orders", "billing callbacks", "example catalog"):
-        root = ElementTree.fromstring(application_svg(name, values, dark=True))
-        texts = {n.attrib.get("id"): n for n in root.iter("{http://www.w3.org/2000/svg}text")}
-        assert texts["application"].text == name
-        positions.append([texts[key].attrib["x"] for key in values])
-        assert "applications" not in texts
+    for passed in (42, 1042, 1234567):
+        parser = Images()
+        parser.feed(
+            application_html("order receipts", dict(passed=passed, failed=2, blocked=0, gaps=0, rejected=0), BASE)
+        )
+        positions.append(parser.columns)
     assert positions[0] == positions[1] == positions[2]
 
 
-def test_cli_produces_graphics_and_a_complete_network_free_fallback(tmp_path: Path) -> None:
+def test_application_names_cannot_create_markdown_links_or_mentions() -> None:
+    body = application_html("@team [x](https://x)", dict(passed=0, failed=0, blocked=0, gaps=0, rejected=0), BASE)
+    assert "&#64;team" in body and "&#91;x&#93;" in body
+
+
+def test_fixed_assets_are_small_passive_images_with_both_themes() -> None:
+    files = list(ASSETS.glob("*.svg"))
+    assert len(files) == 95 and sum(p.stat().st_size for p in files) < 25_000
+    for path in files:
+        root = ElementTree.fromstring(path.read_text(encoding="utf-8"))
+        assert all(n.tag.rsplit("}")[-1] in {"svg", "text", "path"} for n in root.iter())
+        assert not any(k in {"href", "src", "onload", "style"} for n in root.iter() for k in n.attrib)
+
+
+def test_cli_writes_one_markdown_report_without_a_graphics_bundle(tmp_path: Path) -> None:
     case = CaseEvidence(family="replay", collected=True, selected=True, outcomes={"call": ["failed"]})
     suite = SuiteCoverage(name="order receipts", profiles={}, additional_cases={"replay": case})
     source, output = tmp_path / "evidence.json", tmp_path / "report.md"
@@ -66,11 +112,16 @@ def test_cli_produces_graphics_and_a_complete_network_free_fallback(tmp_path: Pa
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    fallback = output.read_text(encoding="utf-8")
-    assert "order receipts" in fallback and "1 failures" in fallback
-    assert "pytest-obligation.invalid" not in fallback and "shields.io" not in fallback
-    bundle = json.loads(output.with_suffix(".graphics.json").read_text(encoding="utf-8"))
-    assert bundle["version"] == 1 and len(bundle["assets"]) == 4
-    assert "1 failures" in bundle["markdown"]
-    for svg in bundle["assets"].values():
-        ElementTree.fromstring(svg)
+    body = output.read_text(encoding="utf-8")
+    assert "order receipts" in body and 'alt="1 failures"' in body
+    assert "/report-glyphs/" in body
+    assert not output.with_suffix(".graphics.json").exists()
+    assert {p.name for p in tmp_path.iterdir()} == {"evidence.json", "report.md"}
+
+
+def test_large_reports_fall_back_to_text_before_graphics_hide_applications() -> None:
+    suites = {str(i): SuiteCoverage(name=f"application {i}", profiles={}) for i in range(20)}
+    body = render(suites, graphics=True)
+    assert len(body) <= 55_000 and "report-glyphs" not in body
+    assert all(f"application {i}" in body for i in range(20))
+    assert body.count("<details>") == body.count("</details>")

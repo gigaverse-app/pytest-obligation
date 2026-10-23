@@ -1,7 +1,6 @@
 // Only rendered Markdown crosses this boundary. Never execute report or PR code.
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const publishGraphics = require('./graphics.cjs');
 
 module.exports = async function publish({github, context, core}, env = process.env) {
   const pr = context.payload.pull_request;
@@ -15,7 +14,7 @@ module.exports = async function publish({github, context, core}, env = process.e
   if (!Number.isSafeInteger(snapshot.run) || !Number.isSafeInteger(snapshot.attempt) || snapshot.run < 1 || snapshot.attempt < 1) {
     throw new Error('A source run ID and attempt are required for sticky publication.');
   }
-  let body = fs.readFileSync(env.OBLIGATION_MARKDOWN, 'utf8');
+  const body = fs.readFileSync(env.OBLIGATION_MARKDOWN, 'utf8');
   if (body.length > 55000) throw new Error('Rendered report exceeds the comment budget.');
   const metadata = `<!-- pytest-obligation-snapshot:${JSON.stringify(snapshot)} -->`;
   try {
@@ -35,17 +34,6 @@ module.exports = async function publish({github, context, core}, env = process.e
           core.info('A newer run/attempt already owns this sticky.');
           return;
         }
-      }
-    }
-    if (env.OBLIGATION_GRAPHICS && env.OBLIGATION_USE_GRAPHICS === 'true') {
-      try {
-        if (fs.statSync(env.OBLIGATION_GRAPHICS).size > 2_000_000) throw new Error('Graphics bundle too large.');
-        const bundle = JSON.parse(fs.readFileSync(env.OBLIGATION_GRAPHICS, 'utf8'));
-        if (Object.keys(bundle.assets || {}).length) {
-          body = await publishGraphics({github,context,bundle,prefix:`pr-${pr.number}/${key}/`});
-        }
-      } catch (error) {
-        core.warning('Graphics unavailable; preserving the complete text report. Rich graphics require a public repository, contents: write, and an unprotected pytest-obligation-assets branch.');
       }
     }
     // Recheck after pagination. Callers serialize the publishing step per PR/key

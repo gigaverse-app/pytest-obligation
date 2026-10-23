@@ -2,7 +2,6 @@
 
 import re
 from collections import Counter
-from hashlib import sha256
 from pathlib import PurePosixPath
 from urllib.parse import quote, urlparse
 
@@ -22,7 +21,7 @@ from .evidence import (
 from .evidence import (
     MAX_BODY as MAX_BODY,
 )
-from .graphics import application_svg, summary_svg
+from .graphics import application_html, application_name, summary_html
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = {
@@ -33,7 +32,6 @@ LABELS = {
     "gaps": "Coverage gaps",
     "rejected": "Rejected bindings",
 }
-ASSET_URL = "https://pytest-obligation.invalid/assets/"
 
 
 def has_gap(profile: ProfileCoverage) -> bool:
@@ -71,21 +69,11 @@ def _priority(item: tuple[str, SuiteCoverage]) -> tuple[int, int, str]:
     return 4, 0, item[0]
 
 
-def _picture(name: str, alt: str, *, row: bool = False) -> str:
-    width = "96%" if row else "100%"
-    return (
-        f'<picture><source media="(prefers-color-scheme: dark)" srcset="{ASSET_URL}{name}-dark.svg">'
-        f'<img alt="{cell(alt)}" src="{ASSET_URL}{name}-light.svg" width="{width}" align="middle"></picture>'
-    )
-
-
-def _totals(values: dict[str, int], assets: dict[str, str] | None) -> str:
+def _totals(values: dict[str, int], glyph_base: str) -> str:
     alt = " · ".join(f"{values[kind]} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
-    if assets is None:
+    if not glyph_base:
         return f"**{alt}**"
-    for theme in ("light", "dark"):
-        assets[f"totals-{theme}.svg"] = summary_svg(values, dark=theme == "dark")
-    return _picture("totals", alt)
+    return summary_html(values, glyph_base)
 
 
 def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> str:
@@ -168,15 +156,12 @@ def _profile_detail(letter: str, profile: ProfileCoverage, *, gap: bool = False)
     return result
 
 
-def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, assets: dict[str, str] | None) -> str:
+def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, glyph_base: str) -> str:
     values = counts(suite)
     description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
-    if assets is not None:
-        name = "app-" + sha256(key.encode()).hexdigest()[:16]
-        for theme in ("light", "dark"):
-            assets[f"{name}-{theme}.svg"] = application_svg(suite.name, values, dark=theme == "dark")
-        summary = _picture(name, f"{suite.name}: {description}", row=True)
+    if glyph_base:
+        summary = application_html(suite.name, values, glyph_base)
     lines = [
         "<details>",
         f"<summary>{summary}</summary>",
@@ -186,7 +171,7 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, a
         f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>",
         "",
     ]
-    if len(suite.name) > 24:
+    if glyph_base and application_name(suite.name)[1]:
         lines += [f"Application: {code(suite.name)}", ""]
     cases = all_cases(suite)
     for title, states in (
@@ -269,10 +254,11 @@ def render(
     asset_ref: str = "main",
     repository_url: str = "",
     revision: str = "",
-    assets: dict[str, str] | None = None,
+    graphics: bool = False,
 ) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
+    glyph_base = f"{banner_assets}/report-glyphs/" if graphics else ""
     totals: Counter[str] = Counter()
     for suite in reports.values():
         totals.update(counts(suite))
@@ -292,7 +278,7 @@ def render(
     if unavailable or not reports:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
     else:
-        head += [_totals(dict(totals), assets), ""]
+        head += [_totals(dict(totals), glyph_base), ""]
         elapsed = next(iter(reports.values())).session_seconds
         timing = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
             _time(list(reports.values()), compact=True)
@@ -329,8 +315,21 @@ def render(
     ]
     sections = []
     for key, suite in sorted(reports.items(), key=_priority):
-        section = "---\n\n" + _suite(key, suite, repository_url, revision, assets)
+        section = "---\n\n" + _suite(key, suite, repository_url, revision, glyph_base)
         if len("\n".join([*head, *sections, section, *footer])) > MAX_BODY:
+            if graphics:
+                # Prefer complete evidence in text over dropping apps to fit image markup.
+                return render(
+                    reports,
+                    run_url=run_url,
+                    source=source,
+                    unavailable=unavailable,
+                    test_outcome=test_outcome,
+                    asset_ref=asset_ref,
+                    repository_url=repository_url,
+                    revision=revision,
+                    graphics=False,
+                )
             sections.append(
                 "Further contract details omitted to fit GitHub's comment limit. See the full JSON artifact."
             )

@@ -1,92 +1,97 @@
-"""Small, self-contained SVGs for typography GitHub Markdown cannot express."""
+"""Compose fixed SVG glyphs; no report-specific files or image service are needed."""
 
 from html import escape
+from unicodedata import combining, east_asian_width
 
-LABELS = {
-    "applications": "Applications",
-    "passed": "Checks passed",
-    "failed": "Failures",
-    "blocked": "Blocked checks",
-    "gaps": "Coverage gaps",
-    "rejected": "Rejected bindings",
-}
+from .evidence import cell
+
+METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
+LABELS = ("applications", "checks passed", "failures", "blocked checks", "coverage gaps", "rejected bindings")
 
 
-def _palette(dark: bool) -> dict[str, str]:
+def _picture(base: str, name: str, width: int, height: int, alt: str = "") -> str:
     return (
-        dict(
-            ink="#e6edf3",
-            quiet="#9da7b3",
-            line="#30363d",
-            green="#7ee787",
-            red="#ff9492",
-            amber="#e3b341",
-            code="#151b23",
-        )
-        if dark
-        else dict(
-            ink="#1f2328",
-            quiet="#59636e",
-            line="#d1d9e0",
-            green="#176f2c",
-            red="#b42324",
-            amber="#865900",
-            code="#f6f8fa",
-        )
+        f'<picture><source media="(prefers-color-scheme: dark)" srcset="{base}{name}-dark.svg">'
+        f'<img src="{base}{name}-light.svg" width="{width}" height="{height}" '
+        f'alt="{escape(alt, quote=True)}" align="middle"></picture>'
     )
 
 
-def _color(kind: str, value: int, colors: dict[str, str]) -> str:
+def _space(base: str, width: int, height: int = 36) -> str:
+    if width <= 0:
+        return ""
+    return f'<picture><img src="{base}space.svg" width="{width}" height="{height}" alt="" align="middle"></picture>'
+
+
+def _number(base: str, value: int, color: str, width: int, height: int, label: str) -> str:
+    # Only the first digit carries the complete accessible count, avoiding digit-by-digit reading.
+    return "".join(
+        _picture(base, f"{color}-{digit}", width, height, f"{value} {label}" if i == 0 else "")
+        for i, digit in enumerate(str(value))
+    )
+
+
+def _color(kind: str, value: int) -> str:
     if kind == "applications":
-        return colors["ink"]
+        return "neutral"
     if kind == "passed" or value == 0:
-        return colors["green"]
-    return colors["red" if kind in ("failed", "rejected") else "amber"]
+        return "good"
+    return "warning" if kind in ("blocked", "gaps") else "bad"
 
 
-def _text(value: str, x: float, y: int, size: int, color: str, *, identifier: str = "", weight: int = 400) -> str:
-    return (
-        f'<text id="{identifier}" x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" '
-        f'fill="{color}">{escape(value)}</text>'
-    )
+def summary_html(values: dict[str, int], base: str) -> str:
+    positions = (0, 107, 235, 339, 442, 546, 640)
+    parts = []
+    for i, (key, label) in enumerate(zip(("applications", *METRICS), LABELS, strict=True)):
+        value = values[key]
+        width = min(18, 90 // len(str(value)))
+        if width < 1:
+            return escape(
+                " · ".join(f"{values[k]} {label}" for k, label in zip(("applications", *METRICS), LABELS, strict=True))
+            )
+        parts.append(_number(base, value, _color(key, value), width, width * 2, label))
+        end = positions[i] + len(str(value)) * width
+        if i == 1:
+            parts += [_space(base, 222 - end), _picture(base, "divider", 1, 36), _space(base, 12)]
+        else:
+            parts.append(_space(base, positions[i + 1] - end))
+    return "<p>" + "".join(parts) + "<br>" + _picture(base, "captions", 640, 22, " · ".join(LABELS)) + "</p>"
 
 
-def _svg(parts: list[str], height: int, title: str) -> str:
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="680" height="{height}" viewBox="0 0 680 {height}" '
-        'role="img" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
-        f"<title>{escape(title)}</title>" + "".join(parts) + "</svg>"
-    )
+def application_name(name: str) -> tuple[str, bool]:
+    # Keep names in native selectable text, with a fixed monospace column.
+    clean = " ".join(name.split())
+
+    def columns(text: str) -> int:
+        return sum(0 if combining(c) else 2 if east_asian_width(c) in ("W", "F") else 1 for c in text)
+
+    display = clean
+    shortened = columns(display) > 20
+    if shortened:
+        # Bound the prefix before trimming wide characters, keeping long names linear-time.
+        display = display[:20]
+        while columns(display) > 19:
+            display = display[:-1]
+        display += "…"
+    title = f' title="{escape(clean[:700], quote=True)}"' if shortened else ""
+    return f"<samp{title}><strong>{cell(display)}</strong>" + "&nbsp;" * (20 - columns(display)) + "</samp>", shortened
 
 
-def summary_svg(values: dict[str, int], *, dark: bool) -> str:
-    colors = _palette(dark)
-    parts = [f'<path d="M236 4v56" stroke="{colors["line"]}"/>']
-    for (kind, label), x in zip(LABELS.items(), (0, 114, 250, 360, 470, 580), strict=True):
-        value = values[kind]
-        size = 28 if len(str(value)) < 7 else 20
+def application_html(name: str, values: dict[str, int], base: str) -> str:
+    native_name, _ = application_name(name)
+    label_widths = (37, 33, 44, 27, 48)
+    columns = (82, 81, 88, 74, 90)
+    parts = [native_name]
+    for i, key in enumerate(METRICS):
+        value = values[key]
+        width = min(8, (columns[i] - label_widths[i]) // len(str(value)))
+        if width < 1:
+            return native_name + " · " + escape(" · ".join(f"{values[k]} {k}" for k in METRICS))
         parts += [
-            _text(str(value), x, 32, size, _color(kind, value, colors), identifier=kind, weight=600),
-            _text(label, x, 56, 12, colors["quiet"]),
+            _number(base, value, _color(key, value), width, width * 2, key),
+            _picture(base, f"label-{key}", label_widths[i], 18),
+            _space(base, columns[i] - len(str(value)) * width - label_widths[i], 18),
         ]
-    return _svg(parts, 76, " · ".join(f"{values[k]} {label.lower()}" for k, label in LABELS.items()))
-
-
-def application_svg(name: str, values: dict[str, int], *, dark: bool) -> str:
-    colors = _palette(dark)
-    display = name if len(name) <= 24 else name[:23] + "…"
-    parts = [
-        f'<rect x="0" y="9" width="{min(164, len(display) * 7 + 10)}" height="23" rx="4" fill="{colors["code"]}"/>',
-        '<g font-family="ui-monospace,SFMono-Regular,Consolas,monospace">',
-        _text(display, 5, 25, 11 if len(display) > 21 else 12, colors["ink"], identifier="application", weight=600),
-        "</g>",
-        f'<path d="M258 10v22" stroke="{colors["line"]}"/>',
-    ]
-    for kind, x in zip((k for k in LABELS if k != "applications"), (174, 270, 370, 470, 570), strict=True):
-        value = str(values[kind])
-        size = 14 if len(value) <= 6 else 10
-        parts += [
-            _text(value, x, 25, size, _color(kind, values[kind], colors), identifier=kind, weight=600),
-            _text(kind, x + len(value) * size * 0.61 + 4, 25, 11, colors["quiet"]),
-        ]
-    return _svg(parts, 40, name + " · " + " · ".join(f"{v} {k}" for k, v in values.items()))
+        if i == 0:
+            parts += [_picture(base, "divider", 1, 22), _space(base, 12, 18)]
+    return "".join(parts)

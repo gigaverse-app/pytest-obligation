@@ -20,7 +20,7 @@ inputs:
     description: Outcome of the test step (steps.tests.outcome), so collection or unrelated failures remain visible.
     default: unknown
   graphics:
-    description: Publish themed SVGs on the dedicated pytest-obligation-assets branch. Requires a public repository and contents write; otherwise retains the complete text report.
+    description: Compose fixed SVG digits and labels in the comment. No image uploads or contents write permission. Set false for plain text.
     default: 'true'
 outputs:
   markdown-path:
@@ -41,15 +41,17 @@ runs:
         TEST_OUTCOME: ${{ inputs.test-outcome }}
         REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
         REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
+        REPORT_GRAPHICS: ${{ inputs.graphics }}
       run: |
         output="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")/report.md"
+        graphics_args=()
+        if [[ "$REPORT_GRAPHICS" == 'true' ]]; then graphics_args+=(--graphics); fi
         uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
-          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" --graphics
+          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
-        echo "graphics-path=${output%.md}.graphics.json" >> "$GITHUB_OUTPUT"
     - name: Preserve full evidence and rendered report
       uses: actions/upload-artifact@v7
       with:
@@ -57,7 +59,6 @@ runs:
         path: |
           ${{ inputs.report-path }}
           ${{ steps.render.outputs.markdown-path }}
-          ${{ steps.render.outputs.graphics-path }}
         if-no-files-found: error
     - name: Update PR report
       if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -66,8 +67,6 @@ runs:
         OBLIGATION_MARKDOWN: ${{ steps.render.outputs.markdown-path }}
         OBLIGATION_STICKY_KEY: ${{ inputs.sticky-key }}
         OBLIGATION_ACTION_PATH: ${{ github.action_path }}
-        OBLIGATION_GRAPHICS: ${{ steps.render.outputs.graphics-path }}
-        OBLIGATION_USE_GRAPHICS: ${{ inputs.graphics }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |

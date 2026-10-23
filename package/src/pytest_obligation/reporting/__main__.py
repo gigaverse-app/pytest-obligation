@@ -1,9 +1,7 @@
 """Render report JSON as data without importing the application or its tests."""
 
 import argparse
-import json
 import os
-from functools import partial
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -22,7 +20,7 @@ def main() -> None:
     parser.add_argument("--run-url", default="")
     parser.add_argument("--repository-url", default="")
     parser.add_argument("--revision", default="")
-    parser.add_argument("--graphics", action="store_true", help="Also save themed SVGs and rich Markdown as data")
+    parser.add_argument("--graphics", action="store_true", help="Compose fixed themed glyphs in the Markdown report")
     parser.add_argument(
         "--test-outcome", choices=("success", "failure", "cancelled", "skipped", "unknown"), default="unknown"
     )
@@ -39,8 +37,7 @@ def main() -> None:
         # Preserve a reviewable report even after collection crashes or schema mismatch.
         # Never print validation input, which can contain application values.
         unavailable = f"Report could not be read ({type(error).__name__}). Check the JSON artifact and pytest log."
-    render_report = partial(
-        render,
+    body = render(
         reports,
         run_url=args.run_url,
         source=args.source,
@@ -49,16 +46,10 @@ def main() -> None:
         asset_ref=args.asset_ref,
         repository_url=args.repository_url,
         revision=args.revision,
+        graphics=args.graphics,
     )
-    body = render_report()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(body, encoding="utf-8")
-    if args.graphics:
-        assets: dict[str, str] = {}
-        rich = render_report(assets=assets)
-        args.output.with_suffix(".graphics.json").write_text(
-            json.dumps(dict(version=1, markdown=rich, assets=assets)), encoding="utf-8"
-        )
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(summary).open("a", encoding="utf-8") as stream:
             stream.write(body + "\n")

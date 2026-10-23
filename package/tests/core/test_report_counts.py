@@ -63,17 +63,15 @@ def test_all_passed_cases_cannot_hide_unassessed_scenario_family() -> None:
 @pytest.mark.parametrize("number", [1, 3, 4])
 def test_application_rows_keep_counts_visible_and_flatten_small_reports(number: int) -> None:
     suites = {f"app{i}": SuiteCoverage(name=f"application {i}", profiles={}) for i in range(number)}
-    assets: dict[str, str] = {}
-    body = render(suites, assets=assets)
+    body = render(suites, graphics=True)
     assert ("most actionable first" in body) == (number > 3)
-    summaries = re.findall(r"<summary><picture>.*?</summary>", body)
+    summaries = re.findall(r"<summary><samp.*?</summary>", body)
     assert len(summaries) == number
     for summary in summaries:
-        assert summary.count("<img ") == 1
+        assert summary.count("<img ") > 1
         assert "applications" not in summary
-        assert 'width="96%"' in summary
-        assert "0 checks passed" in summary and "0 rejected bindings" in summary
-    assert len(assets) == 2 + 2 * number
+        assert "good-0-dark.svg" in summary
+        assert 'alt="0 passed"' in summary and 'alt="0 rejected"' in summary
 
 
 def test_actionability_order_and_failure_classification() -> None:
