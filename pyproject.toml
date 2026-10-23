@@ -27,7 +27,7 @@ pythonpath = ["package", ".", "examples/adopter"]
 addopts = "-p no:cacheprovider"
 
 [tool.pyrefly]
-project-includes = ["package/src", "package/shims", "package/tests", "package/tests_support", "integration_tests", "demos", "scripts", "examples/adopter"]
+project-includes = ["package/src", "package/shims", "package/tests", "package/tests_support", "integration_tests", "demos", "scripts", "examples/adopter", "examples/shopify_billing"]
 # The Saleor demo runs in Saleor's own environment and is type-checked there (see its pyproject.toml).
 project-excludes = ["demos/.upstream/**", "demos/saleor_checkout/**", "**/__pycache__/**", ".venv*/**"]
 python-version = "3.11"
