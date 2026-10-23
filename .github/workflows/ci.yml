@@ -242,7 +242,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_cases.py adopters-redis.xml --case "*TestCatalogThroughCelery*extra-recovery-poison*" --case "*TestCatalogThroughCelery*extra-recovery-stop*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-redis
           path: |
@@ -329,7 +329,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_cases.py adopters-prefect.xml --case "*extra-recovery-poison*" --case "*extra-recovery-stop*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-prefect
           path: |
@@ -440,7 +440,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_cases.py demos/wagtail_tasks/adopters-wagtail.xml --case "*TestDatabaseWorkerRows*database_legal*" --case "*TestDatabaseWorkerRows*inadmissible*" --case "*TestDatabaseWorkerRows*poisoned_identity*" --case "*TestDatabaseWorkerRows*soft_time_limit*" --case "*TestDatabaseWorkerRows*assert_selection_is_complete*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-demos
           path: |
@@ -519,7 +519,7 @@ jobs:
           demos/.upstream/saleor/.venv/bin/python scripts/check_adoption_cases.py demos/saleor_checkout/adopters-saleor.xml --case "*TestCheckoutWithAutomaticCompletion*database_legal*" --case "*TestCheckoutWithAutomaticCompletion*inadmissible*" --case "*TestAutomaticCompletionRelatedRows*database_legal*" --case "*TestAutomaticCompletionRelatedRows*inadmissible*" --case "*TestAutomaticCompletionRelatedRows*poisoned_identity*" --case "*TestAutomaticCompletionRelatedRows*soft_time_limit*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-saleor
           path: |
@@ -589,7 +589,7 @@ jobs:
           uv run --no-sync python ../../scripts/check_adoption_cases.py adopters-example.xml --case "*extra-recovery-poison*" --case "*extra-recovery-stop*" --case "*TestOptionalAlert*test_the_exemption_holds"
       - name: Keep example profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-example
           path: |
