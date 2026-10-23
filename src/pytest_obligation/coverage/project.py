@@ -55,6 +55,7 @@ class Project:
         self.unparsable: list[str] = []
         self._trees: dict[Path, ast.Module] = {}
         self._imports: dict[str, dict[str, str]] = {}
+        self._all_imports: dict[str, tuple[str, ...]] = {}
         for root in config.source_roots:
             base = (config.root / root).resolve()
             if base.is_dir():
@@ -158,7 +159,7 @@ class Project:
             if module.name in seen:
                 continue
             seen[module.name] = module
-            for imported in imported_names(self.tree(module), module):
+            for imported in self.all_imports(module):
                 for candidate in (imported, imported.rsplit(".", 1)[0]):
                     if candidate in self.modules and candidate not in seen:
                         frontier.append(self.modules[candidate])
@@ -167,7 +168,13 @@ class Project:
     @cached_property
     def frameworks(self) -> set[str]:
         """Every dotted name imported anywhere in the code production reaches."""
-        return {imported for module in self.reachable for imported in imported_names(self.tree(module), module)}
+        return {imported for module in self.reachable for imported in self.all_imports(module)}
+
+    def all_imports(self, module: Module) -> tuple[str, ...]:
+        """Imports at every depth, shared by reachability and framework detection within this scan."""
+        if module.name not in self._all_imports:
+            self._all_imports[module.name] = tuple(imported_names(self.tree(module), module))
+        return self._all_imports[module.name]
 
 
 def relative_path(config: CoverageConfig, path: Path) -> Path:
