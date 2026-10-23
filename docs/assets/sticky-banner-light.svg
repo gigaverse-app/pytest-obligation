@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="64" viewBox="0 0 640 64" role="img" aria-label="pytest-obligation: what passed, what is missing, what to fix">
+  <title>pytest-obligation · application evidence</title>
+  <rect x=".5" y=".5" width="639" height="63" rx="10" fill="#FFFFFF" stroke="#D0D7DE"/>
+  <g transform="translate(10 10) scale(.171875)">
+    <rect width="256" height="256" rx="52" fill="#0B172A"/>
+    <path d="M70 58v140m0-140h29c60 0 100 27 100 70s-40 70-100 70H70" fill="none" stroke="#79D9F1" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="m105 128 19 19 37-42" fill="none" stroke="#FFC857" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="66" y="30" font-family="system-ui,Segoe UI,sans-serif" font-size="23" font-weight="700" fill="#1F2328">pytest<tspan fill="#087E98">-obligation</tspan></text>
+  <text x="67" y="48" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#59636E">what passed · what is missing · what to fix</text>
+  <g fill="none" stroke-width="2"><path d="M500 32h36m12 0h36" stroke="#D0D7DE"/><circle cx="494" cy="32" r="11" stroke="#0969DA"/><circle cx="542" cy="32" r="11" stroke="#8250DF"/><circle cx="590" cy="32" r="11" stroke="#8250DF"/><path d="m489 32 4 4 6-8" stroke="#0969DA"/><path d="M538 32h8 M586 32h8" stroke="#8250DF"/></g>
+</svg>

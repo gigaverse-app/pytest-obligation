@@ -175,6 +175,7 @@
         "examples/adopter/**",
         "check/**",
         "test/**",
+        "report/**",
         "package/src/**",
         "package/shims/**",
         "scripts/check_adoption*.py"

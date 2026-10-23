@@ -54,6 +54,8 @@ jobs:
           ci-esta check-workflow --workflow .github/workflows/ci.yml --lanes .github/test-lanes.json
       - name: Check local documentation links
         run: python scripts/ci/check_docs.py
+      - name: Test sticky publication controls
+        run: node --test report/publish.test.cjs
 
   lint:
     runs-on: ubuntu-latest
@@ -553,6 +555,9 @@ jobs:
         run: /tmp/wheel/bin/python -m pytest package/tests/core/test_compatibility.py package/tests/core/test_package_identity.py -q
 
   actions:
+    permissions:
+      contents: read
+      pull-requests: write # Dogfood the report; forks retain summary/artifact only.
     needs: select-tests
     if: >-
       ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
@@ -574,6 +579,7 @@ jobs:
           working-directory: examples/adopter
           pytest-args: --due-work-check-fixtures --due-work-require-assessed
       - name: Generated histories also support optional search
+        id: example-contracts
         uses: ./test
         with:
           working-directory: examples/adopter
@@ -582,6 +588,13 @@ jobs:
       - name: Replay and sensitivity controls
         working-directory: examples/adopter
         run: uv run --no-sync pytest tests/test_catalog_failures.py
+      - name: Smoke-test the evidence report action
+        if: always()
+        uses: ./report
+        with:
+          report-path: examples/adopter/profiles-example.json
+          sticky-key: example-application
+          test-outcome: ${{ steps.example-contracts.outcome }}
       - name: Require example capabilities
         working-directory: examples/adopter
         run: |
