@@ -19,6 +19,14 @@ from pytest_obligation.worker_death import WorkerDied
 from tests_support.mongodb_app import MongoDBOutbox
 
 
+def test_wire_adapter_can_watch_and_release_the_installed_driver_without_connecting():
+    # Entering the adapter must use boundaries present in this driver version.
+    # Real-server cases below prove writes, reads, transactions and death fencing.
+    with MongoClient(connect=False) as watched:
+        with mongodb_worker_killer(watched)(None) as worker:
+            assert worker.commits == 0
+
+
 @pytest.fixture
 def client():
     with MongoClient(
