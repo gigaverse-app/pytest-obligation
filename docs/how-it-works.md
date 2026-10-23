@@ -45,6 +45,8 @@ restarts it through the real application entry point. The DBOS demo uses this
 path. A history's observation must include externally visible effects, not
 just the database row that requested them.
 
+<a id="the-a-j-guarantees"></a>
+
 ## The A–J guarantees
 
 A declarative contract binds production selection, tick, transitions, and
