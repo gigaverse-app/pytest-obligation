@@ -106,9 +106,51 @@ def test_cli_writes_one_markdown_report_without_a_graphics_bundle(tmp_path: Path
     assert {p.name for p in tmp_path.iterdir()} == {"evidence.json", "report.md"}
 
 
-def test_large_reports_fall_back_to_text_before_graphics_hide_applications() -> None:
-    suites = {str(i): SuiteCoverage(name=f"application {i}", profiles={}) for i in range(20)}
+def test_large_reports_keep_graphical_headline_and_aligned_application_overview() -> None:
+    suites = {str(i): SuiteCoverage(name=f"application {i}", profiles={}) for i in range(37)}
     body = render(suites, graphics=True)
-    assert len(body) <= 55_000 and "report-glyphs" not in body
-    assert all(f"application {i}" in body for i in range(20))
+    assert len(body) <= 55_000 and "report-glyphs" in body
+    assert 'alt="37 applications"' in body
+    assert "| Application | Passed | Failed | Blocked | Gaps | Rejected |" in body
+    assert all(f"| application {i} |" in body for i in range(37))
     assert body.count("<details>") == body.count("</details>")
+
+
+def test_detail_overflow_cannot_remove_application_overview_or_graphical_totals() -> None:
+    from tests.core.test_report_debt import specimen
+
+    suites = {}
+    for index in range(100):
+        suite = specimen()
+        suite.name = f"application {index}"
+        for profile in suite.profiles.values():
+            profile.assessment = profile.assessment.model_copy(update={"because": "Long application decision. " * 40})
+        suites[str(index)] = suite
+    body = render(suites, graphics=True)
+    assert len(body) <= 55_000
+    assert 'alt="100 applications"' in body
+    assert all(f"| application {i} |" in body for i in range(100))
+    assert "omitted" in body
+    assert "Known defects" in body and "Unassessed guarantees" in body and "Deliberate exclusions" in body
+    assert "](https://linear.app/example/issue/BE-1)" in body
+    assert body.count("<details>") == body.count("</details>")
+
+
+def test_application_disclosures_have_markdown_block_boundaries() -> None:
+    suites = {str(i): SuiteCoverage(name=f"application {i}", profiles={}) for i in range(3)}
+    body = render(suites, graphics=True)
+    assert "</details>\n---" not in body
+
+
+def test_large_overview_folds_clean_apps_and_safely_wraps_long_names() -> None:
+    suites = {str(i): SuiteCoverage(name=f"application {i}", profiles={}) for i in range(4)}
+    suites["0"].name = "long_application_name_" * 3 + "<script>"
+    suites["0"].additional_cases = {
+        "bad": CaseEvidence(family="replay", collected=True, selected=True, outcomes={"call": ["failed"]})
+    }
+    body = render(suites)
+    overview = body.split("### Evidence and decisions")[0]
+    assert "3 applications · zero failures, blocked checks or gaps" in overview
+    assert "&#8203;" in overview and "<script>" not in overview
+    assert unescape(overview).index("long_application_name_") < unescape(overview).index("3 applications · zero")
+    assert all(f"| application {i} |" in overview for i in range(1, 4))
