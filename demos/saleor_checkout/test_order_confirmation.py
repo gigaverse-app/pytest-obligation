@@ -120,8 +120,11 @@ def run_beat_schedule() -> None:
     """What Saleor does on its own over the following three months: every periodic task, at each horizon."""
     app.loader.import_default_modules()
     start = timezone.now()
-    for horizon in RECOVERY_HORIZONS:
-        with freeze_time(start + horizon):
+    # Install the process-wide patches once, then advance the same frozen clock.
+    # Every scheduled task still runs at every original recovery horizon.
+    with freeze_time(start) as clock:
+        for horizon in RECOVERY_HORIZONS:
+            clock.move_to(start + horizon)
             for entry in settings.CELERY_BEAT_SCHEDULE.values():
                 app.tasks[entry["task"]].apply()
 

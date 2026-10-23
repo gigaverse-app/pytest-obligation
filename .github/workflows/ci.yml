@@ -359,6 +359,10 @@ jobs:
       PGPASSWORD: postgres
       PGPORT: "5432"
     steps:
+      - name: Match PostgreSQL clients to the service
+        uses: gigaverse-app/ci-esta/.github/actions/postgres-client@c6642e05f754f0133336d73340e1306892fde9f4
+        with:
+          image: postgres:16
       - uses: actions/checkout@v7
         with:
           # The check action builds the harness from this checkout; its version comes from git tags.
@@ -388,7 +392,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: demos/.ci-cache/wagtail_tasks.dump
-          key: wagtail-test-db-pg16-${{ hashFiles('uv.lock', 'demos/wagtail_tasks/settings.py', 'demos/cached_database.py') }}
+          key: wagtail-test-db-pg16-client16-${{ hashFiles('uv.lock', 'demos/wagtail_tasks/settings.py', 'demos/cached_database.py') }}
       - name: Wagtail's test database, migrated once
         # As pytest-django creates a test database: every app's migrations, syncdb for the rest, no checks.
         run: >-
@@ -466,6 +470,10 @@ jobs:
       # Absolute: run.sh works in the demo directory.
       SALEOR_DATABASE_DUMP: ${{ github.workspace }}/demos/.ci-cache/saleor.dump
     steps:
+      - name: Match PostgreSQL clients to the service
+        uses: gigaverse-app/ci-esta/.github/actions/postgres-client@c6642e05f754f0133336d73340e1306892fde9f4
+        with:
+          image: postgres:16
       - uses: actions/checkout@v7
         with:
           # The check action builds the harness from this checkout; its version comes from git tags.
@@ -492,7 +500,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ env.SALEOR_DATABASE_DUMP }}
-          key: saleor-test-db-pg16-${{ hashFiles('demos/fetch_upstream.py', 'demos/saleor_checkout/prepare_db.py', 'demos/cached_database.py') }}
+          key: saleor-test-db-pg16-client16-${{ hashFiles('demos/fetch_upstream.py', 'demos/saleor_checkout/prepare_db.py', 'demos/cached_database.py') }}
       # One xdist worker per runner CPU. Four workers each migrating their own database took
       # 193 s apiece; migrating once and cloning a copy per worker costs one migration.
       - name: Saleor's test databases, migrated once
