@@ -26,7 +26,6 @@ theme:
     primary: teal
     accent: cyan
   features:
-  - navigation.sections
   - navigation.top
   - search.suggest
   - search.highlight
@@ -83,32 +82,37 @@ extra:
   - CONTRIBUTING.md
   - RELEASING.md
 nav:
-- Start here: index.md
-- Quickstart: package/docs/adopting.md
-- Guides:
-  - Adopter capabilities: docs/adopter-capabilities.md
-  - CI toolkit: docs/ci-toolkit.md
-  - CI: docs/ci.md
-  - Aiokafka: package/docs/aiokafka.md
-  - Architecture: package/docs/architecture.md
-  - Completion: package/docs/completion.md
-  - Coverage: package/docs/coverage.md
-  - Debt baseline: package/docs/debt-baseline.md
-  - False greens: package/docs/false-greens.md
+- Home: index.md
+- Getting started:
+  - Quickstart: package/docs/adopting.md
+  - How the proofs work: package/docs/how-it-works.md
   - Harness guide: package/docs/harness-guide.md
-  - How it works: package/docs/how-it-works.md
-  - Integrations: package/docs/integrations.md
-  - Interleavings: package/docs/interleavings.md
-  - Jepsen analogy: package/docs/jepsen-analogy.md
-  - Mongodb: package/docs/mongodb.md
-  - Package migration: package/docs/package-migration.md
-  - Prefect: package/docs/prefect.md
-  - Pytest plugin: package/docs/pytest-plugin.md
+  - Coming from Jepsen: package/docs/jepsen-analogy.md
+- Writing conformance tests:
+  - pytest plugin: package/docs/pytest-plugin.md
+  - Completion and duplicate delivery: package/docs/completion.md
+  - Interleavings and replay: package/docs/interleavings.md
+  - Recovery selection completeness: package/docs/selection-completeness.md
   - Recovery edge cases: package/docs/recovery-edge-cases.md
-  - Selection completeness: package/docs/selection-completeness.md
-  - Source policies: package/docs/source-policies.md
+  - Find every handoff: package/docs/coverage.md
+  - Application source policies: package/docs/source-policies.md
+- Understanding results:
   - What a green result means: package/docs/what-a-green-result-means.md
-- Related tools: ecosystem.md
-- Contributing: CONTRIBUTING.md
-- Releasing: RELEASING.md
-- Documentation publishing: publishing.md
+  - Avoid false greens: package/docs/false-greens.md
+  - Track known test debt: package/docs/debt-baseline.md
+- Integrations:
+  - Framework overview: package/docs/integrations.md
+  - aiokafka: package/docs/aiokafka.md
+  - MongoDB: package/docs/mongodb.md
+  - Prefect: package/docs/prefect.md
+  - Choose an application example: docs/adopter-capabilities.md
+- Related tools and CI:
+  - Related tools: ecosystem.md
+  - CI toolkit: docs/ci-toolkit.md
+  - This project's CI: docs/ci.md
+- Contributing and reference:
+  - Architecture: package/docs/architecture.md
+  - Package migration: package/docs/package-migration.md
+  - Development setup: CONTRIBUTING.md
+  - Releasing: RELEASING.md
+  - Documentation publishing: publishing.md
