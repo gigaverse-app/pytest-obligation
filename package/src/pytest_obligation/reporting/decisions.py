@@ -10,7 +10,10 @@ from .evidence import GUARANTEES, all_cases, assessment_status, case_status, cel
 def ticket_link(ticket: str | None) -> str:
     if not ticket:
         return "Ticket not reported."
-    parsed = urlparse(ticket)
+    try:
+        parsed = urlparse(ticket)
+    except ValueError:
+        return code(ticket)
     if (
         parsed.scheme in ("https", "http")
         and parsed.netloc

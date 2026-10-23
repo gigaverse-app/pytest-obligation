@@ -72,7 +72,7 @@ def test_undeclared_expected_failure_is_not_invented_as_a_known_defect() -> None
 
 
 @pytest.mark.parametrize(
-    "ticket", ["javascript:alert(1)", 'https://example.com/"bad', "https://example.com/)bad", "BE-1"]
+    "ticket", ["javascript:alert(1)", 'https://example.com/"bad', "https://example.com/)bad", "https://[", "BE-1"]
 )
 def test_ticket_links_do_not_render_unsafe_urls_or_invent_issue_trackers(ticket: str) -> None:
     suite = specimen()
