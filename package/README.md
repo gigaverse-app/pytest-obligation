@@ -1,3 +1,5 @@
+![pytest-obligation: what passed · what is missing · what to fix](https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/main/docs/assets/banner.png)
+
 # pytest-obligation
 
 Executable contracts for durable work: bind real selection, execution and independent observations to reusable failure/recovery proofs. This directory is the editable library imported by application repositories.

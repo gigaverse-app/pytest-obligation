@@ -1,0 +1,10 @@
+{
+  "name": "pytest-obligation",
+  "tagline": "what passed \u00b7 what is missing \u00b7 what to fix",
+  "color": "#79D9F1",
+  "repository": "pytest-obligation",
+  "logo_aliases": [
+    "plugins/pytest-obligation/assets/icon.svg"
+  ],
+  "sticky": true
+}

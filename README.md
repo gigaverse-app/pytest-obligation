@@ -1,4 +1,4 @@
-<img src="plugins/pytest-obligation/assets/icon.svg" alt="pytest-obligation logo" width="96">
+![pytest-obligation: what passed · what is missing · what to fix](https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/main/docs/assets/banner.png)
 
 # pytest-obligation
 

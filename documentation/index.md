@@ -3,7 +3,7 @@ title: pytest-obligation documentation
 description: Find lost work and duplicate effects before production does.
 ---
 
-![pytest-obligation](assets/banner.svg)
+![pytest-obligation](../docs/assets/banner.svg)
 
 # Find lost work and duplicate effects before production does.
 
