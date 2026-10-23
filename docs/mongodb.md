@@ -20,7 +20,9 @@ available to observe persisted state. Lost replies let the write land and raise
 PyMongo `ConnectionFailure`; normal driver and application error handling runs.
 Configure driver retries as production does: they are part of that behavior.
 
-The optional dependency bounds PyMongo below 4.18, which changed the wire API.
+The adapter supports PyMongo 4.9 through 4.18, selecting the matching wire
+boundaries for each version. The optional dependency stays below 4.19 until
+that minor version has been validated.
 Native `AsyncMongoClient` is not supported; it is rejected instead of silently
 producing empty histories. Other clients, detached tasks and other processes
 are outside this host's scope. Server TTL time is not frozen. This host does
