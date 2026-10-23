@@ -1,6 +1,6 @@
 # What a green result means
 
-`due-work-harness` turns a contract about background work into a pytest suite.
+`pytest-obligation` turns a contract about background work into a pytest suite.
 This page explains why the contract is split into profiles, what a passing or
 failing case actually tells you, and what the proofs deliberately do not cover.
 Read it before you treat a green suite as a guarantee.
@@ -40,7 +40,7 @@ E has four independent families: stale snapshots, monotonic results, in-flight
 completion, and evidence confluence. Claiming one does not certify the others.
 `NotAssessed` is strict-XFAIL assessment debt; `KnownGap` records a demonstrated
 or declared missing guarantee in legacy behavior. Neither is passing evidence.
-The [migration guide](adopting.md#migrating-an-existing-declaration) explains
+The [migration guide](package-migration.md#migrating-an-existing-declaration) explains
 how to declare the distinction and produce an executed coverage report.
 
 The deterministic catalogs and optional Hypothesis explorer use the same

@@ -106,12 +106,10 @@ not a verified guarantee. [Read the reporting guide](package/docs/adopting.md#re
 
 ## Get started
 
-Formerly **due-work-harness**. The package is being renamed to
-**pytest-obligation**; until its first PyPI release, install `due-work-harness`
-for the last published version. Do not install both distributions in the same
-environment: they provide the same Python modules. New code uses
-`from pytest_obligation import ObligationContract`. Existing `due_work_harness`
-imports and `DueWorkContract` are supported by an isolated compatibility shim.
+Install **pytest-obligation** from PyPI in your application's test environment.
+The former `due-work-harness` distribution should be removed when migrating;
+[the migration guide](package/docs/package-migration.md) explains compatibility.
+
 The `--due-work-*` options, `due-work-harness` command, and
 `[tool.due-work-harness]` configuration remain supported.
 [See the compatibility and migration guide](package/docs/package-migration.md).
