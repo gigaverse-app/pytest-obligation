@@ -19,7 +19,13 @@ from tests.core.test_profile_summary import contract_project  # noqa: F401 - exp
 
 @pytest.mark.parametrize("mode", ["complete", "filtered", "binding", "failed", "teardown"])
 @pytest.mark.parametrize("workers", [0, 2])
-def test_real_pytest_evidence_reaches_the_sticky(contract_project: pytest.Pytester, mode: str, workers: int) -> None:  # noqa: F811
+def test_real_pytest_evidence_reaches_the_sticky(
+    contract_project: pytest.Pytester,  # noqa: F811 - explicitly imported shared fixture
+    mode: str,
+    workers: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(contract_project.path))
     if mode == "failed":
         source = next(contract_project.path.glob("test_*.py"))
         source.write_text(
@@ -233,3 +239,17 @@ def test_broken_optional_diagnostics_preserve_the_original_failure_category() ->
     assert evidence.kind == "check"
     assert evidence.message == "BrokenMessage: Exception message unavailable"
     assert evidence.recovery == []
+
+
+def test_sources_outside_the_checkout_never_get_a_github_link(
+    contract_project: pytest.Pytester,  # noqa: F811 - explicitly imported shared fixture
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path / "other-checkout"))
+    path = contract_project.path / "profiles.json"
+    result = contract_project.runpytest_subprocess("-q", f"--due-work-profile-report={path}")
+    assert result.ret == pytest.ExitCode.OK
+    reports = TypeAdapter(dict[str, SuiteCoverage]).validate_json(path.read_bytes())
+    assert next(iter(reports.values())).source is None
+    assert "[View contract" not in render(reports, repository_url="https://github.com/example/app", revision="a" * 40)

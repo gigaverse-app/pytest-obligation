@@ -74,7 +74,7 @@ def test_application_rows_keep_counts_visible_and_flatten_small_reports(number: 
         assert "│" in summary
         assert 'width="76"' in summary
         for url in re.findall(r'src="([^"]+)"', summary):
-            assert parse_qs(urlparse(url).query)["color"] == ["238636"]
+            assert parse_qs(urlparse(url).query)["labelColor"] == ["238636"]
 
 
 def test_actionability_order_and_failure_classification() -> None:

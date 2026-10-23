@@ -80,14 +80,14 @@ def _badge(kind: str, value: int, *, large: bool = False) -> str:
         else "30363d"
     )
     params = {
-        "label": "" if large else kind,
-        "message": str(value),
-        "color": color,
-        "labelColor": "30363d",
+        "label": "" if large else str(value),
+        "message": str(value) if large else kind,
+        "color": color if large else "30363d",
+        "labelColor": "30363d" if large else color,
         "style": "for-the-badge" if large else "flat-square",
     }
     alt = f"{value} {LABELS[kind].lower()}"
-    size = 'height="28"' if large else f'width="{WIDTHS[kind]}" height="20"'
+    size = 'height="36"' if large else f'width="{WIDTHS[kind]}" height="20"'
     return f'<img alt="{alt}" src="https://img.shields.io/static/v1?{urlencode(params)}" {size}>'
 
 

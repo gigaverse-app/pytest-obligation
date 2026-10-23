@@ -65,18 +65,6 @@ def assessment_status(assessment: Assessment) -> str:
     }[assessment.state]
 
 
-def profile_status(profile: ProfileCoverage) -> str:
-    if profile.verified:
-        return "✅ Supported by this run"
-    statuses = {case_status(c) for c in profile.cases.values()}
-    for status in ("Test binding rejected", "Test setup/cleanup failed", "Check failed"):
-        if status in statuses:
-            return f"🔴 {status}"
-    if profile.assessment.state in ("not applicable", "declined"):
-        return "⚪ " + assessment_status(profile.assessment)
-    return "🟠 " + assessment_status(profile.assessment)
-
-
 def advice(profile: ProfileCoverage) -> str:
     statuses = {case_status(c) for c in profile.cases.values()}
     if "Test binding rejected" in statuses:
