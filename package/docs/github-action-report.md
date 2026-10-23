@@ -17,7 +17,8 @@ Applications sort by failed assertions, rejected bindings, blocked execution, th
 coverage gaps, with the largest count in the first applicable category first.
 
 GitHub strips custom CSS. The reporter uses fixed-width Shields count images,
-monospace application names, native tables and disclosures. Alt text retains the
+monospace application names and native disclosures. The header has no table grid;
+elapsed and summed check time share one compact line. Alt text retains the
 numbers if images cannot load. The images send only category names and counts to
 Shields; application names, reasons and diagnostics remain in GitHub Markdown.
 

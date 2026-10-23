@@ -31,7 +31,7 @@ LABELS = {
     "gaps": "Coverage gaps",
     "rejected": "Rejected bindings",
 }
-WIDTHS = {"passed": 76, "failed": 68, "blocked": 76, "gaps": 60, "rejected": 80}
+WIDTHS = {"applications": 64, "passed": 76, "failed": 68, "blocked": 76, "gaps": 60, "rejected": 80}
 
 
 def has_gap(profile: ProfileCoverage) -> bool:
@@ -79,25 +79,26 @@ def _badge(kind: str, value: int, *, large: bool = False) -> str:
         if kind != "applications"
         else "30363d"
     )
+    label = ("app" if value == 1 else "apps") if kind == "applications" else kind
     params = {
-        "label": "" if large else str(value),
-        "message": str(value) if large else kind,
-        "color": color if large else "30363d",
-        "labelColor": "30363d" if large else color,
-        "style": "for-the-badge" if large else "flat-square",
+        "label": str(value),
+        "message": label,
+        "color": "30363d",
+        "labelColor": color,
+        "style": "flat-square",
     }
     alt = f"{value} {LABELS[kind].lower()}"
-    size = 'height="36"' if large else f'width="{WIDTHS[kind]}" height="20"'
+    size = f'width="{WIDTHS[kind]}" height="{24 if large else 20}"'
     return f'<img alt="{alt}" src="https://img.shields.io/static/v1?{urlencode(params)}" {size}>'
 
 
 def _totals(values: dict[str, int]) -> str:
-    cells = []
+    badges = []
     for kind in ("applications", *METRICS):
         if kind == "failed":
-            cells.append('<td align="center" width="12">│</td>')
-        cells.append(f'<td align="left">{_badge(kind, values[kind], large=True)}<br><sub>{LABELS[kind]}</sub></td>')
-    return "<table><tr>" + "".join(cells) + "</tr></table>"
+            badges.append("&#160;<sup>│</sup>&#160;")
+        badges.append(_badge(kind, values[kind], large=True))
+    return " ".join(badges)
 
 
 def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> str:
@@ -126,11 +127,13 @@ def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> st
     return f"[View {source.kind}]({url}) · {code(label)} · tested revision"
 
 
-def _time(suites: list[SuiteCoverage]) -> str:
+def _time(suites: list[SuiteCoverage], *, compact: bool = False) -> str:
     cases = [c for s in suites for c in all_cases(s).values() if c.outcomes]
     if not cases or any(not c.durations for c in cases):
         return "Test time: not reported."
     seconds = sum(sum(c.durations) for c in cases)
+    if compact:
+        return f"{seconds:.1f}s summed check time"
     return f"Test time: **{seconds:.1f}s** summed check time (setup, call and cleanup; parallel work overlaps)."
 
 
@@ -280,10 +283,12 @@ def render(
     if unavailable or not reports:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
     else:
-        head += [_totals(dict(totals)), "", _time(list(reports.values())), ""]
+        head += [_totals(dict(totals)), ""]
         elapsed = next(iter(reports.values())).session_seconds
-        if elapsed is not None:
-            head += [f"Pytest session: **{elapsed:.1f}s elapsed**.", ""]
+        timing = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
+            _time(list(reports.values()), compact=True)
+        ]
+        head += ["<sub>" + " · ".join(timing) + "</sub>", ""]
     outer = len(reports) > 3
     if outer:
         head += ["<details>", f"<summary>Applications · {len(reports)} · most actionable first</summary>", ""]
@@ -299,6 +304,8 @@ def render(
         "",
         "Pass/fail/blocked/rejected counts partition unique checks. Gaps count guarantees, not extra tests. "
         "Not-applicable declarations remain separate. Zero issues are green; missing reports never show green zeroes.",
+        "",
+        "Elapsed time covers the pytest session. Summed check time includes setup, execution and cleanup; parallel work overlaps.",
         "",
         "Application names, quoted reasons and diagnostic values come from application code. "
         "Guarantee labels come from pytest-obligation. Results cover collected suites only; passing checks do not rate every test's quality.",
