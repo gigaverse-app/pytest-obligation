@@ -1,4 +1,4 @@
-# Adopting due-work-harness
+# Adopt pytest-obligation in your application
 
 For a guided map of interfaces, examples and debugging paths, see the
 [harness guide](harness-guide.md). Application source-policy checks are
@@ -9,6 +9,37 @@ This is the path from "we use Django/Celery, Procrastinate or DBOS" to "CI fails
 when background work can be lost or repeated". A complete, minimal adopter lives
 in [`examples/adopter/`](https://github.com/gigaverse-app/pytest-obligation/blob/main/examples/adopter); the harness's own CI runs it through
 the GitHub Actions below.
+
+## Try a complete example first
+
+You need Python 3.12+, Git and uv for this example. It uses a temporary SQLite
+file and an in-process provider, so you do not need Docker, a broker or Due.
+The core package supports Python 3.11+; the example project requires 3.12+.
+
+```bash
+git clone https://github.com/gigaverse-app/pytest-obligation.git
+cd pytest-obligation/examples/adopter
+uv sync --locked
+uv run pytest-obligation check
+uv run pytest --due-work-verify --due-work-require-assessed --due-work-profile-report=profiles-example.json
+```
+
+The command must exit successfully and produce `profiles-example.json`. Read
+verified, declined and inapplicable dispositions separately. The suite includes
+negative controls: those tests pass when deliberately broken application behavior
+is detected. They are not additional production guarantees.
+
+Open [the application](../../examples/adopter/adopter_app/catalog.py) beside
+[its bindings](../../examples/adopter/test_bindings.py). Notice the separation:
+the application commits intent and performs recovery; bindings arrange fresh
+resources, inject failures and independently observe the result. To adopt this
+in your project, replace those bindings with your real commands and storage,
+then follow the steps below. Installing the plugin alone proves nothing about
+your application. The example uses the checked-out package; install the published
+package in your own project.
+
+Existing users changing package names or profile declarations should use the
+[migration reference](package-migration.md).
 
 ## Required adoption shape
 
@@ -33,44 +64,6 @@ suite classes, and run report in the PR. Report passes, declared gaps, declines,
 and exclusions separately; collection alone is not execution evidence. Do not
 invent a claim or misuse `Decline` to hide unfinished bindings. Legacy gaps must
 remain explicit; new-feature contracts cannot waive gaps.
-
-## Migrating an existing declaration
-
-This version requires Pydantic 2.11 or newer; the minimum is exercised in CI.
-The canonical names and enum values now follow the A–J vocabulary in the
-[profile table](how-it-works.md#the-a-j-guarantees). This is an API migration:
-
-- Move nested `safety.profiles` into `ObligationContract.profiles`: old
-  `SafetyProfile.REPLAY_SAFE_EXECUTION` becomes `Profile.HARMLESS_REPLAY` (H),
-  and `SafetyProfile.BOUNDED_RETRY` becomes `Profile.JOB_RETRY_LIMITS` (J).
-  Move `replay=` and `retry=` onto the same `ObligationContract`, preserving their
-  fixtures, real-commit requirement and legacy gap policy.
-- Add G and I decisions. Claim G when binding `eligibility=`; claim I when binding
-  named `admission=` commands. Use `NotAssessed(because="...")` when assessment
-  is unfinished. It produces a strict XFAIL until replaced with evidence or an
-  applicability decision. Existing H/J test IDs remain stable.
-- `SafetyContract` remains a standalone H/J-only view for independently scoped
-  effects, using `Profile.H` and `Profile.J`. It is no longer nested in a domain
-  contract. The implementations live in `profiles.harmless_replay` and
-  `profiles.job_retry_limits`; G lives in `profiles.gated_execution`.
-- E's four families are independently assessed. Existing bindings imply a claim
-  for their own family only. Unbound families generate assessment XFAILs; declare
-  `convergence_families={ConvergenceFamily.IN_FLIGHT: NotApplicable("reason")}`
-  only when that family truly cannot apply. Exact behavioral failures belong in
-  `Claim.gaps` or the scenario's history/invariant gaps, not blanket family waivers.
-
-`pytest --due-work-profile-report=profiles.json` records every expected behavioral
-case, which cases were collected and selected, and their setup/call/teardown
-outcomes. It supports xdist and never treats an XFAIL as a verified guarantee.
-This complements the static handoff scan and `--due-work-verify`; neither a
-collected declaration nor one passing test certifies a whole profile.
-
-See [interleavings](interleavings.md) for generated competing-event tests,
-optional exploration and deterministic replay. Profile I's callbacks are documented
-in [`indivisible_admission.py`](../src/pytest_obligation/profiles/indivisible_admission.py):
-bind a real standalone command, independently observed product intent and work,
-an external-publication recorder, and a fault boundary reached after partial writes.
-The host must supply `in_transaction`; fault fixtures must not supply the transaction.
 
 ## 1. Install
 
@@ -116,8 +109,8 @@ skip, and may never hide production code. See
 ## 3. See what you have, and baseline the past
 
 ```bash
-uv run due-work-harness sites      # every site, and its disposition
-uv run due-work-harness baseline   # a [tool.due-work-harness.baseline] table for today's sites
+uv run pytest-obligation sites      # every site, and its disposition
+uv run pytest-obligation baseline   # a [tool.due-work-harness.baseline] table for today's sites
 ```
 
 Paste the baseline into `pyproject.toml` to adopt without fixing everything at
@@ -255,7 +248,7 @@ jobs:
 Without GitHub Actions, the same two steps are:
 
 ```bash
-uv run due-work-harness check --base-ref origin/main
+uv run pytest-obligation check --base-ref origin/main
 uv run pytest -m due_work
 ```
 

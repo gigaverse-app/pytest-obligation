@@ -8,8 +8,8 @@ the Python package supplies the pytest integration and fault-injection engine.
 
 ## Install and discover
 
-Previously published as `due-work-harness`; see the
-[migration and release-status note](https://github.com/gigaverse-app/pytest-obligation/blob/main/README.md#get-started) before installing.
+Migrating from `due-work-harness`? Follow the
+[package migration guide](package-migration.md).
 New code imports `pytest_obligation.ObligationContract`; the compatibility shim
 preserves `due_work_harness.DueWorkContract` and existing pytest options.
 
@@ -38,7 +38,7 @@ pytest --help
 ```
 
 If your environment disables plugin autoload, load it explicitly with
-`pytest -p due_work_harness`. To disable it, use `pytest -p no:due_work_harness`.
+`pytest -p pytest_obligation.pytest_plugin`. To disable it, use `pytest -p no:due_work_harness`.
 See [pytest's plugin-discovery documentation](https://docs.pytest.org/en/stable/how-to/writing_plugins.html#making-your-plugin-installable-by-others).
 
 The PyPI metadata includes `Framework :: Pytest`, a pytest-focused summary and

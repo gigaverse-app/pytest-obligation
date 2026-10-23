@@ -49,8 +49,8 @@ jobs:
 Use your existing test command, services and test path. The reporter installs its
 own isolated Python runtime from the action revision; it does not import your
 application or alter its environment. Pin the action to a reviewed commit for
-production. The new action is available on `main` after this change merges; use
-the PR's commit while trying the preview, rather than an older release tag.
+production. The action is available on `main`. A release pin must contain `report/action.yml`;
+older releases without that path cannot provide this action.
 
 Use a stable, distinct `sticky-key` for each test session or matrix lane. This
 version reads one complete session report per key. It does not combine reports
