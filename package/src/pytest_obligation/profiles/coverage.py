@@ -5,11 +5,14 @@ Declarations remain canonical in contract.py. This report projects only coverage
 metadata and pytest outcomes; it never executes bindings or serializes domain data.
 """
 
-from typing import Literal
+from collections.abc import Iterator, Mapping
+from typing import Any, Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
+
+from .failures import FailureEvidence
 
 AssessmentState = Literal["claimed", "declined", "not applicable", "known gap", "not assessed"]
 
@@ -21,7 +24,21 @@ class Assessment(HarnessModel):
     because: str | None = Field(default=None, description="Reason for an unclaimed guarantee or family.")
 
 
-class CaseEvidence(MutableHarnessModel):
+class _ExecutedEvidence(MutableHarnessModel):
+    """Read our own JSON while deriving every verdict from validated evidence."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_stored_verdicts(cls, value: Any) -> Any:
+        # INVARIANT: serialized verdicts are display metadata, never proof.
+        # Ignore only this model's computed fields; unknown evidence stays an
+        # error. Copy the mapping so nested validation does not mutate callers.
+        if isinstance(value, Mapping):
+            return {key: item for key, item in value.items() if key not in cls.model_computed_fields}
+        return value
+
+
+class CaseEvidence(_ExecutedEvidence):
     """Coverage of one generated case; a pass requires successful setup, call and teardown."""
 
     family: str = Field(description="Binding or history family that generated this case.")
@@ -30,6 +47,9 @@ class CaseEvidence(MutableHarnessModel):
     outcomes: dict[str, list[str]] = Field(
         default_factory=dict,
         description="All observed outcomes by pytest phase, including retries and distributed runs.",
+    )
+    failures: list[FailureEvidence] = Field(
+        default_factory=list, description="Observed failures; diagnostic metadata is not proof."
     )
 
     @computed_field
@@ -48,7 +68,7 @@ class CaseEvidence(MutableHarnessModel):
         )
 
 
-class ProfileCoverage(MutableHarnessModel):
+class ProfileCoverage(_ExecutedEvidence):
     """Named guarantee, independently assessed families, and evidence for its expected cases."""
 
     title: str = Field(description="Canonical profile name from the A–J catalog.")
@@ -70,8 +90,29 @@ class ProfileCoverage(MutableHarnessModel):
         )
 
 
-class SuiteCoverage(MutableHarnessModel):
+class SuiteCoverage(_ExecutedEvidence):
     """Coverage scoped to a collected suite; absent/unimported suites are never certified."""
 
     name: str = Field(description="Adopter contract name; the report key identifies its collected suite class.")
     profiles: dict[str, ProfileCoverage]
+    additional_cases: dict[str, CaseEvidence] = Field(
+        default_factory=dict, description="Extra proofs and assessment checks outside profile behavioral cases."
+    )
+
+    def case_groups(self) -> Iterator[dict[str, CaseEvidence]]:
+        """All expected evidence, including checks without a profile claim."""
+        yield self.additional_cases
+        for letter in sorted(self.profiles):
+            yield self.profiles[letter].cases
+
+    @computed_field
+    @property
+    def verified(self) -> bool:
+        """Verify the explicitly assessed scope, requiring at least one executed claim."""
+        return (
+            any(profile.verified for profile in self.profiles.values())
+            and all(
+                profile.verified or profile.assessment.state == "not applicable" for profile in self.profiles.values()
+            )
+            and all(case.passed for case in self.additional_cases.values())
+        )

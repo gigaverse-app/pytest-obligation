@@ -12,9 +12,9 @@ _ITEMS = pytest.StashKey[dict[str, tuple[str, str]]]()
 
 
 def _record(config: pytest.Config, suite: str, case_id: str, *, selected: bool = False) -> None:
-    for profile in config.stash[_REPORT][suite].profiles.values():
-        if case_id in profile.cases:
-            evidence = profile.cases[case_id]
+    for cases in config.stash[_REPORT][suite].case_groups():
+        if case_id in cases:
+            evidence = cases[case_id]
             evidence.collected = True
             evidence.selected |= selected
 
@@ -22,7 +22,9 @@ def _record(config: pytest.Config, suite: str, case_id: str, *, selected: bool =
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> Generator[None]:
     """Capture expected/collected coverage before filtering, then record actual selection."""
-    if not config.getoption("due_work_profile_report", default=None):
+    if not (
+        config.getoption("due_work_profile_report", default=None) or config.getoption("due_work_summary", default=False)
+    ):
         yield
         return
     # These declarations have already been imported by selected suites. Keeping
@@ -69,13 +71,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 parameters = suite_cases(contract, covers=getattr(item.cls, "__due_work_sources__", ()))
             else:
                 parameters = safety_contract_cases(contract)
+            additional_cases: dict[str, CaseEvidence] = {}
             for parameter in parameters:
                 case = parameter.values[0]
                 if case.profile is None or case.assessment_only:
+                    additional_cases[case.id] = CaseEvidence(family=case.family)
                     continue
                 for profile in (case.profile, *case.related_profiles):
                     profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family)
-            reports[suite] = SuiteCoverage(name=contract.name, profiles=profiles)
+            reports[suite] = SuiteCoverage(name=contract.name, profiles=profiles, additional_cases=additional_cases)
         if hasattr(item, "callspec") and "case" in item.callspec.params:
             case = item.callspec.params["case"]
             assert isinstance(case, ContractCase), "generated profile test must carry the canonical case"
@@ -91,7 +95,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
-def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
     """Read the final normalized outcome, including teardown and strict known failures."""
     report = yield
     route = item.config.stash.get(_ITEMS, {}).get(item.nodeid)
@@ -101,9 +107,13 @@ def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, pytest.TestR
     outcome = report.outcome
     if getattr(report, "wasxfail", None) is not None:
         outcome = "xpass" if report.passed else "xfail"
-    for profile in item.config.stash[_REPORT][suite].profiles.values():
-        if case_id in profile.cases:
-            profile.cases[case_id].outcomes.setdefault(report.when, []).append(outcome)
+    for cases in item.config.stash[_REPORT][suite].case_groups():
+        if case_id in cases:
+            cases[case_id].outcomes.setdefault(report.when, []).append(outcome)
+            if report.failed and call.excinfo is not None:
+                from .failures import failure_evidence
+
+                cases[case_id].failures.append(failure_evidence(call.excinfo.value, report.when))
     return report
 
 
@@ -123,13 +133,16 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
                 profile.families,
                 profile.cases.keys(),
             ), f"{suite}/{letter}: workers disagree on expected profile coverage"
-            for case_id, case in profile.cases.items():
-                old = existing.cases[case_id]
+        for existing_cases, incoming_cases in zip(current.case_groups(), report.case_groups(), strict=True):
+            assert existing_cases.keys() == incoming_cases.keys(), f"{suite}: workers disagree on expected checks"
+            for case_id, case in incoming_cases.items():
+                old = existing_cases[case_id]
                 assert old.family == case.family
                 old.collected |= case.collected
                 old.selected |= case.selected
                 for phase, outcomes in case.outcomes.items():
                     old.outcomes.setdefault(phase, []).extend(outcomes)
+                old.failures.extend(case.failures)
 
 
 @pytest.hookimpl(optionalhook=True)
@@ -144,8 +157,6 @@ def pytest_testnodedown(node: Any, error: object) -> None:
 
 def pytest_sessionfinish(session: pytest.Session) -> None:
     destination = session.config.getoption("due_work_profile_report", default=None)
-    if not destination:
-        return
     from pathlib import Path
 
     from pydantic import TypeAdapter
@@ -157,6 +168,54 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     if worker_output is not None:
         worker_output["due_work_profiles"] = serialized
         return
+    if not destination:
+        return
     path = Path(destination)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(TypeAdapter(dict[str, SuiteCoverage]).dump_json(reports, indent=2))
+
+
+def _case_status(case: CaseEvidence) -> str:
+    if case.passed:
+        return "passed"
+    if not case.collected:
+        return "not collected"
+    if not case.selected:
+        return "deselected"
+    phases = ", ".join(
+        f"{phase}={','.join(case.outcomes.get(phase, [])) or 'missing'}" for phase in ("setup", "call", "teardown")
+    )
+    return f"incomplete ({phases})"
+
+
+def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
+    """Render the merged evidence without changing pytest's selection or exit status."""
+    if not terminalreporter.config.getoption("due_work_summary", default=False):
+        return
+    reports = terminalreporter.config.stash.get(_REPORT, {})
+    if not reports:
+        return
+    terminalreporter.section("due-work-harness: contract evidence (collected suites only)")
+    for suite, report in sorted(reports.items()):
+        verdict = "VERIFIED" if report.verified else "UNVERIFIED"
+        terminalreporter.line(
+            f"  {verdict}: {report.name} [{suite}]", green=report.verified, yellow=not report.verified
+        )
+        for letter, profile in sorted(report.profiles.items()):
+            decision = "VERIFIED" if profile.verified else profile.assessment.state
+            if decision == "claimed":
+                decision = "UNVERIFIED (claimed)"
+            reason = f"; {profile.assessment.because}" if profile.assessment.because else ""
+            passed = sum(case.passed for case in profile.cases.values())
+            terminalreporter.line(
+                f"    {letter} {profile.title}: {decision}; {passed}/{len(profile.cases)} passed{reason}"
+            )
+            for family, assessment in sorted(profile.families.items()):
+                reason = f"; {assessment.because}" if assessment.because else ""
+                terminalreporter.line(f"      {family}: {assessment.state}{reason}")
+            for case_id, case in sorted(profile.cases.items()):
+                if not case.passed:
+                    terminalreporter.line(f"      {case_id}: {_case_status(case)}")
+        for case_id, case in sorted(report.additional_cases.items()):
+            if not case.passed:
+                terminalreporter.line(f"    {case_id}: {_case_status(case)}")

@@ -1,0 +1,206 @@
+{
+  "graph": {
+    "module_roots": [
+      "package/src",
+      "package/shims",
+      "package",
+      "package/tests_support",
+      "examples/adopter",
+      "."
+    ],
+    "test_roots": [
+      "package/tests",
+      "integration_tests",
+      "examples/adopter",
+      "demos"
+    ],
+    "pytest_policy": {
+      "demos/dbos_transactional_outbox/pyproject.toml": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "demos/procrastinate_demo_django/pyproject.toml": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "demos/saleor_checkout/pyproject.toml": "8ea38dc8c6be4d9141ab7a42973b959a3d89ebcbabdf437101fc453c5cdd3c3a",
+      "demos/wagtail_tasks/pyproject.toml": "f6372835919285e1e863a46f0ca60c63ef45b205e4fa8f1f34851f03eef7901a",
+      "examples/adopter/pyproject.toml": "eb4f1244c75e948b593d2122599ad6c7db4326c2b56ba4902f22bd258ddcdb91",
+      "package/pyproject.toml": "197e7f7507e5e55187d99781b4c7a4532cd222fc4ebdda624bb6d62cd3ad60a3",
+      "pyproject.toml": "e22f1beebaa72b78345891da5d89dc21a513f9fd40c0f6e4367c844d8f505a92"
+    },
+    "global_modules": []
+  },
+  "lanes": {
+    "core": {
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core"
+      ],
+      "inputs": [
+        "package/src/pytest_obligation/**",
+        "package/shims/**",
+        "package/tests_support/**",
+        "package/src/**",
+        "scripts/check_core_is_framework_free.py"
+      ]
+    },
+    "minimum_models": {
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core",
+        "examples/adopter/tests"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_core_is_framework_free.py"
+      ]
+    },
+    "exploration": {
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**"
+      ]
+    },
+    "django": {
+      "roots": [
+        "package/tests/django",
+        "examples/adopter/tests_django"
+      ],
+      "inputs": [
+        "package/tests/django/**",
+        "examples/adopter/tests_django/**",
+        "package/src/**",
+        "package/shims/**"
+      ]
+    },
+    "django_psycopg2": {
+      "roots": [
+        "package/tests/django",
+        "examples/adopter/tests_django"
+      ],
+      "inputs": [
+        "package/tests/django/**",
+        "examples/adopter/tests_django/**",
+        "package/src/**",
+        "package/shims/**"
+      ]
+    },
+    "redis": {
+      "roots": [
+        "package/tests/rq",
+        "package/tests/celery_worker",
+        "integration_tests/rq",
+        "integration_tests/celery_worker"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "mongodb": {
+      "roots": [
+        "package/tests/mongodb"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**"
+      ]
+    },
+    "aiokafka": {
+      "roots": [
+        "package/tests/aiokafka"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**"
+      ]
+    },
+    "prefect": {
+      "roots": [
+        "package/tests/prefect",
+        "integration_tests/prefect"
+      ],
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "demos": {
+      "roots": [
+        "demos/procrastinate_demo_django",
+        "demos/dbos_transactional_outbox",
+        "demos/wagtail_tasks",
+        "demos/test_readme_gif.py"
+      ],
+      "inputs": [
+        "demos/procrastinate_demo_django/**",
+        "demos/dbos_transactional_outbox/**",
+        "demos/wagtail_tasks/**",
+        "demos/fetch_upstream.py",
+        "demos/cached_database.py",
+        "demos/throwaway_postgres.sh",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py",
+        "docs/demo.tape",
+        "docs/demo_env.sh",
+        "demos/saleor_checkout/**",
+        "check/**"
+      ]
+    },
+    "saleor": {
+      "roots": [
+        "demos/saleor_checkout"
+      ],
+      "inputs": [
+        "demos/saleor_checkout/**",
+        "demos/fetch_upstream.py",
+        "demos/cached_database.py",
+        "demos/throwaway_postgres.sh",
+        "check/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "actions": {
+      "roots": [
+        "examples/adopter/tests",
+        "examples/adopter/tests_django",
+        "examples/adopter/test_bindings.py"
+      ],
+      "inputs": [
+        "examples/adopter/**",
+        "check/**",
+        "test/**",
+        "report/**",
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "due": {
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_adoption*.py"
+      ]
+    },
+    "typecheck": {
+      "inputs": [
+        "**/*.py",
+        "pyrefly.toml",
+        "**/pyrefly.toml"
+      ]
+    }
+  },
+  "global_inputs": [
+    "**/pyproject.toml",
+    "pyproject.toml",
+    "**/uv.lock",
+    "uv.lock",
+    ".github/**"
+  ]
+}

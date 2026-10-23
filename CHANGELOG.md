@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.14.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.1...v0.14.2) (2026-10-23)
+
+
+### Bug fixes
+
+* Support PyMongo 4.18 bulk-write and read-checkout boundaries while preserving 4.9 through 4.17 compatibility ([#109](https://github.com/gigaverse-app/pytest-obligation/pull/109)).
+* Adopt compatible CI-esta and pytest-selective releases, including the matching PostgreSQL client repair.
+
+### Performance
+
+* **ci:** repair snapshots and reduce Saleor recovery overhead ([#108](https://github.com/gigaverse-app/pytest-obligation/issues/108)) ([ad67e0f](https://github.com/gigaverse-app/pytest-obligation/commit/ad67e0fe3911091ece8537b8b61a4436ef50b323))
+* parallelize Wagtail and Due conformance with isolated databases ([#105](https://github.com/gigaverse-app/pytest-obligation/issues/105)) ([533bf3c](https://github.com/gigaverse-app/pytest-obligation/commit/533bf3c23bf92d6dbf215d7e1a9104a71277d049))
+
+
+### Documentation
+
+* replace sister-project sections with footer badges ([#99](https://github.com/gigaverse-app/pytest-obligation/issues/99)) ([8c325d6](https://github.com/gigaverse-app/pytest-obligation/commit/8c325d67a572987e8a0cd2bb9d0ef3dfeec20ba2))
+* show the CI-esta logo on the CI-esta badge ([#102](https://github.com/gigaverse-app/pytest-obligation/issues/102)) ([ecd9305](https://github.com/gigaverse-app/pytest-obligation/commit/ecd9305a4fa35398d8dddbbad987a109aeff75bc))
+
+## [0.14.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.0...v0.14.1) (2026-10-22)
+
+
+### Documentation
+
+* connect CI-esta observability and evidence reuse ([#90](https://github.com/gigaverse-app/pytest-obligation/issues/90)) ([920f138](https://github.com/gigaverse-app/pytest-obligation/commit/920f1380d20a18ad9d026d1a84c9d931c3138785))
+
 ## [0.14.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.13.1...v0.14.0) (2026-10-21)
 
 

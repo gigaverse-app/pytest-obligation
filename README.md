@@ -1,6 +1,6 @@
-# pytest-obligation
+![pytest-obligation: what passed · what is missing · what to fix](https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/main/docs/assets/banner.png)
 
-<img src="plugins/pytest-obligation/assets/icon.svg" alt="pytest-obligation logo" width="96">
+# pytest-obligation
 
 [![CI](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pytest-obligation)](https://pypi.org/project/pytest-obligation/)
@@ -8,6 +8,12 @@
 [![pytest plugin](https://img.shields.io/badge/pytest-plugin-0A9EDC?logo=pytest&logoColor=white)](https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/pytest-plugin.md)
 [![Typed](https://img.shields.io/badge/typing-py.typed-blue)](https://typing.python.org/en/latest/spec/distributing.html)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](package/LICENSE)
+[![Documentation](https://readthedocs.org/projects/pytest-obligation/badge/?version=latest)](https://pytest-obligation.readthedocs.io/en/latest/)
+
+[Read the documentation](https://pytest-obligation.readthedocs.io/en/latest/) · [Related tools](https://pytest-obligation.readthedocs.io/en/latest/ecosystem/)
+
+[PR evidence report: what passed, what is missing, what to fix](package/docs/github-action-report.md)
+
 
 ## Don’t lose orders, money, receipts, or work when the happy path breaks
 
@@ -100,12 +106,10 @@ not a verified guarantee. [Read the reporting guide](package/docs/adopting.md#re
 
 ## Get started
 
-Formerly **due-work-harness**. The package is being renamed to
-**pytest-obligation**; until its first PyPI release, install `due-work-harness`
-for the last published version. Do not install both distributions in the same
-environment: they provide the same Python modules. New code uses
-`from pytest_obligation import ObligationContract`. Existing `due_work_harness`
-imports and `DueWorkContract` are supported by an isolated compatibility shim.
+Install **pytest-obligation** from PyPI in your application's test environment.
+The former `due-work-harness` distribution should be removed when migrating;
+[the migration guide](package/docs/package-migration.md) explains compatibility.
+
 The `--due-work-*` options, `due-work-harness` command, and
 `[tool.due-work-harness]` configuration remain supported.
 [See the compatibility and migration guide](package/docs/package-migration.md).
@@ -174,21 +178,28 @@ Open your application in Claude Code or Codex and ask:
 | --- | --- |
 | Find the right workflow or public interface | [Harness guide and module map](package/docs/harness-guide.md) |
 | Bind your application and run generated proofs | [Adoption walkthrough](package/docs/adopting.md), [runnable SQLite adopter](examples/adopter) |
+| Bind a [Due](https://github.com/gigaverse-app/due) work-table application | [Due's conformance guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md) |
 | Inspect transaction and schedule policy | [Handoff coverage](package/docs/coverage.md), [source-policy APIs and examples](package/docs/source-policies.md) |
 | Understand recovery and outcome evidence | [Recovery edge cases](package/docs/recovery-edge-cases.md), [what a green result means](package/docs/what-a-green-result-means.md) |
+| Enforce known gaps and selection completeness | [Debt baseline](package/docs/debt-baseline.md), [selection completeness](package/docs/selection-completeness.md) |
+| Probe another project | [Upstream playbook](docs/upstream-playbook.md), [framework integrations](package/docs/integrations.md) |
 | Replace the backend harness | [Completed port and ownership map](package/docs/backend-harness-port.md) |
-| Contribute a proof or integration | [Architecture](package/docs/architecture.md), [contributor workflow](CONTRIBUTING.md) |
-
-Start with the [adoption guide](package/docs/adopting.md) if you want to bind a contract
-yourself. For framework boundaries and the handoff scan, see
-[integrations](package/docs/integrations.md) and [coverage](package/docs/coverage.md). To probe
-another project, follow the [upstream playbook](docs/upstream-playbook.md).
+| Edit the library inside an adopter checkout | [Package ownership and subtree development](package/docs/development.md) |
+| Contribute a proof or integration | [Architecture](package/docs/architecture.md), [contributor workflow](CONTRIBUTING.md), [CI selection and costs](docs/ci.md) |
 
 Alpha; the public API may change before 1.0. [Architecture](package/docs/architecture.md) ·
 [Contributing](CONTRIBUTING.md) · [Apache-2.0 license](package/LICENSE)
 
-Generated expected failures can be enforced with an application-owned [debt baseline](package/docs/debt-baseline.md).
+---
 
-Recovery contracts can also [prove selection completeness](package/docs/selection-completeness.md), including related lifecycle states and strict per-combination debt.
+[![CI measured by CI-esta](https://img.shields.io/badge/CI_measured_by-CI--esta-EA580C?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI%2BPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTUiIGZpbGw9IiNFQTU4MEMiLz48cGF0aCBkPSJNMTUgMzRsMTEgMTEgMjAtMjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSI3IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNNDYgN2gxMGwtMTAgMTBoMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg%3D%3D)](https://github.com/gigaverse-app/ci-esta)
+[![Tests selected by pytest-selective](https://img.shields.io/badge/tests_selected_by-pytest--selective-2563EB)](https://github.com/gigaverse-app/pytest-selective)
 
-See [package ownership and subtree development](package/docs/development.md) for library edits made inside an adopter checkout.
+<sub>Pull requests run only the [test lanes](.github/test-lanes.json) a change can
+affect: a package README edit skips every live framework lane. Every run gets a
+CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
+
+### How this project keeps CI fast
+
+See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
+environment caches, required gates and real dependency critical-path reports.

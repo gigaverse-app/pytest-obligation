@@ -4,32 +4,77 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 # Every job installs from uv.lock with --locked: a lock that no longer matches
 # pyproject.toml fails CI instead of silently resolving something new.
 
 jobs:
-  lint:
+  select-tests:
+    runs-on: ubuntu-latest
+    outputs:
+      lanes: ${{ steps.select.outputs.lanes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: select
+        uses: gigaverse-app/pytest-selective/actions/plan-lanes@v1
+        with:
+          config: .github/test-lanes.json
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          full: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'test:full') }}
+
+  ci-contracts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - run: uv sync --all-packages --locked --only-group lint
+          python-version: '3.14'
+      - name: Prove consumer routing and documentation checks
+        # Resolve from the action pin above, so tests cannot silently use a different selector.
+        run: >-
+          uv run --no-project --python 3.14
+          --with "$(python scripts/ci/selector_requirement.py)"
+          python -m unittest discover -s ci_tests -v
+      - name: Check aggregate gate against the execution lanes
+        run: >-
+          uv run --no-project --python 3.14
+          --with "ci-esta>=1.1.0,<2.0.0"
+          ci-esta check-workflow --workflow .github/workflows/ci.yml --lanes .github/test-lanes.json
+      - name: Check local documentation links
+        run: python scripts/ci/check_docs.py
+      - name: Test sticky publication controls
+        run: node --test report/publish.test.cjs
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
+        with:
+          python-version: '3.14'
+          sync-args: --all-packages --only-group lint
       - run: uv run --no-sync ruff check
       - run: uv run --no-sync ruff format --check
       - name: actionlint
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
 
   typecheck:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).typecheck) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,6 +88,10 @@ jobs:
       - run: uv run --no-sync pyrefly check
 
   core:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).core) }}
     # The core must work with no framework installed: the package, pytest and pytest-xdist only.
     runs-on: ubuntu-latest
     strategy:
@@ -51,12 +100,10 @@ jobs:
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
           python-version: ${{ matrix.python }}
-      # xdist is no framework: it lets the verify option's self-tests split a session across workers.
-      - run: uv sync --all-packages --python ${{ matrix.python }} --locked --no-default-groups --extra debt --group xdist
+          sync-args: --all-packages --no-default-groups --extra debt --group xdist
       - run: uv run --python ${{ matrix.python }} --no-sync python scripts/check_core_is_framework_free.py
       - run: uv run --python ${{ matrix.python }} --no-sync python -m compileall -q package/src/pytest_obligation
       - name: Prove package-only core controls need no application checkout
@@ -65,18 +112,25 @@ jobs:
           package_dir=$(mktemp -d)
           git archive HEAD:package | tar -x -C "$package_dir"
           uv run --directory "$package_dir" --extra selftest python -m pytest tests/core
-      - run: uv run --python ${{ matrix.python }} --no-sync pytest package/tests/core integration_tests/core
+      - run: uv run --python ${{ matrix.python }} --no-sync pytest package/tests/core integration_tests/core --junitxml=test-timings.xml -o junit_family=xunit1
+      - uses: gigaverse-app/ci-esta/actions/learn-test-timings@v1
+        with:
+          junit-pattern: test-timings.xml
+          artifact-name: test-timings-core-${{ matrix.python }}
 
   minimum-models:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).minimum_models) }}
     # Exercise nested generic declarations on the supported minimum, without Hypothesis or frameworks.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
           python-version: "3.12"
-      - run: uv sync --all-packages --locked --no-default-groups --extra debt --group xdist
+          sync-args: --all-packages --no-default-groups --extra debt --group xdist
       # This lane deliberately checks the declared lower bound, not uv.lock's current release.
       - run: uv pip install 'pydantic==2.11.0'
       - run: uv run --no-sync python scripts/check_core_is_framework_free.py
@@ -84,16 +138,24 @@ jobs:
       - run: uv run --no-sync pytest examples/adopter/tests --due-work-check-fixtures --due-work-require-assessed
 
   exploration:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).exploration) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      - run: uv sync --all-packages --locked --no-default-groups --extra debt --extra exploration --group xdist
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra debt --extra exploration --group xdist
       - run: uv run --no-sync pytest package/tests/core integration_tests/core
 
   django:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).django) }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -111,16 +173,19 @@ jobs:
       PGDATABASE: pytest_obligation
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      # pytest-django gives each xdist worker its own test database.
-      - run: uv sync --all-packages --locked --no-default-groups --extra django --extra celery --extra exploration --group xdist
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra django --extra celery --extra exploration --group xdist
       - run: uv run --no-sync pytest package/tests/django examples/adopter/tests_django --ds=tests.django.settings -n 4
 
   # The same suite on psycopg2, which Django uses when psycopg 3 is not installed: pretix and many older
   # projects run on it, and the host's autocommit-write probe once assumed psycopg 3.
   django-psycopg2:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).django_psycopg2) }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -138,15 +203,19 @@ jobs:
       PGDATABASE: due_work_harness_psycopg2
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      - run: uv sync --all-packages --locked --no-default-groups --extra django --extra celery --extra exploration --group xdist
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra django --extra celery --extra exploration --group xdist
       - run: uv pip uninstall psycopg psycopg-binary && uv pip install psycopg2-binary
       - run: uv run --no-sync pytest package/tests/django examples/adopter/tests_django --ds=tests.django.settings -n 4
 
   # Redis-backed queues, and Celery's real worker as a child process on a Redis broker.
   redis:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).redis) }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -158,10 +227,10 @@ jobs:
       REDIS_URL: redis://localhost:6379/14
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      - run: uv sync --all-packages --locked --no-default-groups --extra rq --extra celery --extra exploration --group xdist
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra rq --extra celery --extra exploration --group xdist
       # Each xdist worker takes its own four Redis databases (tests/redis_databases.py), so cases that
       # empty theirs cannot wipe another worker's; four workers use all 16 of the service's databases.
       - run: uv run --no-sync pytest package/tests/rq package/tests/celery_worker integration_tests/rq integration_tests/celery_worker -p no:django -rxX -n 4 --durations=10 --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-redis.json --junitxml=adopters-redis.xml
@@ -175,7 +244,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_cases.py adopters-redis.xml --case "*TestCatalogThroughCelery*extra-recovery-poison*" --case "*TestCatalogThroughCelery*extra-recovery-stop*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-redis
           path: |
@@ -186,15 +255,19 @@ jobs:
           if-no-files-found: error
 
   mongodb:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).mongodb) }}
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://localhost:27017/?directConnection=true
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      - run: uv sync --all-packages --locked --no-default-groups --extra mongodb
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra mongodb
       # Transactions need a replica set on this disposable runner.
       - run: |
           docker run -d --name due-work-mongodb -p 27017:27017 mongo:7 --replSet dwh --bind_ip_all
@@ -206,6 +279,10 @@ jobs:
       - run: uv run --no-sync pytest package/tests/mongodb -q
 
   aiokafka:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).aiokafka) }}
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -228,21 +305,25 @@ jobs:
       KAFKA_BOOTSTRAP_SERVERS: localhost:9092
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      - run: uv sync --all-packages --locked --no-default-groups --extra aiokafka
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra aiokafka
       - run: uv run --no-sync pytest package/tests/aiokafka -q
 
   prefect:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).prefect) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
-          enable-cache: true
-      - run: uv sync --all-packages --locked --no-default-groups --extra prefect --extra exploration
-      - run: uv run --no-sync pytest package/tests/prefect integration_tests/prefect -q --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-prefect.json --junitxml=adopters-prefect.xml
+          python-version: '3.14'
+          sync-args: --all-packages --no-default-groups --extra prefect --extra exploration
+      - run: uv run --no-sync pytest package/tests/prefect integration_tests/prefect -q --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-prefect.json --junitxml=adopters-prefect.xml --durations=20
 
       - name: Require the promised adopters and executed capabilities
         run: |
@@ -250,7 +331,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_cases.py adopters-prefect.xml --case "*extra-recovery-poison*" --case "*extra-recovery-stop*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-prefect
           path: |
@@ -261,6 +342,10 @@ jobs:
           if-no-files-found: error
 
   demos:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).demos) }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -276,6 +361,10 @@ jobs:
       PGPASSWORD: postgres
       PGPORT: "5432"
     steps:
+      - name: Match PostgreSQL clients to the service
+        uses: gigaverse-app/ci-esta/actions/postgres-client@v1
+        with:
+          image: postgres:16
       - uses: actions/checkout@v7
         with:
           # The check action builds the harness from this checkout; its version comes from git tags.
@@ -286,7 +375,7 @@ jobs:
       # Saleor too: the README's demo GIF shows the coverage scan of its checkout. Wagtail's source is
       # what the Wagtail demo's coverage check reads; the demo itself runs the wheel from PyPI.
       - run: uv run --no-project python demos/fetch_upstream.py procrastinate dbos-demo-apps saleor wagtail
-      - run: uv sync --all-packages --locked --no-default-groups --extra django --extra exploration --group demos
+      - run: uv sync --all-packages --locked --no-default-groups --extra django --extra exploration --group demos --group xdist
       # procrastinate's demos ship only in its source tree, pinned by fetch_upstream.py.
       - run: uv pip install -e demos/.upstream/procrastinate
       - name: Postgres without durability
@@ -302,22 +391,26 @@ jobs:
         run: uv run --no-sync pytest demos/dbos_transactional_outbox -p no:django -rxX --durations=15 --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-dbos.json --junitxml=adopters-dbos.xml
       # Migrating Wagtail's test database is most of its run, and depends only on the pinned packages
       # (uv.lock) and the demo's settings: restored from the cached dump when the key matches.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: demos/.ci-cache/wagtail_tasks.dump
-          key: wagtail-test-db-pg16-${{ hashFiles('uv.lock', 'demos/wagtail_tasks/settings.py', 'demos/cached_database.py') }}
+          key: wagtail-test-db-pg16-client16-${{ hashFiles('uv.lock', 'demos/wagtail_tasks/settings.py', 'demos/cached_database.py') }}
       - name: Wagtail's test database, migrated once
         # As pytest-django creates a test database: every app's migrations, syncdb for the rest, no checks.
         run: >-
           uv run --no-sync python demos/cached_database.py test_wagtail_tasks --dump demos/.ci-cache/wagtail_tasks.dump
           -- uv run --no-sync python -m django migrate --settings=demos.wagtail_tasks.settings
           --run-syncdb --skip-checks --no-input --verbosity 0
+      - name: Clone the migrated database for isolated pytest workers
+        run: >-
+          uv run --no-project --with "ci-esta[postgres]>=1.1.0,<2.0.0"
+          ci-esta-postgres-clone --database test_wagtail_tasks --workers 4
       # Wagtail 8.0 on django-tasks-db, both from PyPI; the demo's own directory is pytest's rootdir.
       - name: Wagtail on django-tasks-db
         working-directory: demos/wagtail_tasks
         env:
           PGDATABASE: wagtail_tasks
-        run: uv run --no-sync --project ../.. pytest --reuse-db --due-work-verify --durations=15 --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-wagtail.json --junitxml=adopters-wagtail.xml
+        run: uv run --no-sync --project ../.. pytest -n 4 --dist worksteal --reuse-db --due-work-verify --durations=15 --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-wagtail.json --junitxml=adopters-wagtail.xml
       - name: the README's demo GIF prints what the harness prints
         run: uv run --no-sync pytest demos/test_readme_gif.py -p no:django --durations=15
       # Each demo is an adopter: its handoffs are checked the way an adopter's CI checks them.
@@ -349,7 +442,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_cases.py demos/wagtail_tasks/adopters-wagtail.xml --case "*TestDatabaseWorkerRows*database_legal*" --case "*TestDatabaseWorkerRows*inadmissible*" --case "*TestDatabaseWorkerRows*poisoned_identity*" --case "*TestDatabaseWorkerRows*soft_time_limit*" --case "*TestDatabaseWorkerRows*assert_selection_is_complete*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-demos
           path: |
@@ -360,6 +453,10 @@ jobs:
           if-no-files-found: error
 
   saleor:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).saleor) }}
     # Saleor's checkout, unmodified, in Saleor's own environment built from its uv.lock.
     runs-on: ubuntu-latest
     services:
@@ -375,6 +472,10 @@ jobs:
       # Absolute: run.sh works in the demo directory.
       SALEOR_DATABASE_DUMP: ${{ github.workspace }}/demos/.ci-cache/saleor.dump
     steps:
+      - name: Match PostgreSQL clients to the service
+        uses: gigaverse-app/ci-esta/actions/postgres-client@v1
+        with:
+          image: postgres:16
       - uses: actions/checkout@v7
         with:
           # The check action builds the harness from this checkout; its version comes from git tags.
@@ -398,10 +499,10 @@ jobs:
         run: demos/throwaway_postgres.sh
       # Saleor's migrations depend only on its pin (in fetch_upstream.py): their result is cached as a
       # dump, restored in seconds instead of migrating for two minutes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ env.SALEOR_DATABASE_DUMP }}
-          key: saleor-test-db-pg16-${{ hashFiles('demos/fetch_upstream.py', 'demos/saleor_checkout/prepare_db.py', 'demos/cached_database.py') }}
+          key: saleor-test-db-pg16-client16-${{ hashFiles('demos/fetch_upstream.py', 'demos/saleor_checkout/prepare_db.py', 'demos/cached_database.py') }}
       # One xdist worker per runner CPU. Four workers each migrating their own database took
       # 193 s apiece; migrating once and cloning a copy per worker costs one migration.
       - name: Saleor's test databases, migrated once
@@ -420,7 +521,7 @@ jobs:
           demos/.upstream/saleor/.venv/bin/python scripts/check_adoption_cases.py demos/saleor_checkout/adopters-saleor.xml --case "*TestCheckoutWithAutomaticCompletion*database_legal*" --case "*TestCheckoutWithAutomaticCompletion*inadmissible*" --case "*TestAutomaticCompletionRelatedRows*database_legal*" --case "*TestAutomaticCompletionRelatedRows*inadmissible*" --case "*TestAutomaticCompletionRelatedRows*poisoned_identity*" --case "*TestAutomaticCompletionRelatedRows*soft_time_limit*"
       - name: Keep executed profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-saleor
           path: |
@@ -442,6 +543,10 @@ jobs:
         with:
           enable-cache: true
       - run: uv build --project package --out-dir dist
+      - name: Validate package metadata and Markdown rendering
+        run: |
+          uvx --from twine==7.0.0 twine check --strict dist/*
+          python scripts/ci/check_metadata.py
       - run: unzip -l dist/*.whl | grep -q "pytest_obligation/py.typed"
       - run: unzip -l dist/*.whl | grep -q "due_work_harness/py.typed"
       - run: uv venv /tmp/wheel && uv pip install --python /tmp/wheel dist/*.whl
@@ -450,6 +555,13 @@ jobs:
         run: /tmp/wheel/bin/python -m pytest package/tests/core/test_compatibility.py package/tests/core/test_package_identity.py -q
 
   actions:
+    permissions:
+      contents: read
+      pull-requests: write # Dogfood the report; forks retain summary/artifact only.
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).actions) }}
     # The published GitHub Actions, run against the example adopter the way a project would use them.
     runs-on: ubuntu-latest
     steps:
@@ -467,6 +579,7 @@ jobs:
           working-directory: examples/adopter
           pytest-args: --due-work-check-fixtures --due-work-require-assessed
       - name: Generated histories also support optional search
+        id: example-contracts
         uses: ./test
         with:
           working-directory: examples/adopter
@@ -475,6 +588,13 @@ jobs:
       - name: Replay and sensitivity controls
         working-directory: examples/adopter
         run: uv run --no-sync pytest tests/test_catalog_failures.py
+      - name: Smoke-test the evidence report action
+        if: always()
+        uses: ./report
+        with:
+          report-path: examples/adopter/profiles-example.json
+          sticky-key: example-application
+          test-outcome: ${{ steps.example-contracts.outcome }}
       - name: Require example capabilities
         working-directory: examples/adopter
         run: |
@@ -482,7 +602,7 @@ jobs:
           uv run --no-sync python ../../scripts/check_adoption_cases.py adopters-example.xml --case "*extra-recovery-poison*" --case "*extra-recovery-stop*" --case "*TestOptionalAlert*test_the_exemption_holds"
       - name: Keep example profile evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: profiles-example
           path: |
@@ -498,6 +618,10 @@ jobs:
           fi
 
   due:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).due) }}
     # The complete work-table harness lives with Due's runtime. Install this PR's
     # wheel over its locked obligation dependency and prove the packages together.
     runs-on: ubuntu-latest
@@ -539,15 +663,15 @@ jobs:
         run: uv pip install --python .upstream/due/.venv/bin/python --no-deps --reinstall dist/*.whl
       - name: Run independent Due library controls
         working-directory: .upstream/due
-        run: .venv/bin/python -m pytest -c package/pyproject.toml package/tests --due-work-check-fixtures --due-work-profile-report=library-profiles.json
+        run: .venv/bin/python -m pytest -n 4 --dist worksteal -c package/pyproject.toml package/tests --due-work-check-fixtures --due-work-profile-report=library-profiles.json --durations=20
       - name: Run complete work-table and application conformance
         working-directory: .upstream/due
         run: >-
-          .venv/bin/python -m pytest -p due.django.conformance.reporting
+          .venv/bin/python -m pytest -n 4 --dist worksteal -p due.django.conformance.reporting
           --due-work-check-fixtures --due-work-debt-baseline=integration_tests/conformance/debt_baseline.yaml
           --due-work-profile-report=profiles.json
           --durable-work-report=effects.json --durable-observation-report=observations.json
-          --junitxml=results.xml
+          --junitxml=results.xml --durations=20
       - name: Require executed primitive and application guarantees
         working-directory: .upstream/due
         run: |
@@ -570,3 +694,15 @@ jobs:
             .upstream/due/observations.json
             .upstream/due/results.xml
           if-no-files-found: error
+
+  validation-gate:
+    name: Validation gate
+    needs: [select-tests, ci-contracts, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: gigaverse-app/ci-esta/actions/validation-gate@v1
+        with:
+          needs: ${{ toJSON(needs) }}
+          lanes: ${{ needs.select-tests.outputs.lanes || '{}' }}
+          lane-jobs: '{"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"actions":["actions"],"due":["due"]}'

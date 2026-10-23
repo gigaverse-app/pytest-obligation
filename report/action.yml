@@ -1,0 +1,66 @@
+name: pytest-obligation report
+description: Explain passing evidence, missing coverage, rejected bindings and failures in one updated PR comment.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  report-path:
+    description: JSON produced by pytest --due-work-profile-report in this run. One complete session per sticky key.
+    default: obligation-profiles.json
+  github-token:
+    description: Token with pull-requests write for same-repository PR comments. No token is needed for summary-only use.
+    default: ${{ github.token }}
+  post-comment:
+    description: Update one PR comment. Fork PRs keep the summary and artifact without posting.
+    default: 'true'
+  sticky-key:
+    description: Stable key for this workflow or test lane; use distinct keys for separate sessions.
+    default: obligation
+  test-outcome:
+    description: Outcome of the test step (steps.tests.outcome), so collection or unrelated failures remain visible.
+    default: unknown
+outputs:
+  markdown-path:
+    description: Rendered Markdown, also included in the job summary and uploaded artifact.
+    value: ${{ steps.render.outputs.markdown-path }}
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v7
+    - name: Render executed evidence
+      id: render
+      shell: bash
+      env:
+        REPORT_PATH: ${{ inputs.report-path }}
+        REPORTER_PACKAGE: ${{ github.action_path }}/../package
+        REPORT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        REPORT_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        TEST_OUTCOME: ${{ inputs.test-outcome }}
+        REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
+      run: |
+        output="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")/report.md"
+        uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting \
+          --input "$REPORT_PATH" --output "$output" \
+          --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
+          --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF"
+        echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
+    - name: Preserve full evidence and rendered report
+      uses: actions/upload-artifact@v7
+      with:
+        name: obligation-${{ inputs.sticky-key }}-${{ github.run_attempt }}
+        path: |
+          ${{ inputs.report-path }}
+          ${{ steps.render.outputs.markdown-path }}
+        if-no-files-found: error
+    - name: Update PR report
+      if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+      uses: actions/github-script@v8
+      env:
+        OBLIGATION_MARKDOWN: ${{ steps.render.outputs.markdown-path }}
+        OBLIGATION_STICKY_KEY: ${{ inputs.sticky-key }}
+        OBLIGATION_ACTION_PATH: ${{ github.action_path }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const publish = require(`${process.env.OBLIGATION_ACTION_PATH}/publish.cjs`);
+          await publish({github, context, core});

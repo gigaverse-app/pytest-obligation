@@ -1,0 +1,122 @@
+site_name: pytest-obligation
+site_description: Test background work against crashes, retries, and duplicate delivery
+  with executable conformance checks.
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, "https://pytest-obligation.readthedocs.io/en/latest/"]
+repo_url: https://github.com/gigaverse-app/pytest-obligation
+repo_name: gigaverse-app/pytest-obligation
+edit_uri: ''
+docs_dir: documentation
+site_dir: site
+strict: true
+exclude_docs: '*.py
+
+  *.txt
+
+  *.in
+
+  overrides/
+
+  '
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/icon.png
+  custom_dir: documentation/overrides
+  language: en
+  font: false
+  palette:
+    primary: teal
+    accent: cyan
+  features:
+  - navigation.top
+  - search.suggest
+  - search.highlight
+  - content.code.copy
+plugins:
+- search
+hooks:
+- documentation/hooks.py
+markdown_extensions:
+- admonition
+- attr_list
+- tables
+- pymdownx.details
+- pymdownx.highlight
+- pymdownx.superfences:
+    custom_fences:
+      - name: mermaid
+        class: mermaid
+        format: !!python/name:pymdownx.superfences.fence_code_format
+- toc:
+    permalink: true
+validation:
+  nav:
+    omitted_files: info
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    anchors: warn
+extra:
+  published_sources:
+  - docs/adopter-capabilities.md
+  - docs/ci-toolkit.md
+  - docs/ci.md
+  - package/docs/adopting.md
+  - package/docs/aiokafka.md
+  - package/docs/architecture.md
+  - package/docs/completion.md
+  - package/docs/coverage.md
+  - package/docs/debt-baseline.md
+  - package/docs/false-greens.md
+  - package/docs/github-action-report.md
+  - package/docs/harness-guide.md
+  - package/docs/how-it-works.md
+  - package/docs/integrations.md
+  - package/docs/interleavings.md
+  - package/docs/jepsen-analogy.md
+  - package/docs/mongodb.md
+  - package/docs/package-migration.md
+  - package/docs/prefect.md
+  - package/docs/pytest-plugin.md
+  - package/docs/recovery-edge-cases.md
+  - package/docs/selection-completeness.md
+  - package/docs/source-policies.md
+  - package/docs/what-a-green-result-means.md
+  - CONTRIBUTING.md
+  - RELEASING.md
+nav:
+- Home: index.md
+- Getting started:
+  - Quickstart: package/docs/adopting.md
+  - How the proofs work: package/docs/how-it-works.md
+  - Harness guide: package/docs/harness-guide.md
+  - Coming from Jepsen: package/docs/jepsen-analogy.md
+- Writing conformance tests:
+  - pytest plugin: package/docs/pytest-plugin.md
+  - Completion and duplicate delivery: package/docs/completion.md
+  - Interleavings and replay: package/docs/interleavings.md
+  - Recovery selection completeness: package/docs/selection-completeness.md
+  - Recovery edge cases: package/docs/recovery-edge-cases.md
+  - Find every handoff: package/docs/coverage.md
+  - Application source policies: package/docs/source-policies.md
+- Understanding results:
+  - Publish a PR evidence report: package/docs/github-action-report.md
+  - What a green result means: package/docs/what-a-green-result-means.md
+  - Avoid false greens: package/docs/false-greens.md
+  - Track known test debt: package/docs/debt-baseline.md
+- Integrations:
+  - Framework overview: package/docs/integrations.md
+  - aiokafka: package/docs/aiokafka.md
+  - MongoDB: package/docs/mongodb.md
+  - Prefect: package/docs/prefect.md
+  - Choose an application example: docs/adopter-capabilities.md
+- Related tools and CI:
+  - Related tools: ecosystem.md
+  - CI toolkit: docs/ci-toolkit.md
+  - This project's CI: docs/ci.md
+- Contributing and reference:
+  - Architecture: package/docs/architecture.md
+  - Package migration: package/docs/package-migration.md
+  - Development setup: CONTRIBUTING.md
+  - Releasing: RELEASING.md
+  - Documentation publishing: publishing.md

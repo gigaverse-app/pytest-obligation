@@ -46,14 +46,14 @@ procrastinate = ["procrastinate>=3.0"]
 dbos = ["dbos>=2.0"]
 redis = ["redis>=5.0", "time-machine>=2.10"]
 rq = ["rq>=2.6", "redis>=5.0", "time-machine>=2.10"]
-# The wire adapter binds PyMongo's 4.x connection API; 4.18 replaced its bulk-write boundary.
-mongodb = ["pymongo>=4.9,<4.18", "motor>=3.7,<4"]
+# The private wire boundaries are version-gated at PyMongo 4.18.
+mongodb = ["pymongo>=4.9,<4.19", "motor>=3.7,<4"]
 prefect = ["prefect>=3.7,<3.8"]
 aiokafka = ["aiokafka>=0.12,<0.15"]
 
 [project.urls]
 Homepage = "https://github.com/gigaverse-app/pytest-obligation"
-Documentation = "https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/pytest-plugin.md"
+Documentation = "https://pytest-obligation.readthedocs.io/en/latest/"
 Source = "https://github.com/gigaverse-app/pytest-obligation"
 Changelog = "https://github.com/gigaverse-app/pytest-obligation/blob/main/CHANGELOG.md"
 Issues = "https://github.com/gigaverse-app/pytest-obligation/issues"
