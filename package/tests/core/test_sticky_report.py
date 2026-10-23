@@ -13,7 +13,7 @@ from pytest_obligation.profiles.coverage import Assessment, CaseEvidence, Profil
 from pytest_obligation.profiles.failures import failure_evidence
 from pytest_obligation.profiles.reporting import merge_reports
 from pytest_obligation.recovery import RecoveryCandidateEvidence, RecoveryDiagnostics
-from pytest_obligation.reporting.markdown import MAX_BODY, render
+from pytest_obligation.reporting.markdown import MAX_BODY, counts, render
 from tests.core.test_profile_summary import contract_project  # noqa: F401 - explicit shared pytester fixture
 
 
@@ -58,9 +58,19 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
     result = contract_project.runpytest_subprocess(*args)
     reports = TypeAdapter(dict[str, SuiteCoverage]).validate_json(path.read_bytes())
     body = render(reports)
+    suite = next(iter(reports.values()))
+    assert suite.source is not None and suite.source.kind == "contract setup"
+    assert suite.source.path.endswith(".py")
+    assert suite.session_seconds is not None and suite.session_seconds > 0
+    assert suite.exploration == {}
+    executed = [c for group in suite.case_groups() for c in group.values() if c.outcomes]
+    assert executed and all(c.durations for c in executed)
+    assert "summed check time" in body
     if mode == "complete":
         assert result.ret == pytest.ExitCode.OK
-        assert "✅ All claims" in body
+        assert suite.verified
+        assert counts(suite)["passed"] > 0
+        assert not any(counts(suite)[k] for k in ("failed", "rejected", "blocked", "gaps"))
     else:
         assert "✅ All claims" not in body
         assert not next(iter(reports.values())).verified
@@ -92,7 +102,7 @@ class TestOrders: pass
     assert result.ret == pytest.ExitCode.OK
     body = render(TypeAdapter(dict[str, SuiteCoverage]).validate_json(path.read_bytes()))
     assert "Known gap declared" in body
-    assert "reason from application: Recovery worker" in body
+    assert "Application reason: Recovery worker" in body
     assert "✅ All claims" not in body
     assert "🔴 1 checks failed" not in body
 
@@ -132,7 +142,7 @@ def test_failure_state_roundtrips_and_survives_worker_merge() -> None:
     }
     merge_reports(merged, restored)
     body = render(merged)
-    assert "🔴 1 checks failed" in body
+    assert 'alt="1 failures"' in body
     assert "resumed" in body and "**7**" in body and "order-17" in body and "status=pending" in body
     assert not merged["tests.Orders"].verified
 
@@ -188,7 +198,7 @@ def test_comment_limit_preserves_verdict_and_explicit_omission() -> None:
     }
     body = render(reports)
     assert len(body) <= MAX_BODY
-    assert "Some guarantees lack passing evidence" in body
+    assert "Coverage gaps" in body
     assert "omitted" in body and body.count("<details>") == body.count("</details>")
 
 
@@ -203,7 +213,7 @@ def test_report_accepts_prior_version_without_optional_failure_metadata() -> Non
         }
     }
     body = render(TypeAdapter(dict[str, SuiteCoverage]).validate_json(json.dumps(data)))
-    assert "🔴 1 checks failed" in body
+    assert 'alt="1 failures"' in body
 
 
 def test_failed_test_step_remains_red_when_no_contract_failure_was_recorded() -> None:

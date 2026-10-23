@@ -8,6 +8,50 @@ not change your validation policy.
 The banner and compact headline follow CI-esta's sticky layout. Expand an application
 to see its guarantees, missing evidence, failed checks and recovery state.
 
+The header counts applications and passing checks on the left, with failures,
+blocked checks, coverage gaps and rejected bindings after a divider. Zero issues
+are green. Missing evidence produces an unavailable message instead of green zeroes.
+Each application has an aligned compact row with its counts visible while closed.
+One to three applications appear directly; larger reports use an outer disclosure.
+Applications sort by failed assertions, rejected bindings, blocked execution, then
+coverage gaps, with the largest count in the first applicable category first.
+
+GitHub strips custom CSS. The reporter uses fixed-width Shields count images,
+monospace application names, native tables and disclosures. Alt text retains the
+numbers if images cannot load. The images send only category names and counts to
+Shields; application names, reasons and diagnostics remain in GitHub Markdown.
+
+## What the counts measure
+
+Passing, failed, blocked and rejected counts partition unique expected checks.
+Related guarantees referencing the same check do not multiply its count. A setup
+or cleanup failure is blocked execution; a harness binding rejection takes
+precedence over that classification. Expected failures and unexpected passes
+remain blocked evidence with their explicit outcome in the details.
+
+Coverage gaps count guarantees, not tests. Each guarantee with a missing
+assessment, missing scenario family, no expected checks, declared gap or declined
+claim counts once. A failed or filtered check alone does not also add a coverage
+gap. Not-applicable declarations are listed separately with application reasons.
+
+Application details include the contract setup assignment when discoverable,
+otherwise the suite definition. Links point to the workflow's tested commit,
+including the merge commit when that is what checkout tested. Factories and
+imported contracts are not traced speculatively to another definition.
+
+New reports record whole pytest-session elapsed time and summed setup/call/cleanup
+durations. Per-application durations include retries and parallel work; they are
+not elapsed latency and do not measure unrelated tests. Older JSON explicitly
+shows missing timing, source and Hypothesis evidence.
+
+The Hypothesis disclosure reports optional generated schedule-exploration cases
+and their actual outcomes. Disabled cases appear as disabled and do not inflate
+blocked-check counts. Selected exploration cases contribute to the same observed
+check counts as other tests. These are scenario-check counts, not example counts;
+shrinking statistics and replay histories are not captured here. Failing histories
+remain in the pytest log. Hypothesis use inside arbitrary application callbacks
+is outside this view. Existing fixed-history proof rules remain unchanged.
+
 ## Start with your existing test job
 
 Your project needs pytest-obligation with profile reporting (the current source

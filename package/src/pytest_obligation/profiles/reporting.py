@@ -1,6 +1,9 @@
 """Optional pytest view of A–J coverage, for both native and registered work-table suites."""
 
+import os
 from collections.abc import Generator
+from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import pytest
@@ -9,10 +12,17 @@ from .coverage import Assessment, CaseEvidence, ProfileCoverage, SuiteCoverage
 
 _REPORT = pytest.StashKey[dict[str, SuiteCoverage]]()
 _ITEMS = pytest.StashKey[dict[str, tuple[str, str]]]()
+_EXPLORATION_ITEMS = pytest.StashKey[dict[str, tuple[str, str]]]()
+_START = pytest.StashKey[float]()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    session.config.stash[_START] = perf_counter()
 
 
 def _record(config: pytest.Config, suite: str, case_id: str, *, selected: bool = False) -> None:
-    for cases in config.stash[_REPORT][suite].case_groups():
+    report = config.stash[_REPORT][suite]
+    for cases in (*report.case_groups(), report.exploration or {}):
         if case_id in cases:
             evidence = cases[case_id]
             evidence.collected = True
@@ -44,6 +54,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
     reports: dict[str, SuiteCoverage] = {}
     names: dict[str, tuple[str, str]] = {}
+    exploration_names: dict[str, tuple[str, str]] = {}
     for item in items:
         if not isinstance(item, pytest.Function) or item.cls is None:
             continue
@@ -79,19 +90,36 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                     continue
                 for profile in (case.profile, *case.related_profiles):
                     profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family)
-            reports[suite] = SuiteCoverage(name=contract.name, profiles=profiles, additional_cases=additional_cases)
+            from .source import contract_source
+
+            reports[suite] = SuiteCoverage(
+                name=contract.name,
+                profiles=profiles,
+                additional_cases=additional_cases,
+                source=contract_source(item.cls, contract, Path(os.environ.get("GITHUB_WORKSPACE", config.rootpath))),
+                exploration={},
+            )
+        if item.get_closest_marker("due_work_exploration") and hasattr(item, "callspec"):
+            scenario = str(item.callspec.params["interleaving_name"])
+            case_id = f"hypothesis-{scenario}"
+            exploration = reports[suite].exploration
+            assert exploration is not None
+            exploration[case_id] = CaseEvidence(family=scenario)
+            exploration_names[item.nodeid] = (suite, case_id)
         if hasattr(item, "callspec") and "case" in item.callspec.params:
             case = item.callspec.params["case"]
             assert isinstance(case, ContractCase), "generated profile test must carry the canonical case"
             names[item.nodeid] = (suite, case.id)
     config.stash[_REPORT] = reports
     config.stash[_ITEMS] = names
-    for suite, case_id in names.values():
+    config.stash[_EXPLORATION_ITEMS] = exploration_names
+    routes = {**names, **exploration_names}
+    for suite, case_id in routes.values():
         _record(config, suite, case_id)
     yield
     for item in items:
-        if item.nodeid in names:
-            _record(config, *names[item.nodeid], selected=True)
+        if item.nodeid in routes:
+            _record(config, *routes[item.nodeid], selected=True)
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
@@ -100,16 +128,20 @@ def pytest_runtest_makereport(
 ) -> Generator[None, pytest.TestReport, pytest.TestReport]:
     """Read the final normalized outcome, including teardown and strict known failures."""
     report = yield
-    route = item.config.stash.get(_ITEMS, {}).get(item.nodeid)
+    route = item.config.stash.get(_ITEMS, {}).get(item.nodeid) or item.config.stash.get(_EXPLORATION_ITEMS, {}).get(
+        item.nodeid
+    )
     if route is None:
         return report
     suite, case_id = route
     outcome = report.outcome
     if getattr(report, "wasxfail", None) is not None:
         outcome = "xpass" if report.passed else "xfail"
-    for cases in item.config.stash[_REPORT][suite].case_groups():
+    suite_report = item.config.stash[_REPORT][suite]
+    for cases in (*suite_report.case_groups(), suite_report.exploration or {}):
         if case_id in cases:
             cases[case_id].outcomes.setdefault(report.when, []).append(outcome)
+            cases[case_id].durations.append(report.duration)
             if report.failed and call.excinfo is not None:
                 from .failures import failure_evidence
 
@@ -124,6 +156,8 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
             target[suite] = report
             continue
         current = target[suite]
+        assert current.source == report.source, f"{suite}: workers disagree on source location"
+        assert (current.exploration is None) == (report.exploration is None)
         assert current.name == report.name and current.profiles.keys() == report.profiles.keys()
         for letter, profile in report.profiles.items():
             existing = current.profiles[letter]
@@ -133,7 +167,11 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
                 profile.families,
                 profile.cases.keys(),
             ), f"{suite}/{letter}: workers disagree on expected profile coverage"
-        for existing_cases, incoming_cases in zip(current.case_groups(), report.case_groups(), strict=True):
+        for existing_cases, incoming_cases in zip(
+            (*current.case_groups(), current.exploration or {}),
+            (*report.case_groups(), report.exploration or {}),
+            strict=True,
+        ):
             assert existing_cases.keys() == incoming_cases.keys(), f"{suite}: workers disagree on expected checks"
             for case_id, case in incoming_cases.items():
                 old = existing_cases[case_id]
@@ -143,6 +181,7 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
                 for phase, outcomes in case.outcomes.items():
                     old.outcomes.setdefault(phase, []).extend(outcomes)
                 old.failures.extend(case.failures)
+                old.durations.extend(case.durations)
 
 
 @pytest.hookimpl(optionalhook=True)
@@ -162,6 +201,9 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     from pydantic import TypeAdapter
 
     reports = session.config.stash.get(_REPORT, {})
+    started = session.config.stash.get(_START, None)
+    for report in reports.values():
+        report.session_seconds = perf_counter() - started if started is not None else None
     # Computed verdicts are regenerated after xdist merging, never trusted as input.
     serialized = {name: report.model_dump(round_trip=True) for name, report in reports.items()}
     worker_output = getattr(session.config, "workeroutput", None)

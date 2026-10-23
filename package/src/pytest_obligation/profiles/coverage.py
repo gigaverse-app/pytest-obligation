@@ -6,7 +6,7 @@ metadata and pytest outcomes; it never executes bindings or serializes domain da
 """
 
 from collections.abc import Iterator, Mapping
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, computed_field, model_validator
 
@@ -15,6 +15,7 @@ from pytest_obligation.models import HarnessModel, MutableHarnessModel
 from .failures import FailureEvidence
 
 AssessmentState = Literal["claimed", "declined", "not applicable", "known gap", "not assessed"]
+Seconds = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
 class Assessment(HarnessModel):
@@ -51,6 +52,7 @@ class CaseEvidence(_ExecutedEvidence):
     failures: list[FailureEvidence] = Field(
         default_factory=list, description="Observed failures; diagnostic metadata is not proof."
     )
+    durations: list[Seconds] = Field(default_factory=list, description="Observed phase seconds, including retries.")
 
     @computed_field
     @property
@@ -90,6 +92,12 @@ class ProfileCoverage(_ExecutedEvidence):
         )
 
 
+class SourceLocation(HarnessModel):
+    path: str
+    line: int = Field(ge=1)
+    kind: Literal["contract setup", "suite"] = "suite"
+
+
 class SuiteCoverage(_ExecutedEvidence):
     """Coverage scoped to a collected suite; absent/unimported suites are never certified."""
 
@@ -97,6 +105,13 @@ class SuiteCoverage(_ExecutedEvidence):
     profiles: dict[str, ProfileCoverage]
     additional_cases: dict[str, CaseEvidence] = Field(
         default_factory=dict, description="Extra proofs and assessment checks outside profile behavioral cases."
+    )
+    source: SourceLocation | None = None
+    session_seconds: Seconds | None = Field(
+        default=None, description="Whole pytest session wall time; not per-suite latency."
+    )
+    exploration: dict[str, CaseEvidence] | None = Field(
+        default=None, description="Optional generated Hypothesis scenario checks; None means not reported."
     )
 
     def case_groups(self) -> Iterator[dict[str, CaseEvidence]]:

@@ -37,12 +37,14 @@ runs:
         REPORT_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
         TEST_OUTCOME: ${{ inputs.test-outcome }}
         REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
+        REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
       run: |
         output="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")/report.md"
         uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
-          --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF"
+          --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
+          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
     - name: Preserve full evidence and rendered report
       uses: actions/upload-artifact@v7
