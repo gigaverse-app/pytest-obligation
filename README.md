@@ -1,19 +1,17 @@
-# pytest-obligation
-
-[![Documentation](https://readthedocs.org/projects/pytest-obligation/badge/?version=latest)](https://pytest-obligation.readthedocs.io/en/latest/)
-
-[Read the documentation](https://pytest-obligation.readthedocs.io/en/latest/) · [Related tools](https://pytest-obligation.readthedocs.io/en/latest/ecosystem/)
-
 <img src="plugins/pytest-obligation/assets/icon.svg" alt="pytest-obligation logo" width="96">
-
-[PR evidence report: what passed, what is missing, what to fix](package/docs/github-action-report.md)
-
+# pytest-obligation
 [![CI](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pytest-obligation)](https://pypi.org/project/pytest-obligation/)
 [![Python](https://img.shields.io/pypi/pyversions/pytest-obligation)](https://pypi.org/project/pytest-obligation/)
 [![pytest plugin](https://img.shields.io/badge/pytest-plugin-0A9EDC?logo=pytest&logoColor=white)](https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/pytest-plugin.md)
 [![Typed](https://img.shields.io/badge/typing-py.typed-blue)](https://typing.python.org/en/latest/spec/distributing.html)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](package/LICENSE)
+[![Documentation](https://readthedocs.org/projects/pytest-obligation/badge/?version=latest)](https://pytest-obligation.readthedocs.io/en/latest/)
+
+[Read the documentation](https://pytest-obligation.readthedocs.io/en/latest/) · [Related tools](https://pytest-obligation.readthedocs.io/en/latest/ecosystem/)
+
+[PR evidence report: what passed, what is missing, what to fix](package/docs/github-action-report.md)
+
 
 ## Don’t lose orders, money, receipts, or work when the happy path breaks
 
