@@ -47,9 +47,19 @@ precedence over that classification. Expected failures and unexpected passes
 remain blocked evidence with their explicit outcome in the details.
 
 Coverage gaps count guarantees, not tests. Each guarantee with a missing
-assessment, missing scenario family, no expected checks, declared gap or declined
-claim counts once. A failed or filtered check alone does not also add a coverage
-gap. Not-applicable declarations are listed separately with application reasons.
+assessment, missing scenario family, no expected checks or declared gap counts
+once. A failed or filtered check alone does not also add a coverage gap.
+Declined and not-applicable guarantees are deliberate exclusions, listed
+separately with their application reasons; they do not establish passing coverage.
+
+Application detail separates known defects, unassessed guarantees/scenarios and
+deliberate exclusions. Generated strict expected failures retain their canonical
+debt classification and current declaration reason. When a debt baseline is
+configured, its matching case/kind supplies the ticket. Use a full HTTP(S) ticket
+URL in the baseline for a clickable link; issue keys remain text because the
+library does not guess your tracker. Shards must agree on this metadata.
+Older reports remain readable, but an unclassified expected failure is never
+inferred to be a known defect. Update the test-side package to emit the metadata.
 
 Application details include the contract setup assignment when discoverable,
 otherwise the suite definition. Links point to the workflow's tested commit,

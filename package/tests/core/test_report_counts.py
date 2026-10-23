@@ -35,7 +35,7 @@ def test_counts_partition_checks_without_counting_shared_profile_cases_twice() -
         },
         additional_cases={"rejected": rejected, "failed": failed, "missing": CaseEvidence(family="example")},
     )
-    assert counts(suite) == {"passed": 1, "failed": 1, "blocked": 1, "gaps": 1, "rejected": 1}
+    assert counts(suite) == {"passed": 1, "failed": 1, "blocked": 1, "gaps": 0, "rejected": 1}
 
 
 def test_all_passed_cases_cannot_hide_unassessed_scenario_family() -> None:
