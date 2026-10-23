@@ -21,7 +21,7 @@ function fixture(t) {
     head:{sha:'abc', repo:{full_name:'owner/app'}}}}};
   const core = {info:x => notices.push(x), warning:x => notices.push(x)};
   const env = {OBLIGATION_MARKDOWN:file, OBLIGATION_STICKY_KEY:'python', GITHUB_RUN_ID:'100', GITHUB_RUN_ATTEMPT:'1'};
-  return {calls, comments, notices, state, context, env, run:() => publish({github, context, core}, env)};
+  return {calls, comments, notices, state, context, env, github, run:() => publish({github, context, core}, env)};
 }
 
 test('same key updates one bot-owned comment and carries source identity', async t => {
@@ -72,4 +72,14 @@ test('broken bot snapshot is repairable', async t => {
   const f = fixture(t); await f.run();
   f.comments.push({id:42, body:f.calls[0][1].body.replace(/snapshot:.*? -->/, 'snapshot:broken -->'), user:{login:'github-actions[bot]', type:'Bot'}});
   await f.run(); assert.equal(f.calls[1][0], 'update');
+});
+
+test('fixed graphics publish with comment permission and never touch Git storage', async t => {
+  const f = fixture(t);
+  const body = '<picture><img src="https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/main/docs/assets/report-glyphs/good-4-light.svg" alt="42 passed"></picture>';
+  fs.writeFileSync(f.env.OBLIGATION_MARKDOWN, body);
+  f.github.rest.git = new Proxy({}, {get() {assert.fail('report attempted to access Git storage');}});
+  await f.run();
+  assert.ok(f.calls[0][1].body.startsWith(body));
+  assert.ok(f.calls[0][1].body.includes('"head":"abc","run":100,"attempt":1'));
 });

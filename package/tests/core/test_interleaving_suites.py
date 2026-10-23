@@ -3,9 +3,12 @@
 import importlib.util
 
 import pytest
+from pydantic import TypeAdapter
 
 from pytest_obligation.interleavings import InFlightConvergence
 from pytest_obligation.interleavings.testing.reference import reference
+from pytest_obligation.profiles.coverage import SuiteCoverage
+from pytest_obligation.reporting.markdown import render
 
 DECLARATION = """
 from pytest_obligation import Claim, ObligationContract, NotApplicable, Profile, due_work_contract_suite
@@ -27,7 +30,10 @@ class TestGenerated:
 
 
 @pytest.mark.parametrize("mode", ["off", "smoke"])
-def test_generated_histories_and_optional_search_are_real_due_work_cases(pytester: pytest.Pytester, mode: str) -> None:
+@pytest.mark.parametrize("workers", [0, 2])
+def test_generated_histories_and_optional_search_are_real_due_work_cases(
+    pytester: pytest.Pytester, mode: str, workers: int
+) -> None:
     if mode == "smoke" and importlib.util.find_spec("hypothesis") is None:
         pytest.skip("optional exploration extra is not installed")
     pytester.makepyfile(DECLARATION)
@@ -39,10 +45,26 @@ def test_generated_histories_and_optional_search_are_real_due_work_cases(pyteste
         independent=True,
         no_transport_because="This reference tests provider completion without a broker.",
     )
-    result = pytester.runpytest_subprocess("-q", "-m", "due_work", f"--due-work-explore={mode}")
-    result.assert_outcomes(
-        passed=9 + len(scenario.histories()) + (mode == "smoke"), xfailed=3, deselected=(mode == "off")
+    report = pytester.path / "profiles.json"
+    result = pytester.runpytest_subprocess(
+        "-q", "-n", str(workers), "-m", "due_work", f"--due-work-explore={mode}", f"--due-work-profile-report={report}"
     )
+    result.assert_outcomes(
+        passed=9 + len(scenario.histories()) + (mode == "smoke"), xfailed=3, deselected=(mode == "off" and workers == 0)
+    )
+    suites = TypeAdapter(dict[str, SuiteCoverage]).validate_json(report.read_bytes())
+    suite = next(iter(suites.values()))
+    assert suite.exploration is not None
+    exploration = suite.exploration["hypothesis-generated"]
+    assert exploration.collected
+    assert exploration.selected == (mode == "smoke")
+    assert exploration.passed == (mode == "smoke")
+    if mode == "smoke":
+        assert len(exploration.durations) == 3
+        assert "1/1 scenario checks passed" in render(suites)
+    else:
+        assert not exploration.outcomes
+        assert "Hypothesis · Not run" in render(suites)
 
 
 def test_explicit_search_without_the_optional_dependency_is_actionable(pytester: pytest.Pytester) -> None:

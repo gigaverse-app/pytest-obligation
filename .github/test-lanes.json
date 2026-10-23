@@ -36,7 +36,8 @@
         "package/shims/**",
         "package/tests_support/**",
         "package/src/**",
-        "scripts/check_core_is_framework_free.py"
+        "scripts/check_core_is_framework_free.py",
+        "docs/assets/report-glyphs/**"
       ]
     },
     "minimum_models": {
