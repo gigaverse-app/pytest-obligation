@@ -360,7 +360,7 @@ jobs:
       PGPORT: "5432"
     steps:
       - name: Match PostgreSQL clients to the service
-        uses: gigaverse-app/ci-esta/.github/actions/postgres-client@c6642e05f754f0133336d73340e1306892fde9f4
+        uses: gigaverse-app/ci-esta/.github/actions/postgres-client@v0.1
         with:
           image: postgres:16
       - uses: actions/checkout@v7
@@ -471,7 +471,7 @@ jobs:
       SALEOR_DATABASE_DUMP: ${{ github.workspace }}/demos/.ci-cache/saleor.dump
     steps:
       - name: Match PostgreSQL clients to the service
-        uses: gigaverse-app/ci-esta/.github/actions/postgres-client@c6642e05f754f0133336d73340e1306892fde9f4
+        uses: gigaverse-app/ci-esta/.github/actions/postgres-client@v0.1
         with:
           image: postgres:16
       - uses: actions/checkout@v7
