@@ -389,7 +389,7 @@ jobs:
         run: uv run --no-sync pytest demos/dbos_transactional_outbox -p no:django -rxX --durations=15 --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-dbos.json --junitxml=adopters-dbos.xml
       # Migrating Wagtail's test database is most of its run, and depends only on the pinned packages
       # (uv.lock) and the demo's settings: restored from the cached dump when the key matches.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: demos/.ci-cache/wagtail_tasks.dump
           key: wagtail-test-db-pg16-client16-${{ hashFiles('uv.lock', 'demos/wagtail_tasks/settings.py', 'demos/cached_database.py') }}
@@ -497,7 +497,7 @@ jobs:
         run: demos/throwaway_postgres.sh
       # Saleor's migrations depend only on its pin (in fetch_upstream.py): their result is cached as a
       # dump, restored in seconds instead of migrating for two minutes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ env.SALEOR_DATABASE_DUMP }}
           key: saleor-test-db-pg16-client16-${{ hashFiles('demos/fetch_upstream.py', 'demos/saleor_checkout/prepare_db.py', 'demos/cached_database.py') }}
