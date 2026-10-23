@@ -7,6 +7,7 @@ from urllib.parse import quote, urlparse
 
 from pytest_obligation.profiles.coverage import ProfileCoverage, SuiteCoverage
 
+from .decisions import decision_sections
 from .evidence import (
     GUARANTEES,
     PROJECT,
@@ -35,9 +36,9 @@ LABELS = {
 
 
 def has_gap(profile: ProfileCoverage) -> bool:
-    return profile.assessment.state in ("declined", "known gap", "not assessed") or (
+    return profile.assessment.state in ("known gap", "not assessed") or (
         profile.assessment.state == "claimed"
-        and (not profile.cases or any(f.state not in ("claimed", "not applicable") for f in profile.families.values()))
+        and (not profile.cases or any(f.state in ("known gap", "not assessed") for f in profile.families.values()))
     )
 
 
@@ -182,7 +183,12 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, g
             {case_status(c) for c in cases.values()} - {"Passed", "Check failed", "Test binding rejected"},
         ),
     ):
-        affected = [(name, c) for name, c in cases.items() if case_status(c) in states]
+        affected = [
+            (name, c)
+            for name, c in cases.items()
+            if case_status(c) in states
+            and not (title == "Blocked checks" and c.debt and case_status(c) == "Expected failure; no passing proof")
+        ]
         if not affected:
             continue
         lines += [f"**{len(affected)} {title.lower()}**", ""]
@@ -195,7 +201,10 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, g
                 "",
             ]
         elif title == "Blocked checks":
-            lines += ["Run the missing checks, or repair their setup/cleanup.", ""]
+            lines += [
+                "Run the missing checks or repair setup/cleanup. For expected failures whose classification was not reported, update the report producer to include declaration metadata.",
+                "",
+            ]
         lines += ["<details>", f"<summary><strong>{len(affected)} {title.lower()} · diagnostics</strong></summary>", ""]
         for name, case in affected[:10]:
             lines += [f"- {code(name)}: **{case_status(case)}**", *_failure_details(case)]
@@ -205,24 +214,7 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, g
         if len(affected) > 10:
             lines += [f"{len(affected) - 10} further checks are retained in the JSON artifact."]
         lines += ["", "</details>", ""]
-    gaps = [(letter, p) for letter, p in sorted(suite.profiles.items()) if has_gap(p)]
-    if gaps:
-        lines += [f"**Coverage gaps · {len(gaps)} guarantees need review**", ""]
-        for letter, profile in gaps:
-            lines += [
-                f"**{cell(GUARANTEES.get(letter, profile.title))}** · {assessment_status(profile.assessment)}",
-                "",
-            ]
-            if profile.assessment.because:
-                lines += [f"Application reason: {cell(profile.assessment.because)}", ""]
-        for recommendation in dict.fromkeys(advice(p) for _, p in gaps):
-            lines += [recommendation, ""]
-        if any(p.families for _, p in gaps):
-            lines += ["<details>", "<summary><strong>Missing scenario details</strong></summary>", ""]
-            for letter, profile in gaps:
-                lines += _profile_detail(letter, profile, gap=True)
-            lines += ["", "</details>"]
-        lines += [""]
+    lines += decision_sections(suite)
     supported = [(letter, p) for letter, p in sorted(suite.profiles.items()) if p.verified]
     excluded = [(letter, p) for letter, p in sorted(suite.profiles.items()) if p.assessment.state == "not applicable"]
     lines += ["---", "", *_hypothesis(suite)]
@@ -295,10 +287,10 @@ def render(
         "- **Failures:** an executed assertion failed. Inspect the behavior and test assumptions.",
         "- **Rejected bindings:** repair the connection to production code; these checks provide no supporting evidence.",
         "- **Blocked checks:** expected checks did not complete successfully, including setup/cleanup errors and expected failures.",
-        "- **Coverage gaps:** guarantees not claimed, not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once.",
+        "- **Coverage gaps:** guarantees not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once. Deliberate exclusions are shown separately.",
         "",
         "Pass/fail/blocked/rejected counts partition unique checks. Gaps count guarantees, not extra tests. "
-        "Not-applicable declarations remain separate. Graphics show zero issues in green; missing reports never show green zeroes.",
+        "Declined and not-applicable declarations remain separate and do not establish passing coverage. Graphics show zero issues in green; missing reports never show green zeroes.",
         "",
         "Elapsed time covers the pytest session. Summed check time includes setup, execution and cleanup; parallel work overlaps.",
         "",

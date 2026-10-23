@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, computed_field, model_validator
 
+from pytest_obligation.debt import DebtEntry
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
 
 from .failures import FailureEvidence
@@ -43,6 +44,7 @@ class CaseEvidence(_ExecutedEvidence):
     """Coverage of one generated case; a pass requires successful setup, call and teardown."""
 
     family: str = Field(description="Binding or history family that generated this case.")
+    debt: DebtEntry | None = Field(default=None, description="Declared expected failure, with its baseline ticket.")
     collected: bool = Field(default=False, description="Pytest collected this expected case before selection filters.")
     selected: bool = Field(default=False, description="The case survived pytest selection filters.")
     outcomes: dict[str, list[str]] = Field(
