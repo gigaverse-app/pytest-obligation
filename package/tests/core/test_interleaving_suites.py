@@ -7,8 +7,6 @@ import pytest
 from pytest_obligation.interleavings import InFlightConvergence
 from pytest_obligation.interleavings.testing.reference import reference
 
-pytest_plugins = ["pytester"]
-
 DECLARATION = """
 from pytest_obligation import Claim, ObligationContract, NotApplicable, Profile, due_work_contract_suite
 from pytest_obligation.interleavings import InFlightConvergence
