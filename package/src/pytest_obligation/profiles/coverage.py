@@ -12,6 +12,8 @@ from pydantic import Field, computed_field, model_validator
 
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
 
+from .failures import FailureEvidence
+
 AssessmentState = Literal["claimed", "declined", "not applicable", "known gap", "not assessed"]
 
 
@@ -45,6 +47,9 @@ class CaseEvidence(_ExecutedEvidence):
     outcomes: dict[str, list[str]] = Field(
         default_factory=dict,
         description="All observed outcomes by pytest phase, including retries and distributed runs.",
+    )
+    failures: list[FailureEvidence] = Field(
+        default_factory=list, description="Observed failures; diagnostic metadata is not proof."
     )
 
     @computed_field
