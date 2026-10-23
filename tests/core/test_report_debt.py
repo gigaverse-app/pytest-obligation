@@ -95,3 +95,38 @@ def test_shards_must_agree_on_debt_metadata() -> None:
     incoming.profiles["E"].cases["late"].debt = None
     with pytest.raises(AssertionError, match="debt"):
         merge_reports({"suite": suite}, {"suite": incoming})
+
+
+def test_identical_exclusions_are_not_repeated_but_distinct_family_reasons_survive() -> None:
+    suite = specimen()
+    reason = "No independent receipt application API."
+    other = "The legacy callback still needs separate review."
+    profile = suite.profiles["E"]
+    profile.assessment = Assessment(state="declined", because=reason)
+    profile.families = {
+        "snapshot": profile.assessment,
+        "receipt": Assessment(state="not applicable", because=other),
+    }
+    body = render({"suite": suite})
+    assert body.count(reason) == 1
+    assert body.count(other) == 1
+    assert body.count("No retention process exists.") == 1
+
+
+def test_supported_guarantee_keeps_family_exclusion_in_one_decision_section() -> None:
+    suite = specimen()
+    profile = suite.profiles["E"]
+    profile.cases = {
+        "ok": CaseEvidence(
+            family="replay",
+            collected=True,
+            selected=True,
+            outcomes={phase: ["passed"] for phase in ("setup", "call", "teardown")},
+        )
+    }
+    reason = "This application has no snapshot API."
+    profile.families = {"snapshot": Assessment(state="not applicable", because=reason)}
+    assert profile.verified
+    body = render({"suite": suite})
+    assert body.count(reason) == 1
+    assert "1 supported guarantees" in body

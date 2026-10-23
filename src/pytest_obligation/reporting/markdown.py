@@ -12,9 +12,7 @@ from .evidence import (
     GUARANTEES,
     PROJECT,
     _failure_details,
-    advice,
     all_cases,
-    assessment_status,
     case_status,
     cell,
     code,
@@ -145,27 +143,15 @@ def _hypothesis(suite: SuiteCoverage) -> list[str]:
     return ["<details>", f"<summary><strong>Hypothesis · {summary}</strong></summary>", "", *lines, "", "</details>"]
 
 
-def _profile_detail(letter: str, profile: ProfileCoverage, *, gap: bool = False) -> list[str]:
-    label = GUARANTEES.get(letter, profile.title)
-    result = [f"- **{cell(label)}**" + (f" · {assessment_status(profile.assessment)}" if gap else "")]
-    if profile.assessment.because:
-        result += [f"  - Application reason: {cell(profile.assessment.because)}"]
-    if gap:
-        result += [f"  - {advice(profile)}"]
-    for family, assessment in profile.families.items():
-        if assessment.state != "claimed":
-            result += [
-                f"  - {code(family)}: {assessment_status(assessment)}. "
-                f"Application reason: {cell(assessment.because or 'None supplied.')}"
-            ]
-    return result
-
-
-def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, glyph_base: str) -> str:
+def _suite(
+    key: str, suite: SuiteCoverage, repository_url: str, revision: str, glyph_base: str, *, compact: bool = False
+) -> str:
     values = counts(suite)
     description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
-    if glyph_base:
+    if compact:
+        summary = f"<strong>{cell(suite.name, 100)}</strong> · evidence and decisions"
+    elif glyph_base:
         summary = application_html(suite.name, values, glyph_base)
     lines = [
         "<details>",
@@ -176,7 +162,7 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, g
         f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>",
         "",
     ]
-    if glyph_base and application_name(suite.name)[1]:
+    if not compact and glyph_base and application_name(suite.name)[1]:
         lines += [f"Application: {code(suite.name)}", ""]
     cases = all_cases(suite)
     for title, states in (
@@ -220,24 +206,72 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str, g
         lines += ["", "</details>", ""]
     lines += decision_sections(suite)
     supported = [(letter, p) for letter, p in sorted(suite.profiles.items()) if p.verified]
-    excluded = [(letter, p) for letter, p in sorted(suite.profiles.items()) if p.assessment.state == "not applicable"]
     lines += ["---", "", *_hypothesis(suite)]
     lines += [
         "",
         "---",
         "",
         "<details>",
-        f"<summary><strong>{len(supported)} supported guarantees · {len(excluded)} not applicable</strong></summary>",
+        f"<summary><strong>🟢 {len(supported)} supported guarantees</strong></summary>",
         "",
     ]
     for letter, profile in supported:
-        lines += _profile_detail(letter, profile)
-    if excluded:
-        lines += ["", "**Not applicable, as declared by the application**", ""]
-        for letter, profile in excluded:
-            lines += _profile_detail(letter, profile)
+        lines += [f"- **{cell(GUARANTEES.get(letter, profile.title))}**"]
+        if profile.assessment.because:
+            lines += [f"  - Application reason: {cell(profile.assessment.because)}"]
     lines += ["", f"Suite (application code): {code(key)}", "", "</details>", "", "</details>"]
     return "\n".join(lines)
+
+
+def _overview(reports: dict[str, SuiteCoverage]) -> list[str]:
+    """Reserve a compact index before details can consume the comment budget."""
+    headers = [
+        "| Application | Passed | Failed | Blocked | Gaps | Rejected |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    lines = [
+        "### Applications",
+        "",
+        "All collected applications, most actionable first. Expand the evidence below for reasons and tickets.",
+        "",
+        *headers,
+    ]
+    attention = sum(
+        any(counts(suite)[metric] for metric in METRICS if metric != "passed") for suite in reports.values()
+    )
+    folded = False
+    used = 0
+    for index, (_, suite) in enumerate(sorted(reports.items(), key=_priority)):
+        if 0 < attention == index < len(reports):
+            lines += [
+                "",
+                "<details>",
+                f"<summary>{len(reports) - attention} applications · zero failures, blocked checks or gaps</summary>",
+                "",
+                *headers,
+            ]
+            folded = True
+        values = counts(suite)
+        name = " ".join(suite.name.split())
+        name = name if len(name) <= 70 else name[:70] + "…"
+        # Long identifiers must wrap before squeezing the final metric offscreen.
+        # Escape each chunk before adding trusted zero-width break opportunities.
+        cells = ["&#8203;".join(cell(name[start : start + 24]) for start in range(0, len(name), 24))]
+        for metric in METRICS:
+            value = values[metric]
+            # Color is supplementary: the column name and exact count carry
+            # the meaning for screen readers and monochrome views.
+            icon = "🔴 " if metric in ("failed", "rejected") else "🟠 " if metric != "passed" else ""
+            cells.append(f"{icon}**{value}**" if value else "0")
+        row = "| " + " | ".join(cells) + " |"
+        if used + len(row) > MAX_BODY // 3:
+            lines += ["", f"{len(reports) - index} further application rows omitted; see the full JSON artifact."]
+            break
+        lines.append(row)
+        used += len(row)
+    if folded:
+        lines += ["", "</details>"]
+    return [*lines, "", "### Evidence and decisions", ""]
 
 
 def render(
@@ -280,10 +314,10 @@ def render(
             _time(list(reports.values()), compact=True)
         ]
         head += ["<sub>" + " · ".join(timing) + "</sub>", ""]
-    outer = len(reports) > 3
-    if outer:
-        head += ["<details>", f"<summary>Applications · {len(reports)} · most actionable first</summary>", ""]
-    footer = (["", "</details>"] if outer else []) + [
+    compact = len(reports) > 3
+    if compact:
+        head += _overview(reports)
+    footer = [
         "",
         "<details>",
         "<summary><strong>What do these numbers mean?</strong></summary>",
@@ -311,24 +345,14 @@ def render(
     ]
     sections = []
     for key, suite in sorted(reports.items(), key=_priority):
-        section = "---\n\n" + _suite(key, suite, repository_url, revision, glyph_base)
-        if len("\n".join([*head, *sections, section, *footer])) > MAX_BODY:
-            if graphics:
-                # Prefer complete evidence in text over dropping apps to fit image markup.
-                return render(
-                    reports,
-                    run_url=run_url,
-                    source=source,
-                    unavailable=unavailable,
-                    test_outcome=test_outcome,
-                    asset_ref=asset_ref,
-                    repository_url=repository_url,
-                    revision=revision,
-                    graphics=False,
-                )
+        section = _suite(key, suite, repository_url, revision, glyph_base, compact=compact)
+        # Include disclosure separators and the overflow notice in the budget.
+        if len("\n\n".join([*head, *sections, section, *footer])) > MAX_BODY - 300:
             sections.append(
-                "Further contract details omitted to fit GitHub's comment limit. See the full JSON artifact."
+                "Further contract details omitted to fit GitHub's comment limit. "
+                "Application totals remain above; see the full JSON artifact for all reasons and checks."
             )
             break
         sections.append(section)
-    return "\n".join([*head, *sections, "", "---", *footer])
+    # Blank lines end each HTML disclosure before the next Markdown block.
+    return "\n".join(head) + "\n\n" + "\n\n".join(sections) + "\n\n---\n" + "\n".join(footer)
