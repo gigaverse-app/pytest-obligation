@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-pytest_plugins = ["pytester"]
-
 CANONICAL = "pytest_obligation"
 LEGACY = "due_work_harness"
 

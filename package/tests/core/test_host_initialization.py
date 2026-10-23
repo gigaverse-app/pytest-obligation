@@ -2,8 +2,6 @@
 
 import pytest
 
-pytest_plugins = ["pytester"]
-
 
 def test_unrelated_tests_do_not_import_the_configured_application(pytester: pytest.Pytester) -> None:
     pytester.makeini("[pytest]\ndue_work_harness_host = unavailable_application.testing:host\n")
