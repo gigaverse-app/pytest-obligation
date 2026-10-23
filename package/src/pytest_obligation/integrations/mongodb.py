@@ -10,7 +10,12 @@ are refused: there is no acknowledged boundary at which to kill the worker.
 The checkout scope follows Motor into its executor thread. All operations on
 the selected client are fenced after death, including reads and finally-block
 writes. Other clients remain usable by independent provider/observer code.
-This integration supports synchronous PyMongo 4.9+ and Motor 3.7+ via .delegate;
+PyMongo 4.18 moved bulk batches from Connection.write_command/unack_write to
+command_runner.run_bulk_write_command (imported by name into bulk.py and
+client_bulk.py), and read checkouts from MongoClient._checkout to
+_conn_from_server; each boundary is patched where the installed driver has it.
+
+This integration supports synchronous PyMongo 4.9-4.18 and Motor 3.7+ via .delegate;
 native AsyncMongoClient requires a separate async wire adapter. It neither
 freezes server TTLs nor claims MongoDB query-plan or Kafka delivery coverage.
 """
@@ -57,7 +62,9 @@ def _writes(spec: dict[str, Any]) -> bool:
 
 @contextmanager
 def _watching(client: Any, before: Callable[[], None], committed: Callable[[], None]) -> Iterator[None]:
+    import pymongo
     import pytest
+    from pymongo.synchronous import bulk, client_bulk
     from pymongo.synchronous.bulk import _Bulk
     from pymongo.synchronous.mongo_client import MongoClient
     from pymongo.synchronous.pool import Connection
@@ -66,23 +73,24 @@ def _watching(client: Any, before: Callable[[], None], committed: Callable[[], N
         raise ObligationContractDesignError("pass a synchronous PyMongo client, or Motor client.delegate")
     # A separate context per watcher lets the killer and reply breaker compose.
     active: ContextVar[tuple[bool, Any]] = ContextVar("mongodb_checkout", default=(False, None))
-    original_checkout = MongoClient._checkout
     original_command = Connection.command
-    original_write = Connection.write_command
     original_send = Connection.send_message
-    original_unack = Connection.unack_write
     original_bulk_unack = _Bulk.execute_no_results
 
-    @contextmanager
-    def checkout(self: Any, server: Any, session: Any) -> Iterator[Any]:
-        if self is client:
-            before()
-        with original_checkout(self, server, session) as connection:
-            token = active.set((self is client, session))
-            try:
-                yield connection
-            finally:
-                active.reset(token)
+    def fenced(original: Callable[..., AbstractContextManager[Any]]) -> Callable[..., AbstractContextManager[Any]]:
+        # Both checkout entry points take the session as their last argument.
+        @contextmanager
+        def checkout(self: Any, *args: Any) -> Iterator[Any]:
+            if self is client:
+                before()
+            with original(self, *args) as connection:
+                token = active.set((self is client, args[-1]))
+                try:
+                    yield connection
+                finally:
+                    active.reset(token)
+
+        return checkout
 
     def refuse_unacknowledged() -> None:
         if active.get()[0]:
@@ -101,12 +109,12 @@ def _watching(client: Any, before: Callable[[], None], committed: Callable[[], N
             committed()
         return result
 
-    def write_command(self: Any, *args: Any, **kwargs: Any) -> Any:
+    def acknowledged_batch(send: Callable[[], Any]) -> Any:
         watched, session = active.get()
         if watched:
             before()
         in_transaction = session is not None and session.in_transaction
-        result = original_write(self, *args, **kwargs)
+        result = send()
         if watched and not in_transaction:
             committed()
         return result
@@ -116,9 +124,15 @@ def _watching(client: Any, before: Callable[[], None], committed: Callable[[], N
             before()
         return original_send(self, *args, **kwargs)
 
-    def unack_write(self: Any, *args: Any, **kwargs: Any) -> Any:
-        refuse_unacknowledged()
-        return original_unack(self, *args, **kwargs)
+    def bulk_write_command(original: Callable[..., Any]) -> Callable[..., Any]:
+        # PyMongo 4.18+: one function sends acknowledged and unacknowledged batches.
+        def run(*args: Any, **kwargs: Any) -> Any:
+            if kwargs.get("unacknowledged"):
+                refuse_unacknowledged()
+                return original(*args, **kwargs)
+            return acknowledged_batch(lambda: original(*args, **kwargs))
+
+        return run
 
     def bulk_unack(self: Any, *args: Any, **kwargs: Any) -> Any:
         # Ordered w=0 bulks internally use acknowledged commands to stop on errors.
@@ -127,11 +141,27 @@ def _watching(client: Any, before: Callable[[], None], committed: Callable[[], N
         return original_bulk_unack(self, *args, **kwargs)
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(MongoClient, "_checkout", checkout)
+        patch.setattr(MongoClient, "_checkout", fenced(MongoClient._checkout))
         patch.setattr(Connection, "command", command)
-        patch.setattr(Connection, "write_command", write_command)
         patch.setattr(Connection, "send_message", send_message)
-        patch.setattr(Connection, "unack_write", unack_write)
+        if pymongo.version_tuple >= (4, 18):
+            # Reads no longer pass through _checkout; fence them where they check out.
+            patch.setattr(MongoClient, "_conn_from_server", fenced(MongoClient._conn_from_server))
+            for module in (bulk, client_bulk):
+                patch.setattr(module, "run_bulk_write_command", bulk_write_command(module.run_bulk_write_command))
+        else:
+            original_write = Connection.write_command  # type: ignore[attr-defined]  # removed in 4.18
+            original_unack = Connection.unack_write  # type: ignore[attr-defined]  # removed in 4.18
+
+            def write_command(self: Any, *args: Any, **kwargs: Any) -> Any:
+                return acknowledged_batch(lambda: original_write(self, *args, **kwargs))
+
+            def unack_write(self: Any, *args: Any, **kwargs: Any) -> Any:
+                refuse_unacknowledged()
+                return original_unack(self, *args, **kwargs)
+
+            patch.setattr(Connection, "write_command", write_command)
+            patch.setattr(Connection, "unack_write", unack_write)
         patch.setattr(_Bulk, "execute_no_results", bulk_unack)
         yield
 
