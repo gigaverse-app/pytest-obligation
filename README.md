@@ -1,5 +1,9 @@
 # pytest-obligation
 
+[![Documentation](https://readthedocs.org/projects/pytest-obligation/badge/?version=latest)](https://pytest-obligation.readthedocs.io/en/latest/)
+
+[Read the documentation](https://pytest-obligation.readthedocs.io/en/latest/) · [Related tools](https://pytest-obligation.readthedocs.io/en/latest/ecosystem/)
+
 <img src="plugins/pytest-obligation/assets/icon.svg" alt="pytest-obligation logo" width="96">
 
 [![CI](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/ci.yml)
