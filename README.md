@@ -1,4 +1,4 @@
-<img src="plugins/pytest-obligation/assets/icon.svg" alt="pytest-obligation logo" width="96">
+![pytest-obligation: what passed · what is missing · what to fix](https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/main/docs/assets/banner.png)
 
 # pytest-obligation
 
@@ -127,6 +127,9 @@ poetry add --group dev pytest-obligation
 ```
 
 Optional integrations:
+
+For provider simulation, see the dependency-free [Shopify billing simulator](package/docs/shopify.md):
+accepted requests, permanently consumed keys, rejection and delayed meter evidence.
 
 [![Django integration](https://img.shields.io/badge/integration-Django-092E20?logo=django&logoColor=white)](package/docs/integrations.md)
 [![PostgreSQL integration](https://img.shields.io/badge/integration-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](package/docs/integrations.md)
