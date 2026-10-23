@@ -79,6 +79,11 @@ class RoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set(self.config.lanes))
 
+    def test_other_dependency_installers_keep_every_lane(self):
+        for path in ("requirements.txt", "package/requirements-dev.txt", "poetry.lock", "pylock.toml"):
+            with self.subTest(path=path):
+                self.assertEqual(self.selection(path), set(self.config.lanes))
+
     def test_demo_recording_inputs_keep_the_complete_demo_lane(self):
         for path in ("docs/demo.tape", "docs/demo_env.sh"):
             with self.subTest(path=path):
