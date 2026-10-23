@@ -3,7 +3,7 @@
 ## Conventional Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
-for PR titles and commits that land on `main`:
+for commits you create and PR titles (the squash commit that lands on `main`):
 
 ```text
 fix(parser): handle empty input
@@ -115,3 +115,33 @@ from 293 to 159 seconds. The overall gate fell from 506 to 422 seconds; Saleor
 became the critical path. All 1,183 demo/Due test identities and pass/skip
 outcomes matched. See [raw reports, inventories and the isolation tutorial](https://github.com/gigaverse-app/ci-esta/blob/main/docs/benchmarks/2026-10-23-critical-execution.md).
 
+## Shared instructions for Codex and Claude
+
+[AGENTS.md](AGENTS.md) is the canonical repository guidance. Codex reads it
+directly; Claude reads the tracked `CLAUDE.md -> AGENTS.md` symlink. Edit
+`AGENTS.md` once, including commit-policy changes, so both tools receive the
+same instructions.
+
+[dallay/agentsync](https://github.com/dallay/agentsync) manages that link through
+[agentsync.toml](agentsync.toml). After cloning, or to repair a
+missing or stale link, run these commands from the repository root with Node.js
+18+ and npm installed:
+
+```bash
+npx --yes @dallay/agentsync@1.52.3 apply
+npx --yes @dallay/agentsync@1.52.3 status
+```
+
+The CLI version is pinned for reproducible setup. Review and update both commands
+when upgrading AgentSync. The configuration disables managed gitignore changes
+because we intentionally commit the relative link, following AgentSync's
+[committed-destination workflow](https://dallay.github.io/agentsync/guides/gitignore-team-workflows/).
+Ordinary instruction edits propagate immediately through the link.
+
+On native Windows, enable Developer Mode and Git symlink support
+(`git config core.symlinks true`), then run `apply` to repair a checkout that
+materialized the link as plain text. Alternatively, use WSL for a checkout in
+the Linux filesystem. See the
+[Windows setup guide](https://dallay.github.io/agentsync/guides/windows-symlink-setup/).
+If AgentSync backs up an existing `CLAUDE.md`, review and preserve any unique
+guidance in `AGENTS.md`; do not commit the backup as another instruction source.
