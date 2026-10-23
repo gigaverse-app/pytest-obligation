@@ -170,28 +170,76 @@ def test_native_filtered_report_keeps_unselected_proofs_and_missing_families(
     assert not report["verified"]
 
 
-def test_executable_gap_and_decline_probes_are_reported_without_becoming_verified(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("workers", [0, 2])
+def test_executable_gap_and_decline_probes_are_reported_without_becoming_verified(
+    pytester: pytest.Pytester, workers: int
+) -> None:
     import json
 
-    pytester.makepyfile("""
+    source = pytester.makepyfile("""
 from functools import partial
-from pytest_obligation import Adoption, Decline, ObligationContract, KnownGap, NotApplicable, Profile, due_work_contract_suite
+from pytest_obligation import Adoption, Decline, ObligationContract, KnownGap, NotApplicable, NotAssessed, Profile, due_work_contract_suite
 from pytest_obligation.references.in_memory import assert_the_reference_capability_exists, assert_self_test_probe_fires
 contract = ObligationContract(
     name="executed assessment controls", adoption=Adoption.LEGACY,
     profiles={**{p: NotApplicable("Outside this reporting control.") for p in Profile},
         Profile.A: Decline("The alternative behavior has a real probe.", prove=partial(assert_self_test_probe_fires, [])),
+        Profile.G: NotAssessed(because="No gate binding yet."),
         Profile.I: KnownGap("The reference capability is deliberately missing.", detect=assert_the_reference_capability_exists)},
 )
 @due_work_contract_suite(contract)
 class TestAssessmentProbes:
     pass
 """)
+    baseline = pytester.path / "debt.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "suites": [
+                    {
+                        "suite": f"{source.stem}.TestAssessmentProbes",
+                        "debt": [
+                            {
+                                "case": "I-known_gap",
+                                "kind": "known-defect",
+                                "reason": "Old wording in baseline.",
+                                "ticket": "https://linear.app/example/issue/BE-1",
+                            },
+                            {"case": "G-not_assessed", "kind": "binding-debt", "reason": "No gate binding yet."},
+                        ],
+                    }
+                ]
+            }
+        )
+    )
     destination = pytester.path / "profiles.json"
-    result = pytester.runpytest_subprocess("-q", f"--due-work-profile-report={destination}", "--due-work-summary")
+    result = pytester.runpytest_subprocess(
+        "-q",
+        "-n",
+        str(workers),
+        f"--due-work-debt-baseline={baseline}",
+        f"--due-work-profile-report={destination}",
+        "--due-work-summary",
+    )
     assert result.ret == pytest.ExitCode.OK
     report = next(iter(json.loads(destination.read_text()).values()))["profiles"]
     assert report["I"]["cases"]["I-known_gap"]["outcomes"]["call"] == ["xfail"]
+    debt = report["I"]["cases"]["I-known_gap"]["debt"]
+    assert debt == {
+        "case": "I-known_gap",
+        "kind": "known-defect",
+        "ticket": "https://linear.app/example/issue/BE-1",
+        "reason": "The reference capability is deliberately missing.",
+    }
+    from pytest_obligation.reporting.markdown import render
+
+    restored = TypeAdapter(dict[str, SuiteCoverage]).validate_json(destination.read_bytes())
+    suite = next(iter(restored.values()))
+    gate_debt = suite.additional_cases["G-not_assessed"].debt
+    assert gate_debt is not None and gate_debt.kind == "binding-debt"
+    body = render(restored)
+    assert "Known defects" in body and "Unassessed guarantees and scenarios" in body
+    assert "](https://linear.app/example/issue/BE-1)" in body
     assert report["A"]["cases"]["A-declined"]["passed"]
     assert not report["A"]["verified"] and not report["I"]["verified"]
     result.stdout.fnmatch_lines(

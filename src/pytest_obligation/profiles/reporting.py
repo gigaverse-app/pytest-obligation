@@ -46,11 +46,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         ObligationContract,
         SafetyContract,
         convergence_assessments,
+        declared_debt,
         disposition_label,
         safety_contract_cases,
         suite_cases,
     )
+    from ..debt import DebtBaseline, load_baseline
     from .catalog import Profile
+
+    baseline_path = config.getoption("due_work_debt_baseline") or config.getini("due_work_debt_baseline")
+    baseline = load_baseline(config.rootpath, baseline=Path(baseline_path)) if baseline_path else DebtBaseline()
 
     reports: dict[str, SuiteCoverage] = {}
     names: dict[str, tuple[str, str]] = {}
@@ -82,14 +87,19 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 parameters = suite_cases(contract, covers=getattr(item.cls, "__due_work_sources__", ()))
             else:
                 parameters = safety_contract_cases(contract)
+            tickets = {(entry.case, entry.kind): entry.ticket for entry in baseline.of(suite)}
+            debt = {
+                entry.case: entry.model_copy(update={"ticket": tickets.get((entry.case, entry.kind))})
+                for entry in declared_debt(parameters)
+            }
             additional_cases: dict[str, CaseEvidence] = {}
             for parameter in parameters:
                 case = parameter.values[0]
                 if case.profile is None or case.assessment_only:
-                    additional_cases[case.id] = CaseEvidence(family=case.family)
+                    additional_cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
                     continue
                 for profile in (case.profile, *case.related_profiles):
-                    profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family)
+                    profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
             from .source import contract_source
 
             reports[suite] = SuiteCoverage(
@@ -175,6 +185,7 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
             assert existing_cases.keys() == incoming_cases.keys(), f"{suite}: workers disagree on expected checks"
             for case_id, case in incoming_cases.items():
                 old = existing_cases[case_id]
+                assert old.debt == case.debt, f"{suite}/{case_id}: workers disagree on declared debt"
                 assert old.family == case.family
                 old.collected |= case.collected
                 old.selected |= case.selected
