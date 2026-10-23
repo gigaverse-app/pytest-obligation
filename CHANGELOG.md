@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.15.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.2...v0.15.0) (2026-10-23)
+
+
+### Features
+
+* report contract completeness and recovery diagnostics ([#119](https://github.com/gigaverse-app/pytest-obligation/issues/119)) ([70c5163](https://github.com/gigaverse-app/pytest-obligation/commit/70c5163ecb4ad220f4cb9074e6ad65a494dc35e8))
+* **reporting:** explain contract evidence in a PR sticky action ([#122](https://github.com/gigaverse-app/pytest-obligation/issues/122)) ([4a59760](https://github.com/gigaverse-app/pytest-obligation/commit/4a5976098597b3028f529ce3b1360f06ba44d28d))
+* **shopify:** add a Shopify billing simulator with independent provider evidence ([8b6b5fb](https://github.com/gigaverse-app/pytest-obligation/commit/8b6b5fb03a0a4002c8070ab67a92ce56fcabe509))
+
+
+### Bug fixes
+
+* **ci:** select all runtime tests by declared dependencies ([a52a9ec](https://github.com/gigaverse-app/pytest-obligation/commit/a52a9ec3a66f8391d72c0f3db3385064bca38d22))
+
 ## [0.14.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.1...v0.14.2) (2026-10-23)
 
 
