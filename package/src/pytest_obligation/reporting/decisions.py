@@ -33,7 +33,11 @@ def decision_sections(suite: SuiteCoverage) -> list[str]:
         if case.debt and case.debt.kind == "known-defect":
             defects.setdefault((case.debt.reason, case.debt.ticket), []).append(f"- {code(name)}: {case_status(case)}")
     if defects:
-        lines += ["**Known defects · application-declared expected failures**", ""]
+        lines += [
+            "<details>",
+            "<summary><strong>🔴 Known defects · application-declared expected failures</strong></summary>",
+            "",
+        ]
         for (reason, ticket), checks in defects.items():
             lines += [
                 f"Application reason: {cell(reason)}",
@@ -51,11 +55,13 @@ def decision_sections(suite: SuiteCoverage) -> list[str]:
         lines += [
             "These declarations identify known behavior problems; inspect each check's execution status before treating this run as a reproduction.",
             "",
+            "</details>",
+            "",
         ]
     categories = (
-        ("Known gaps declared by the application", {"known gap"}),
-        ("Unassessed guarantees and scenarios", {"not assessed"}),
-        ("Deliberate exclusions", {"declined", "not applicable"}),
+        ("🔴 Known gaps declared by the application", {"known gap"}),
+        ("🟠 Unassessed guarantees and scenarios", {"not assessed"}),
+        ("⚪ Deliberate exclusions", {"declined", "not applicable"}),
     )
     for title, states in categories:
         entries = []
@@ -63,7 +69,13 @@ def decision_sections(suite: SuiteCoverage) -> list[str]:
             label = f"{GUARANTEES.get(letter, profile.title)} ({letter})"
             assessments = [
                 (label, profile.assessment),
-                *((f"{label} / {family}", assessment) for family, assessment in profile.families.items()),
+                *(
+                    (f"{label} / {family}", assessment)
+                    for family, assessment in profile.families.items()
+                    # A whole-profile exclusion already explains identical family
+                    # decisions. Keep distinct family reasons visible.
+                    if assessment != profile.assessment
+                ),
             ]
             for name, assessment in assessments:
                 if assessment.state in states:
@@ -72,7 +84,7 @@ def decision_sections(suite: SuiteCoverage) -> list[str]:
                         f"Application reason: {cell(assessment.because or 'None supplied.')}"
                     ]
         if entries:
-            lines += [f"**{title}**", "", *entries, ""]
+            lines += ["<details>", f"<summary><strong>{title}</strong></summary>", "", *entries, ""]
             if "not assessed" in states:
                 lines += [
                     "Bind the production behavior and exercise its invariants, or document why it does not apply.",
@@ -83,6 +95,7 @@ def decision_sections(suite: SuiteCoverage) -> list[str]:
                     "These are scope decisions, not demonstrated defects. Review their reasons when the application changes.",
                     "",
                 ]
+            lines += ["</details>", ""]
     missing = [
         letter
         for letter, profile in suite.profiles.items()
