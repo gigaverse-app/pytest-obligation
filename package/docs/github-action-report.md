@@ -52,9 +52,26 @@ application or alter its environment. Pin the action to a reviewed commit for
 production. The action is available on `main`. A release pin must contain `report/action.yml`;
 older releases without that path cannot provide this action.
 
-Use a stable, distinct `sticky-key` for each test session or matrix lane. This
-version reads one complete session report per key. It does not combine reports
-from unrelated sessions or certify absent contracts. Workflow concurrency should
+Use a stable, distinct `sticky-key` for each independently reported test lane.
+For a sharded lane, upload each session's JSON with a unique filename, download
+only this run's artifacts into a clean directory, then publish once:
+
+```yaml
+- uses: gigaverse-app/pytest-obligation/report@main
+  if: always()
+  with:
+    report-path: obligation-evidence/obligation-group-*.json
+    expected-reports: ${{ needs.plan.outputs.shard-count }}
+    sticky-key: application-contracts
+    test-outcome: ${{ needs.tests.result }}
+```
+
+The glob combines shards from the same revision and declared test lane using the
+plugin's distributed-evidence merger. Missing expected files, malformed JSON or
+disagreeing declarations keep the aggregate from claiming complete evidence;
+valid reports remain visible. Empty `{}` reports from shards without contracts
+are valid inputs. Never mix prior runs, retries or unrelated lanes. This does not
+certify contracts absent from the selected tests. Workflow concurrency should
 serialize writers for the same PR/key. The publisher also checks the current PR
 head and refuses older run IDs/attempts; GitHub comments have no atomic update API.
 
