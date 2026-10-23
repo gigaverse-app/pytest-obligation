@@ -194,6 +194,25 @@
         "pyrefly.toml",
         "**/pyrefly.toml"
       ]
+    },
+    "contracts": {
+      "inputs": [
+        "ci_tests/**",
+        "scripts/ci/**",
+        "**/*.py",
+        "**/*.pyi",
+        "report/**"
+      ]
+    },
+    "wheel": {
+      "inputs": [
+        "package/src/**",
+        "package/shims/**",
+        "scripts/check_wheel.py",
+        "scripts/check_core_is_framework_free.py",
+        "package/tests/core/test_compatibility.py",
+        "package/tests/core/test_package_identity.py"
+      ]
     }
   },
   "global_inputs": [
@@ -201,6 +220,10 @@
     "pyproject.toml",
     "**/uv.lock",
     "uv.lock",
-    ".github/**"
+    ".github/test-lanes.json",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    ".github/actions/**",
+    ".python-version"
   ]
 }
