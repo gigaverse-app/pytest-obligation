@@ -5,8 +5,11 @@ branding:
   color: blue
 inputs:
   report-path:
-    description: JSON produced by pytest --due-work-profile-report in this run. One complete session per sticky key.
+    description: JSON file or glob produced by pytest --due-work-profile-report in this run. Shards must share the same code revision and declarations.
     default: obligation-profiles.json
+  expected-reports:
+    description: Expected number of shard reports. Missing shards keep the aggregate from claiming complete evidence.
+    default: '0'
   github-token:
     description: Token with pull-requests write for same-repository PR comments. No token is needed for summary-only use.
     default: ${{ github.token }}
@@ -35,6 +38,7 @@ runs:
       shell: bash
       env:
         REPORT_PATH: ${{ inputs.report-path }}
+        EXPECTED_REPORTS: ${{ inputs.expected-reports }}
         REPORTER_PACKAGE: ${{ github.action_path }}/../package
         REPORT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         REPORT_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
@@ -47,7 +51,7 @@ runs:
         graphics_args=()
         if [[ "$REPORT_GRAPHICS" == 'true' ]]; then graphics_args+=(--graphics); fi
         uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting \
-          --input "$REPORT_PATH" --output "$output" \
+          --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
           --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}"
