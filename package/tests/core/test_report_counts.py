@@ -72,7 +72,7 @@ def test_application_rows_keep_counts_visible_and_flatten_small_reports(number: 
         assert summary.count("<img ") == 5
         assert "applications" not in summary
         assert "│" in summary
-        assert 'width="76"' in summary
+        assert 'width="70"' in summary
         for url in re.findall(r'src="([^"]+)"', summary):
             assert parse_qs(urlparse(url).query)["labelColor"] == ["238636"]
 

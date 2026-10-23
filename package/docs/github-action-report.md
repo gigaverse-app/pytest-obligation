@@ -12,6 +12,7 @@ The header counts applications and passing checks on the left, with failures,
 blocked checks, coverage gaps and rejected bindings after a divider. Zero issues
 are green. Missing evidence produces an unavailable message instead of green zeroes.
 Each application has an aligned compact row with its counts visible while closed.
+Long names are shortened in the row; opening it shows the full application name.
 One to three applications appear directly; larger reports use an outer disclosure.
 Applications sort by failed assertions, rejected bindings, blocked execution, then
 coverage gaps, with the largest count in the first applicable category first.

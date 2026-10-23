@@ -32,6 +32,7 @@ LABELS = {
     "rejected": "Rejected bindings",
 }
 WIDTHS = {"applications": 64, "passed": 76, "failed": 68, "blocked": 76, "gaps": 60, "rejected": 80}
+COMPACT_WIDTHS = {"passed": 70, "failed": 60, "blocked": 66, "gaps": 52, "rejected": 70}
 
 
 def has_gap(profile: ProfileCoverage) -> bool:
@@ -88,7 +89,8 @@ def _badge(kind: str, value: int, *, large: bool = False) -> str:
         "style": "flat-square",
     }
     alt = f"{value} {LABELS[kind].lower()}"
-    size = f'width="{WIDTHS[kind]}" height="{24 if large else 20}"'
+    width = WIDTHS[kind] if large else COMPACT_WIDTHS[kind]
+    size = f'width="{width}" height="{24 if large else 20}"'
     return f'<img alt="{alt}" src="https://img.shields.io/static/v1?{urlencode(params)}" {size}>'
 
 
@@ -185,8 +187,8 @@ def _suite(key: str, suite: SuiteCoverage, repository_url: str, revision: str) -
     values = counts(suite)
     # Monospace nonbreaking padding and fixed-width badges survive GitHub's HTML
     # sanitizer; custom CSS from a local preview does not.
-    name = suite.name[:23] + "…" if len(suite.name) > 24 else suite.name
-    name = cell(name) + "&#160;" * (24 - len(name))
+    name = suite.name[:13] + "…" if len(suite.name) > 14 else suite.name
+    name = cell(name) + "&#160;" * (14 - len(name))
     badges = " ".join(_badge(kind, values[kind]) for kind in METRICS if kind != "passed")
     lines = [
         "<details>",
