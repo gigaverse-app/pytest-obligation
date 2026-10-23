@@ -67,6 +67,7 @@ extra:
   - package/docs/coverage.md
   - package/docs/debt-baseline.md
   - package/docs/false-greens.md
+  - package/docs/github-action-report.md
   - package/docs/harness-guide.md
   - package/docs/how-it-works.md
   - package/docs/integrations.md
@@ -95,6 +96,7 @@ nav:
   - Coverage: package/docs/coverage.md
   - Debt baseline: package/docs/debt-baseline.md
   - False greens: package/docs/false-greens.md
+  - PR evidence report: package/docs/github-action-report.md
   - Harness guide: package/docs/harness-guide.md
   - How it works: package/docs/how-it-works.md
   - Integrations: package/docs/integrations.md

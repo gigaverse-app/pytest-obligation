@@ -12,5 +12,5 @@ declared coverage gaps, and rejected test bindings. Application text must remain
 - [x] Existing core/reporting tests, lint, type checking, package build and documentation links.
 
 
-Validated in PR #122: 1,139 core tests passed (1 skipped), then 21 focused reporter tests passed after the final optional-diagnostic guard. Nine publisher controls and thirteen CI routing/document controls passed. GitHub's example-adopter action completed and created comment 6370098279 plus the full evidence artifact in run 39990121250. Banner rendering was inspected in the live comment. Read the Docs is separately blocked by the repository's missing .readthedocs.yaml, also absent from main.
+Validated in PR #122: 1,139 core tests passed (1 skipped), then 21 focused reporter tests passed after the final optional-diagnostic guard. Nine publisher controls and thirteen CI routing/document controls passed. GitHub's example-adopter action completed and created comment 6370098279 plus the full evidence artifact in run 39990121250. Banner rendering was inspected in the live comment. The first Read the Docs run lacked configuration. The new publishing configuration subsequently landed on main and was merged into this branch; the report guide is included in the site's published navigation.
 
