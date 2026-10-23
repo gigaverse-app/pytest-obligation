@@ -1,13 +1,33 @@
 # Contributing
 
-## Pull request titles
+## Conventional Commits
 
-Pull requests are squash-merged with their title as the commit message, and the
-title decides the next release, so it must be a
-[Conventional Commit](https://www.conventionalcommits.org/): `fix: ...`,
-`feat: ...`, `feat!: ...` for a breaking change, or `docs:`, `test:`, `ci:`,
-`build:`, `refactor:`, `chore:` for changes that do not release on their own.
-The `PR title` check enforces it. See [RELEASING.md](RELEASING.md).
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+for PR titles and commits that land on `main`:
+
+```text
+fix(parser): handle empty input
+feat: add a new output format
+feat(api)!: remove the deprecated argument
+docs: clarify installation
+```
+
+Allowed types are `feat`, `fix`, `perf`, `revert`, `docs`, `style`,
+`refactor`, `test`, `build`, `ci`, and `chore`. Scope is optional.
+Use `!` before the colon for breaking changes and explain the migration in the
+PR body. Choose the type for the actual change, since release tooling uses it.
+
+The `conventional-commit` check uses
+[amannn/action-semantic-pull-request](https://github.com/amannn/action-semantic-pull-request).
+It reads PR metadata, including for forks, without checking out contributor code.
+If it fails on a title, rename the PR; the edited event reruns the check.
+Keep the existing PR and commits. Work-in-progress commits need not be rewritten.
+
+Use **Squash and merge**, with the PR title as the commit title. Check the final
+message before merging, including single-commit PRs, and preserve any
+`BREAKING CHANGE:` explanation in the body. The repository's squash defaults
+support this, but a maintainer can still edit the final message.
+See [RELEASING.md](RELEASING.md) for versioning and publishing.
 
 ## Tooling
 
