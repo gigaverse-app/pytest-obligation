@@ -5,10 +5,10 @@ Declarations remain canonical in contract.py. This report projects only coverage
 metadata and pytest outcomes; it never executes bindings or serializes domain data.
 """
 
-from collections.abc import Iterator
-from typing import Literal
+from collections.abc import Iterator, Mapping
+from typing import Any, Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
 
@@ -22,7 +22,21 @@ class Assessment(HarnessModel):
     because: str | None = Field(default=None, description="Reason for an unclaimed guarantee or family.")
 
 
-class CaseEvidence(MutableHarnessModel):
+class _ExecutedEvidence(MutableHarnessModel):
+    """Read our own JSON while deriving every verdict from validated evidence."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_stored_verdicts(cls, value: Any) -> Any:
+        # INVARIANT: serialized verdicts are display metadata, never proof.
+        # Ignore only this model's computed fields; unknown evidence stays an
+        # error. Copy the mapping so nested validation does not mutate callers.
+        if isinstance(value, Mapping):
+            return {key: item for key, item in value.items() if key not in cls.model_computed_fields}
+        return value
+
+
+class CaseEvidence(_ExecutedEvidence):
     """Coverage of one generated case; a pass requires successful setup, call and teardown."""
 
     family: str = Field(description="Binding or history family that generated this case.")
@@ -49,7 +63,7 @@ class CaseEvidence(MutableHarnessModel):
         )
 
 
-class ProfileCoverage(MutableHarnessModel):
+class ProfileCoverage(_ExecutedEvidence):
     """Named guarantee, independently assessed families, and evidence for its expected cases."""
 
     title: str = Field(description="Canonical profile name from the A–J catalog.")
@@ -71,7 +85,7 @@ class ProfileCoverage(MutableHarnessModel):
         )
 
 
-class SuiteCoverage(MutableHarnessModel):
+class SuiteCoverage(_ExecutedEvidence):
     """Coverage scoped to a collected suite; absent/unimported suites are never certified."""
 
     name: str = Field(description="Adopter contract name; the report key identifies its collected suite class.")

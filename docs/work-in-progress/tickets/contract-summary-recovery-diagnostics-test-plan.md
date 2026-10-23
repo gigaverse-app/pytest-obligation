@@ -12,3 +12,10 @@
 The PR records the actual terminal output and validation commands. Publication
 checks include verifying the Conventional Commits title immediately after creation
 and again before handoff. No repository PR template was found.
+
+## CI report read-back regression
+
+- [x] Reproduce the CI failure through the existing adoption guard and serialized report round trips (seven failures before the fix).
+- [x] Recompute stored verdicts at every evidence-model boundary without mutating input or accepting unknown fields.
+- [x] Read actual serial/xdist plugin JSON and test forged positive verdicts over failed or deselected evidence.
+- [x] Targeted reporting and guard controls: 38 passed; lint, formatting and full type checking passed.

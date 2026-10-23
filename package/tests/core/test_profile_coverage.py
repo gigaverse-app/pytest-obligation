@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from pytest_obligation.profiles.coverage import (
     Assessment,
@@ -68,6 +69,53 @@ def test_a_contract_with_no_claims_is_not_vacuously_verified() -> None:
     assert not suite.verified
 
 
+@pytest.mark.parametrize("fault", [None, "profile", "extra"])
+def test_report_round_trip_recomputes_every_verdict_without_mutating_input(fault: str | None) -> None:
+    profile = coverage()
+    for case in profile.cases.values():
+        case.collected = case.selected = True
+        case.outcomes = {phase: ["passed"] for phase in ("setup", "call", "teardown")}
+    suite = SuiteCoverage(
+        name="effect", profiles={"H": profile}, additional_cases={"extra": profile.cases["first"].model_copy(deep=True)}
+    )
+    if fault == "profile":
+        profile.cases["first"].outcomes["teardown"] = ["failed"]
+    elif fault == "extra":
+        suite.additional_cases["extra"].selected = False
+    # This is the serializer used by the plugin, including computed fields.
+    adapter = TypeAdapter(dict[str, SuiteCoverage])
+    serialized = adapter.dump_json({"suite": suite})
+    restored = adapter.validate_json(serialized)["suite"]
+    assert restored == suite
+    assert restored.verified == (fault is None)
+    payload = suite.model_dump()
+    payload["verified"] = True
+    payload["profiles"]["H"]["verified"] = True
+    payload["profiles"]["H"]["cases"]["first"]["passed"] = True
+    payload["additional_cases"]["extra"]["passed"] = True
+    before = repr(payload)
+    assert SuiteCoverage.model_validate(payload).verified == (fault is None)
+    assert repr(payload) == before
+
+
+@pytest.mark.parametrize("location", ["suite", "profile", "case", "extra"])
+def test_report_readback_still_rejects_unknown_evidence_fields(location: str) -> None:
+    suite = SuiteCoverage(
+        name="effect", profiles={"H": coverage()}, additional_cases={"extra": CaseEvidence(family="extra")}
+    )
+    payload = suite.model_dump()
+    target = {
+        "suite": payload,
+        "profile": payload["profiles"]["H"],
+        "case": payload["profiles"]["H"]["cases"]["first"],
+        "extra": payload["additional_cases"]["extra"],
+    }[location]
+    target["typo"] = True
+    with pytest.raises(ValidationError) as caught:
+        SuiteCoverage.model_validate(payload)
+    assert any(error["loc"][-1] == "typo" and error["type"] == "extra_forbidden" for error in caught.value.errors())
+
+
 def test_distributed_results_cannot_erase_failure_or_change_expected_coverage() -> None:
     initial = SuiteCoverage(name="effect", profiles={"H": coverage()})
     incoming = initial.model_copy(deep=True)
@@ -103,6 +151,8 @@ def test_native_filtered_report_keeps_unselected_proofs_and_missing_families(
         "--due-work-summary",
     )
     assert result.ret == pytest.ExitCode.OK
+    restored = TypeAdapter(dict[str, SuiteCoverage]).validate_json(destination.read_bytes())
+    assert not next(iter(restored.values())).verified
     report = next(iter(json.loads(destination.read_text()).values()))
     convergence = report["profiles"]["E"]
     assert sum(case["selected"] for case in convergence["cases"].values()) == 1
