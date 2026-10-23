@@ -5,6 +5,7 @@ Declarations remain canonical in contract.py. This report projects only coverage
 metadata and pytest outcomes; it never executes bindings or serializes domain data.
 """
 
+from collections.abc import Iterator
 from typing import Literal
 
 from pydantic import Field, computed_field
@@ -75,3 +76,24 @@ class SuiteCoverage(MutableHarnessModel):
 
     name: str = Field(description="Adopter contract name; the report key identifies its collected suite class.")
     profiles: dict[str, ProfileCoverage]
+    additional_cases: dict[str, CaseEvidence] = Field(
+        default_factory=dict, description="Extra proofs and assessment checks outside profile behavioral cases."
+    )
+
+    def case_groups(self) -> Iterator[dict[str, CaseEvidence]]:
+        """All expected evidence, including checks without a profile claim."""
+        yield self.additional_cases
+        for letter in sorted(self.profiles):
+            yield self.profiles[letter].cases
+
+    @computed_field
+    @property
+    def verified(self) -> bool:
+        """Verify the explicitly assessed scope, requiring at least one executed claim."""
+        return (
+            any(profile.verified for profile in self.profiles.values())
+            and all(
+                profile.verified or profile.assessment.state == "not applicable" for profile in self.profiles.values()
+            )
+            and all(case.passed for case in self.additional_cases.values())
+        )
