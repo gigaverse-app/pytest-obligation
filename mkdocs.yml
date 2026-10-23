@@ -1,0 +1,114 @@
+site_name: pytest-obligation
+site_description: Test background work against crashes, retries, and duplicate delivery
+  with executable conformance checks.
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, "https://pytest-obligation.readthedocs.io/en/latest/"]
+repo_url: https://github.com/gigaverse-app/pytest-obligation
+repo_name: gigaverse-app/pytest-obligation
+edit_uri: ''
+docs_dir: documentation
+site_dir: site
+strict: true
+exclude_docs: '*.py
+
+  *.txt
+
+  *.in
+
+  overrides/
+
+  '
+theme:
+  name: material
+  custom_dir: documentation/overrides
+  language: en
+  font: false
+  palette:
+    primary: teal
+    accent: cyan
+  features:
+  - navigation.sections
+  - navigation.top
+  - search.suggest
+  - search.highlight
+  - content.code.copy
+plugins:
+- search
+hooks:
+- documentation/hooks.py
+markdown_extensions:
+- admonition
+- attr_list
+- tables
+- pymdownx.details
+- pymdownx.highlight
+- pymdownx.superfences:
+    custom_fences:
+      - name: mermaid
+        class: mermaid
+        format: !!python/name:pymdownx.superfences.fence_code_format
+- toc:
+    permalink: true
+validation:
+  nav:
+    omitted_files: info
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    anchors: warn
+extra:
+  published_sources:
+  - docs/adopter-capabilities.md
+  - docs/ci-toolkit.md
+  - docs/ci.md
+  - package/docs/adopting.md
+  - package/docs/aiokafka.md
+  - package/docs/architecture.md
+  - package/docs/completion.md
+  - package/docs/coverage.md
+  - package/docs/debt-baseline.md
+  - package/docs/false-greens.md
+  - package/docs/harness-guide.md
+  - package/docs/how-it-works.md
+  - package/docs/integrations.md
+  - package/docs/interleavings.md
+  - package/docs/jepsen-analogy.md
+  - package/docs/mongodb.md
+  - package/docs/package-migration.md
+  - package/docs/prefect.md
+  - package/docs/pytest-plugin.md
+  - package/docs/recovery-edge-cases.md
+  - package/docs/selection-completeness.md
+  - package/docs/source-policies.md
+  - package/docs/what-a-green-result-means.md
+  - CONTRIBUTING.md
+  - RELEASING.md
+nav:
+- Start here: index.md
+- Quickstart: package/docs/adopting.md
+- Guides:
+  - Adopter capabilities: docs/adopter-capabilities.md
+  - CI toolkit: docs/ci-toolkit.md
+  - CI: docs/ci.md
+  - Aiokafka: package/docs/aiokafka.md
+  - Architecture: package/docs/architecture.md
+  - Completion: package/docs/completion.md
+  - Coverage: package/docs/coverage.md
+  - Debt baseline: package/docs/debt-baseline.md
+  - False greens: package/docs/false-greens.md
+  - Harness guide: package/docs/harness-guide.md
+  - How it works: package/docs/how-it-works.md
+  - Integrations: package/docs/integrations.md
+  - Interleavings: package/docs/interleavings.md
+  - Jepsen analogy: package/docs/jepsen-analogy.md
+  - Mongodb: package/docs/mongodb.md
+  - Package migration: package/docs/package-migration.md
+  - Prefect: package/docs/prefect.md
+  - Pytest plugin: package/docs/pytest-plugin.md
+  - Recovery edge cases: package/docs/recovery-edge-cases.md
+  - Selection completeness: package/docs/selection-completeness.md
+  - Source policies: package/docs/source-policies.md
+  - What a green result means: package/docs/what-a-green-result-means.md
+- Related tools: ecosystem.md
+- Contributing: CONTRIBUTING.md
+- Releasing: RELEASING.md
+- Documentation publishing: publishing.md
