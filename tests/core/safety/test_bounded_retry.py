@@ -214,3 +214,35 @@ def test_a_retry_that_never_reaches_the_failing_dependency_fails_stays_owed() ->
 
     with pytest.raises(AssertionError, match="recorded 0 new attempts"):
         assert_persistent_failure_stays_owed(reference_persistent_retry_binding(_SkipsDependency()))
+
+
+class _CandidateRetry(InMemoryPersistentLifecycle):
+    def due_work(self):
+        return list(self.rows)
+
+
+def test_persistent_retry_can_select_candidates_and_enforce_wait_inside_the_runner():
+    assert_persistent_failure_stays_owed(reference_persistent_retry_binding(_CandidateRetry()))
+
+
+@pytest.mark.parametrize(
+    "fault,reason",
+    [
+        ("execute", "hot loop"),
+        ("mutate", "waiting retry changed observable state"),
+        ("abandon", "waiting retry became terminal"),
+    ],
+)
+def test_waiting_candidate_must_not_execute_mutate_or_abandon(fault, reason):
+    class Broken(_CandidateRetry):
+        def run_once(self, operation_id):
+            row = self.rows[operation_id]
+            if row.state != "WAITING":
+                return super().run_once(operation_id)
+            if fault == "execute":
+                row.executions += 1
+            else:
+                row.state = "LOST" if fault == "mutate" else "TERMINAL"
+
+    with pytest.raises(AssertionError, match=reason):
+        assert_persistent_failure_stays_owed(reference_persistent_retry_binding(Broken()))

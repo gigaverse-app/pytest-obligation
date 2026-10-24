@@ -114,7 +114,7 @@ class PersistentRetry(RetryLifecycle):
     """A retry lifecycle with no execution bound: the obligation is kept until it succeeds."""
 
     #: Whether a failed execution waits before it is due again (a positive retry
-    #: delay). True makes an immediately due retry a hot-loop failure.
+    #: delay). A selected waiting candidate must remain a no-op in the runner.
     waits: bool = True
 
 
@@ -270,11 +270,16 @@ def assert_persistent_failure_stays_owed(retry: PersistentRetry) -> None:
             f"{retry.name}: a persistently failing obligation became terminal after {execution} "
             f"execution(s). With no execution bound it must stay owed until it succeeds"
         )
-        if retry.waits:
-            assert not _is_due(retry, operation), (
-                f"{retry.name}: failure {execution} left the obligation due again immediately. "
-                f"A persistent failure would be retried in a hot loop instead of after its retry delay"
+        if retry.waits and _is_due(retry, operation):
+            # Candidate scans may enforce their wait inside the executor.
+            # Run that path: selection alone is not evidence of a hot loop.
+            waiting = retry.observe(operation)
+            retry.run_once(operation)
+            assert retry.failure_attempt_count(operation) == attempts, (
+                f"{retry.name}: failure {execution} retried before its wait elapsed: a hot loop"
             )
+            assert not retry.is_terminal(operation), f"{retry.name}: waiting retry became terminal"
+            assert retry.observe(operation) == waiting, f"{retry.name}: waiting retry changed observable state"
         _advance_after_failure(retry, operation, attempts=attempts, execution=execution)
 
 
