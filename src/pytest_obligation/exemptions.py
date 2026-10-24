@@ -28,6 +28,8 @@ from pytest_obligation.binding import is_real_reason, is_test_authored
 from pytest_obligation.contract import DueWorkSource, ObligationContractDesignError
 from pytest_obligation.host import current_host
 
+EXEMPTION_TEST_NAME = "test_the_exemption_holds"
+
 
 def exempt_due_work_suite(
     source: DueWorkSource,
@@ -65,7 +67,7 @@ def exempt_due_work_suite(
         )
 
     def decorate(cls: type) -> type:
-        test_name = "test_the_exemption_holds"
+        test_name = EXEMPTION_TEST_NAME
         assert not hasattr(cls, test_name), f"{cls.__name__} already defines {test_name}"
 
         def test_the_exemption_holds(self: Any) -> None:
