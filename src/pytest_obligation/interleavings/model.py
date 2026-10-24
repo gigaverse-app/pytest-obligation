@@ -15,6 +15,8 @@ class Operation(StrEnum):
     START = "start"
     CHANGE = "change"
     RETIRE = "retire"
+    RECREATE = "recreate"
+    REJECT_RETIRE = "reject_retire"
     COMPLETE = "complete"
     RECOVER = "recover"
     SETTLE = "settle"

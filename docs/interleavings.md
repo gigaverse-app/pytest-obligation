@@ -17,6 +17,33 @@ stability. A repeated visible payload does not excuse corrupt revision or
 acknowledgement identities. Seams listed in `acknowledgement_only_seams` also
 get acknowledgement-without-application histories (below); nothing else does.
 
+### Retirement, recreation and rejected synchronous commands
+
+Opt in with `retirement=True, recreation=True` when the same logical authority
+can return after retirement. Bind `session.recreate(old_handle, value)` to the
+real restoration command, returning its current handle, even if the database row
+changed. The first declared intent describes admission; the last describes
+restoration. `IF.recreate-before-completion` settles the restored state, releases
+the old provider write, and checks convergence again.
+
+For synchronous commands that reject on provider failure, declare
+`rejected_retirement_seams=("remove-access",)` and bind `rejection_errors` plus
+`authority(handle)`. This observer returns an immutable snapshot of product
+intent, excluding remote state and recovery bookkeeping. `IF.rejected-retirement`
+holds the remote command, requires the declared exception and a newly reached
+fault, and verifies authority did not change. It then retries retirement, restores
+the authority, completes the rejected remote request, and requires convergence.
+An unrelated exception, swallowed rejection, or changed product intent fails.
+
+Hypothesis exploration reuses these operations and assertions. It varies the
+number of retire/restore cycles and the completion order of all held requests,
+with fresh bindings per example. Shrunk failures emit ordinary `HistoryTrace`
+artifacts and replay without Hypothesis. Fixed histories remain separately named
+regressions. No new histories or dependencies are added to declarations that do
+not opt in. Keep real simultaneous database races and provider batch-size/cost
+checks in focused integration tests; these generated histories exercise command
+and provider boundaries.
+
 ### Repair without a provider lifetime bound
 
 The default `QUIET` check still forbids any repeated settled provider call. Some

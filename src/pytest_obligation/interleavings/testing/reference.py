@@ -17,6 +17,8 @@ def reference(
     *,
     forget: bool = False,
     inline_retirement: bool = False,
+    recreation: bool = False,
+    lose_rollback: bool = False,
     forget_at: int = 0,
     quiet_corruption: Literal["acknowledgement", "desired-revision"] | None = None,
     repair_recoveries: int = 0,
@@ -94,9 +96,14 @@ def reference(
             write(handle, propagate=True)
         except TimeoutError:
             # A synchronous command rejects instead of admitting retirement.
-            desired[handle], revisions[handle] = previous, revision
+            if not lose_rollback:
+                desired[handle], revisions[handle] = previous, revision
             write(handle)
             raise
+
+    def recreate(handle: int, value: str) -> int:
+        change(handle, value)
+        return handle
 
     repairs_left = repair_recoveries
 
@@ -133,6 +140,9 @@ def reference(
         change=change,
         retire=retire if inline_retirement else None,
         retired="B" if inline_retirement else None,
+        recreate=recreate if recreation else None,
+        authority=lambda h: (desired[h], revisions[h]),
+        rejection_errors=(TimeoutError,),
         observe=lambda h: remote.get(h, ""),
         recover=recover,
         advance=lambda seconds: None,

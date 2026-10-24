@@ -73,6 +73,11 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
             assert session.change and session.desired_identity and session.acknowledged_identity, (
                 "revision seams missing"
             )
+        assert (session.recreate is not None) == scenario.recreation, "recreation seam mismatch"
+        if scenario.rejected_retirement_seams:
+            assert session.authority and session.rejection_errors, "rejected commands need authority and error bindings"
+        if session.recreate:
+            guard(scenario, "recreate", session.recreate)
         guard(scenario, "recover", session.recover)
         if session.change:
             guard(scenario, "change", session.change)
@@ -183,6 +188,31 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
                     expected[item.target] = session.retired
                     if session.desired_identity:
                         identities[item.target] = session.desired_identity(handles[item.target])
+                case Op.RECREATE:
+                    assert session.recreate
+                    intent = session.intents[item.value]
+                    handles[item.target] = session.recreate(handles[item.target], intent.value)
+                    expected[item.target] = intent.expected
+                    if session.desired_identity:
+                        identities[item.target] = session.desired_identity(handles[item.target])
+                case Op.REJECT_RETIRE:
+                    assert scenario.rejected_retirement_seams, "rejected retirement was not declared"
+                    assert (
+                        session.provider.armed and session.provider.armed[0][0] in scenario.rejected_retirement_seams
+                    ), "rejected retirement needs an armed declared seam"
+                    assert session.retire and session.authority and session.rejection_errors
+                    handle = handles[item.target]
+                    before = session.authority(handle)
+                    faults = len(session.provider.reached)
+                    try:
+                        session.retire(handle)
+                    except session.rejection_errors:
+                        assert len(session.provider.reached) > faults, "uninjected command rejection"
+                    else:
+                        require(False, "command-rejection", "faulted synchronous command did not reject")
+                    require(
+                        session.authority(handle) == before, "rejected-authority", "rejected command changed authority"
+                    )
                 case Op.COMPLETE:
                     session.provider.complete(item.index)
                 case Op.RECOVER:

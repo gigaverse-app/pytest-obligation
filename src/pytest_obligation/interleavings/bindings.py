@@ -77,6 +77,18 @@ class InFlightSession(HarnessModel, Generic[HandleT, ValueT, ObservationT]):
         default=None,
         description="Reviewed product/provider observation after retirement; required when retire is supplied.",
     )
+    recreate: Callable[[HandleT, ValueT], HandleT] | None = Field(
+        default=None,
+        description="Restore the same authority through its production command; return its current handle.",
+    )
+    authority: Callable[[HandleT], object] | None = Field(
+        default=None,
+        description="Read an immutable product-authority snapshot, excluding external state and retry bookkeeping.",
+    )
+    rejection_errors: tuple[type[Exception], ...] = Field(
+        default=(),
+        description="Expected synchronous command errors; the runner also requires a newly reached fault.",
+    )
     transport: InstanceOf[Transport] | None = Field(
         default=None, description="Optional external delivery controller; presence must match the declaration."
     )
@@ -292,6 +304,14 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
     retirement: bool = Field(
         default=False, description="Generate retirement histories instead of desired-value revision histories."
     )
+    recreation: bool = Field(
+        default=False,
+        description="Restore retired authority with the final intent; generate late writes across restoration.",
+    )
+    rejected_retirement_seams: tuple[_Alias, ...] = Field(
+        default=(),
+        description="Synchronous retirement seams whose failure must reject without changing authority.",
+    )
     independent: bool = Field(
         default=False, description="Generate a second admission to check progress while the first is held."
     )
@@ -336,6 +356,8 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
             self.acknowledgement_only_seams,
             self.replay_safe,
             self.repair_triggers,
+            self.recreation,
+            self.rejected_retirement_seams,
         )
 
     def limitations(self) -> Mapping[str, str]:
@@ -368,6 +390,9 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
         assert len(set(self.intents)) == len(self.intents)
         assert set(self.repair_triggers) <= set(self.repair_seams), "repair trigger names must be repair seams"
         assert set(self.repair_triggers.values()) <= set(self.seams), "repair triggers must name write seams"
+        assert not self.recreation or self.retirement, "recreation requires retirement"
+        assert not self.rejected_retirement_seams or self.recreation, "rejected retirement requires recreation"
+        assert len(set(self.rejected_retirement_seams)) == len(self.rejected_retirement_seams)
         assert self.retirement or len(self.intents) >= 2, "revision bindings require a legal transition"
         undeclared = [seam for seam in self.acknowledgement_only_seams if seam not in self.seams]
         assert not undeclared, f"acknowledgement_only_seams names undeclared seams: {undeclared}"
