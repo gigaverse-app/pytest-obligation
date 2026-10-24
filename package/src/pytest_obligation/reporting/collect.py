@@ -18,32 +18,45 @@ def main() -> None:
     parser.add_argument("--input", default="", help="Current-run nodeid list or selector JSON glob")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--collection-key", default="", help="Content identity permitting cross-revision reuse")
     parser.add_argument("--pytest-command", default="", help="Empty plans only; otherwise collect missing files")
     parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args()
-    inventory = discover(Path.cwd(), args.application_path).model_copy(update={"revision": args.revision})
+    inventory = discover(Path.cwd(), args.application_path).model_copy(
+        update={"revision": args.revision, "collection_key": args.collection_key}
+    )
+    reused = False
     if args.output.exists():
         try:
             previous = ApplicationInventory.model_validate_json(args.output.read_bytes())
         except (OSError, ValueError):
             previous = None
-        if previous is not None and previous.revision == args.revision:
+        if previous is not None and (
+            previous.collection_key == args.collection_key
+            if args.collection_key
+            else previous.revision == args.revision
+        ):
             inventory = inventory.model_copy(
                 update={
                     "applications": {
                         key: app.model_copy(update={"nodeids": previous.applications[key].nodeids})
                         if key in previous.applications
+                        and previous.applications[key].name == app.name
+                        and previous.applications[key].source == app.source
                         else app
                         for key, app in inventory.applications.items()
                     }
                 }
             )
+            reused = all(app.nodeids is not None for app in inventory.applications.values())
     nodeids: set[str] = set()
     for value in sorted(glob.glob(args.input, recursive=True)) if args.input else []:
         payload = json.loads(Path(value).read_bytes())
         if not isinstance(payload, (dict, list)) or not all(isinstance(key, str) for key in payload):
             raise ValueError("Collection input must be a nodeid list or mapping")
         nodeids.update(payload)
+    if nodeids:
+        reused = False  # Fresh current-run collection takes precedence over cached metadata.
 
     def apply_nodeids() -> None:
         for key, app in list(inventory.applications.items()):
@@ -95,11 +108,13 @@ def main() -> None:
     args.output.write_text(inventory.model_dump_json(indent=2))
     if github_output := os.environ.get("GITHUB_OUTPUT"):
         with Path(github_output).open("a") as stream:
-            stream.write(f"required={str(required).lower()}\ninventory-path={args.output}\n")
+            stream.write(
+                f"required={str(required).lower()}\ninventory-path={args.output}\nreused={str(reused).lower()}\n"
+            )
     print(
         f"Application inventory: {len(inventory.applications)} suites, "
         f"{sum(len(app.nodeids or []) for app in inventory.applications.values())} collected tests; "
-        f"collection required: {required}"
+        f"collection required: {required}; reused: {reused}"
     )
 
 

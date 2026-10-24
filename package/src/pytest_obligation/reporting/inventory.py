@@ -21,6 +21,7 @@ class Application(HarnessModel):
 
 class ApplicationInventory(HarnessModel):
     revision: str = ""
+    collection_key: str = ""
     applications: dict[str, Application] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
 

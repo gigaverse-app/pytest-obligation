@@ -41,7 +41,14 @@ outputs:
 runs:
   using: composite
   steps:
+    - id: runtime
+      shell: bash
+      run: |
+        if command -v uv >/dev/null; then echo 'uv=true' >> "$GITHUB_OUTPUT"; fi
     - uses: astral-sh/setup-uv@v7
+      if: ${{ steps.runtime.outputs.uv != 'true' }}
+      with:
+        enable-cache: 'false'
     - name: Render executed evidence
       id: render
       shell: bash
