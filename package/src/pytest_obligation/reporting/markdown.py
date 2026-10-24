@@ -43,7 +43,10 @@ def _skipped_checks(
 
 
 def _execution_summary(
-    reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
+    reports: dict[str, SuiteCoverage],
+    inventory: ApplicationInventory | None,
+    unavailable: str,
+    collected_skips: int | None = None,
 ) -> list[str]:
     declared = inventory.applications if inventory else {}
     applications = set(declared) | set(reports)
@@ -52,6 +55,8 @@ def _execution_summary(
     unknown = absent if unavailable else set()
     not_run = absent - unknown
     skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
+    if collected_skips is not None:
+        skipped, incomplete = collected_skips, False
     skip_count = f"**{skipped} known**" if skipped and incomplete else "**unknown**" if incomplete else f"**{skipped}**"
     lines = [
         "<details>",
@@ -60,7 +65,11 @@ def _execution_summary(
         f"**{len(observed)}** applications with results · **{len(not_run)}** applications not run"
         + (f" · **{len(unknown)}** unknown" if unknown else ""),
         f"Checks skipped: {skip_count}."
-        + (" Uncollected applications have no measured test count." if set(declared) - set(reports) else ""),
+        + (
+            " Uncollected applications have no measured test count."
+            if incomplete and set(declared) - set(reports)
+            else ""
+        ),
         "",
     ]
     if not reports:
@@ -348,6 +357,7 @@ def render(
     revision: str = "",
     graphics: bool = False,
     inventory: ApplicationInventory | None = None,
+    collected_skips: int | None = None,
 ) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
@@ -363,6 +373,8 @@ def render(
         "",
     ]
     skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
+    if collected_skips is not None:
+        skipped, incomplete = collected_skips, False
     head += [
         _totals(
             dict(totals), glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped
@@ -384,7 +396,7 @@ def render(
             _time(list(reports.values()), compact=True)
         ]
         head += ["<sub>" + " · ".join(timing) + "</sub>", ""]
-    head += _execution_summary(reports, inventory, unavailable)
+    head += _execution_summary(reports, inventory, unavailable, collected_skips)
     compact = len(reports) > 3
     if compact:
         head += _overview(reports)

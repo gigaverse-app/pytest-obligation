@@ -16,9 +16,11 @@ class Application(HarnessModel):
 
     name: str
     source: SourceLocation
+    nodeids: list[str] | None = None
 
 
 class ApplicationInventory(HarnessModel):
+    revision: str = ""
     applications: dict[str, Application] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
 

@@ -106,7 +106,7 @@ files. A wholly skipped lane uses `expected-reports: '0'` and
 `test-outcome: skipped`. Keep the reporting job admitted on that path so it
 replaces an older sticky. This does not require running any tests.
 
-The application table distinguishes recorded results from **Not run** (not
+The collapsed application inventory distinguishes recorded results from **Not run** (not
 collected or filtered out in this invocation). If expected reports are missing
 or invalid, absent applications are **Unknown**, not assumed skipped. Valid empty
 `{}` reports say no application contract checks ran and never claim passing
@@ -118,6 +118,50 @@ even when none ran. Its **Skipped tests** counter uses known deselections and
 explicit pytest skips. It shows **?** when uncollected applications or incomplete
 reports prevent an exact total. Application lists and skip explanations stay
 collapsed; zero recorded checks use neutral colors when no execution was reported.
+
+### Exact skipped-test counts without executing tests
+
+Use the `collect` action to reuse a current-run selector's complete, pre-filter
+nodeid list (or metadata mapping keyed by nodeid). It scans declarations first and
+collects only application source files missing from that data. Its output is bound
+to the checkout revision. A matching output is reused; stale or damaged output is
+recollected. Never feed it prior-run selector files as current evidence.
+
+```yaml
+- uses: actions/checkout@v7
+# Your existing environment setup goes here, if collection needs dependencies.
+- uses: gigaverse-app/pytest-obligation/collect@v1
+  id: inventory
+  with:
+    application-paths: tests
+    collection-input: artifacts/current-run-collected-nodeids.json
+    pytest-command: uv run --no-sync pytest --no-selective
+- uses: gigaverse-app/pytest-obligation/report@v1
+  with:
+    inventory-path: ${{ steps.inventory.outputs.inventory-path }}
+    report-path: artifacts/**/obligation-*.json
+    junit-path: artifacts/**/junit-*.xml
+    expected-reports: ${{ needs.plan.outputs.report-count }}
+    test-outcome: ${{ needs.tests.result }}
+```
+
+Omit `pytest-command` for a cheap planning pass. Restore dependencies and call the
+action again only when `outputs.required == 'true'`. Both calls reuse the same
+`inventory-path`. Use your project's pytest command; `--no-selective` above is
+appropriate when using pytest-selective. The collector always adds `--collect-only`,
+clears configured addopts and targets only missing files. Collection imports those
+files and runs collection hooks, but does not execute fixtures or test bodies.
+The timeout defaults to 120 seconds and is configurable.
+
+The top-level **Skipped tests** counter joins collected IDs to the existing JUnit
+results. Tests absent from completed admitted sessions, deselections and explicit
+pytest skips count as skipped; executed failures remain failures. Repeated XML
+reports cannot double-count tests. Missing/invalid evidence, stale inventory or an
+interrupted run retains **?**, rather than misclassifying lost execution as a skip.
+No historical pass is substituted for current execution. The same CLI is available
+as `python -m pytest_obligation.reporting.collect`; the report CLI accepts
+`--inventory`, `--collection-revision` and `--junit-input`. Install the `report` extra
+for safe JUnit parsing.
 
 Static discovery does not certify a complete inventory of dynamic factories,
 generated classes or custom decorators. Those limits and unresolved names are

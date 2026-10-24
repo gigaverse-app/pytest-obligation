@@ -1,0 +1,46 @@
+name: Collect application test inventory
+description: Reuse current-run collected test IDs, then optionally collect only missing application files. Never runs tests.
+inputs:
+  application-paths:
+    description: Newline-separated source roots containing application contract suites.
+    default: tests
+  collection-input:
+    description: Current-run nodeid list or selector metadata JSON glob. Do not pass prior-run artifacts.
+    default: ''
+  inventory-path:
+    description: Output inventory; a matching checkout revision is reused on subsequent calls.
+    default: application-inventory.json
+  pytest-command:
+    description: Empty plans only. Otherwise invoke this pytest command in the adopter environment with mandatory collect-only and only missing source files.
+    default: ''
+  timeout:
+    description: Maximum seconds allowed for targeted collection.
+    default: '120'
+outputs:
+  required:
+    description: Whether some application suites still need collection.
+    value: ${{ steps.collect.outputs.required }}
+  inventory-path:
+    description: Collected application inventory bound to the checkout revision.
+    value: ${{ steps.collect.outputs.inventory-path }}
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v7
+    - id: collect
+      shell: bash
+      env:
+        APPLICATION_PATHS: ${{ inputs.application-paths }}
+        COLLECTION_INPUT: ${{ inputs.collection-input }}
+        INVENTORY_PATH: ${{ inputs.inventory-path }}
+        PYTEST_COMMAND: ${{ inputs.pytest-command }}
+        COLLECTION_TIMEOUT: ${{ inputs.timeout }}
+        REPORTER_PACKAGE: ${{ github.action_path }}/../package
+      run: |
+        paths=()
+        while IFS= read -r path; do
+          if [[ -n "$path" ]]; then paths+=(--application-path "$path"); fi
+        done <<< "$APPLICATION_PATHS"
+        uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting.collect \
+          "${paths[@]}" --input "$COLLECTION_INPUT" --output "$INVENTORY_PATH" \
+          --revision "$(git rev-parse HEAD)" --pytest-command "$PYTEST_COMMAND" --timeout "$COLLECTION_TIMEOUT"

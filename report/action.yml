@@ -13,6 +13,12 @@ inputs:
   application-paths:
     description: Newline-separated repository-relative Python source files/directories to inventory without importing or collecting tests. Checkout the tested revision first. Static decorator declarations are listed even when their tests are not selected.
     default: ''
+  inventory-path:
+    description: Revision-bound collected inventory from the collect action; provides exact generated test counts.
+    default: ''
+  junit-path:
+    description: Current-run JUnit glob to distinguish executed and skipped collected tests.
+    default: ''
   github-token:
     description: Token with pull-requests write for same-repository PR comments. No token is needed for summary-only use.
     default: ${{ github.token }}
@@ -50,6 +56,8 @@ runs:
         REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
         REPORT_GRAPHICS: ${{ inputs.graphics }}
         APPLICATION_PATHS: ${{ inputs.application-paths }}
+        INVENTORY_PATH: ${{ inputs.inventory-path }}
+        JUNIT_PATH: ${{ inputs.junit-path }}
       run: |
         output="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")/report.md"
         graphics_args=()
@@ -58,7 +66,11 @@ runs:
         while IFS= read -r path; do
           if [[ -n "$path" ]]; then inventory_args+=(--application-path "$path"); fi
         done <<< "$APPLICATION_PATHS"
-        uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting \
+        if [[ -n "$INVENTORY_PATH" ]]; then
+          inventory_args+=(--inventory "$INVENTORY_PATH" --collection-revision "$(git rev-parse HEAD)")
+        fi
+        if [[ -n "$JUNIT_PATH" ]]; then inventory_args+=(--junit-input "$JUNIT_PATH"); fi
+        uvx --python 3.11 --from "$REPORTER_PACKAGE[report]" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
@@ -71,6 +83,7 @@ runs:
         name: obligation-${{ inputs.sticky-key }}-${{ github.run_attempt }}
         path: |
           ${{ inputs.report-path }}
+          ${{ inputs.junit-path }}
           ${{ steps.render.outputs.markdown-path }}
           ${{ steps.render.outputs.inventory-path }}
         if-no-files-found: error
