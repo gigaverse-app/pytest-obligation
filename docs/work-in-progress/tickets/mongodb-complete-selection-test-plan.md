@@ -23,3 +23,19 @@ passes selection equivalence, native routing and index proofs. Other recovery
 guarantee failures remain visible; this is not a full application adoption claim.
 
 No application runtime, Due execution API, dependency pin or release tag changes.
+
+
+## Native distinct and aggregation reads
+
+The reconciliation audit needs production-owned distinct shop selection and
+aggregation over sent transactions. Five initial controls failed because the
+observer recognized no native find. The extension captures those commands at the
+driver boundary with their real collection/session routing. Pipeline and query
+options are copied as observations, never reconstructed from application models.
+
+Controls cover lost indexes, replica-capable preferences (including explicit
+PRIMARY_PREFERRED), collation, hints, immutable captured pipelines and refusal to
+certify only the first scan of a foreign-collection pipeline. All 49 MongoDB
+integration tests pass on PyMongo 4.18.3 and the supported floor, 4.9.2. The actual
+Shopify sent-shop and sent-mark reads pass native index/routing checks through
+the SDK/HTTP/MongoDB path; removing their indexes makes both shared checks fail.

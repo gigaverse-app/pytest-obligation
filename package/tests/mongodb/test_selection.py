@@ -238,3 +238,84 @@ def test_observed_selection_inspects_later_pages_too(client, populated):
     assert not served
     assert "unbounded leading" in reason
     assert inspector(client, selection).replica_read(selection) is not None
+
+
+@pytest.mark.parametrize("kind", ["aggregate", "distinct"])
+def test_complete_selection_inspects_native_read_commands(client, populated, kind):
+    from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+    populated.create_index([("state", 1), ("sequence", 1)])
+
+    def read():
+        if kind == "distinct":
+            return populated.distinct("sequence", {"state": "pending"})
+        return populated.aggregate(
+            [
+                {"$match": {"state": "pending"}},
+                {"$group": {"_id": "$state", "total": {"$sum": "$sequence"}}},
+            ]
+        )
+
+    selection = observe_selection(read, populated)
+    assert list(selection) == ([0, 1, 2] if kind == "distinct" else [{"_id": "pending", "total": 3}])
+    assert inspector(client, selection).index_served(selection)[0]
+    assert inspector(client, selection).replica_read(selection) is None
+    populated.drop_indexes()
+    served, evidence = inspector(client, selection).index_served(selection)
+    assert not served and "collection scan" in evidence
+
+
+@pytest.mark.parametrize("kind", ["aggregate", "distinct"])
+@pytest.mark.parametrize("preference", [ReadPreference.PRIMARY_PREFERRED, ReadPreference.SECONDARY_PREFERRED])
+def test_native_read_commands_preserve_routing(client, populated, kind, preference):
+    from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+    remote = populated.with_options(read_preference=preference)
+    read = (
+        (lambda: remote.distinct("state"))
+        if kind == "distinct"
+        else (lambda: remote.aggregate([{"$match": {"state": "pending"}}]))
+    )
+    selection = observe_selection(read, populated)
+    assert inspector(client, selection).replica_read(selection) is not None
+
+
+def test_a_foreign_collection_pipeline_cannot_certify_only_its_first_scan(client, populated):
+    from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+    selection = observe_selection(
+        lambda: populated.aggregate(
+            [
+                {"$match": {"state": "pending"}},
+                {"$lookup": {"from": "other", "localField": "state", "foreignField": "state", "as": "joined"}},
+            ]
+        ),
+        populated,
+    )
+    with pytest.raises(ObligationContractDesignError, match="pipeline stage"):
+        inspector(client, selection).index_served(selection)
+
+
+@pytest.mark.parametrize("kind", ["aggregate", "distinct"])
+def test_native_commands_keep_collation_and_query_options(client, populated, kind):
+    from pymongo.collation import Collation
+
+    from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+    fold = Collation("en", strength=2)
+    populated.create_index("state", name="state_casefold", collation=fold)
+    pipeline = [{"$match": {"state": "PENDING"}}]
+
+    def read():
+        if kind == "distinct":
+            return populated.distinct("state", {"state": "PENDING"}, collation=fold)
+        return populated.aggregate(pipeline, collation=fold, hint="state_casefold")
+
+    selection = observe_selection(read, populated)
+    assert len(list(selection)) == (1 if kind == "distinct" else 3)
+    assert selection.commands[0].command["collation"] == fold.document
+    assert inspector(client, selection).index_served(selection)[0]
+    if kind == "aggregate":
+        pipeline[0]["$match"]["state"] = "settled"
+        assert selection.commands[0].command["pipeline"][0]["$match"]["state"] == "PENDING"
+        assert selection.commands[0].command["hint"] == "state_casefold"
