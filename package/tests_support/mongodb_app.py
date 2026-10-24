@@ -12,7 +12,10 @@ class MongoDBOutbox:
         self.collection.insert_one({"_id": identity, "done": False})
         self.recover()
 
+    def pending(self) -> Any:
+        return self.collection.find({"done": False}).sort("_id", 1)
+
     def recover(self) -> None:
-        for row in self.collection.find({"done": False}):
+        for row in self.pending():
             self.send(row["_id"])
             self.collection.update_one({"_id": row["_id"]}, {"$set": {"done": True}})
