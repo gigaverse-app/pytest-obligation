@@ -1,4 +1,4 @@
-"""Optional pytest view of A–J coverage, for both native and registered work-table suites."""
+"""Optional pytest evidence for full contracts and narrower scheduled-selection suites."""
 
 import os
 from collections.abc import Generator
@@ -45,14 +45,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         Disposition,
         ObligationContract,
         SafetyContract,
+        ScheduledSelection,
         convergence_assessments,
         declared_debt,
         disposition_label,
         safety_contract_cases,
+        scheduled_selection_cases,
         suite_cases,
     )
     from ..debt import DebtBaseline, load_baseline
+    from ..exemptions import EXEMPTION_TEST_NAME
     from .catalog import Profile
+    from .source import contract_source
 
     baseline_path = config.getoption("due_work_debt_baseline") or config.getini("due_work_debt_baseline")
     baseline = load_baseline(config.rootpath, baseline=Path(baseline_path)) if baseline_path else DebtBaseline()
@@ -64,7 +68,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if not isinstance(item, pytest.Function) or item.cls is None:
             continue
         contract = getattr(item.cls, "__due_work_contract__", None) or getattr(item.cls, "__safety_contract__", None)
-        if not isinstance(contract, (ObligationContract, SafetyContract)):
+        if not isinstance(contract, (ObligationContract, SafetyContract, ScheduledSelection)):
             continue
         suite = f"{item.cls.__module__}.{item.cls.__qualname__}"
         if suite not in reports:
@@ -75,18 +79,35 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                     because=None if isinstance(disposition, Claim) else disposition.because,
                 )
 
-            profiles = {
-                profile.name: ProfileCoverage(title=profile.title, assessment=assessment(disposition))
-                for profile, disposition in contract.profiles.items()
-            }
+            if isinstance(contract, ScheduledSelection):
+                # This is its own limited scope, never a full profile A claim.
+                profiles = {
+                    "selection": ProfileCoverage(
+                        title="Scheduled selection and loop",
+                        assessment=Assessment(state="claimed"),
+                        families={
+                            "schedule evidence": Assessment(
+                                state="declined" if contract.unscheduled_because else "claimed",
+                                because=contract.unscheduled_because,
+                            )
+                        },
+                    )
+                }
+            else:
+                profiles = {
+                    profile.name: ProfileCoverage(title=profile.title, assessment=assessment(disposition))
+                    for profile, disposition in contract.profiles.items()
+                }
             if isinstance(contract, ObligationContract):
                 profiles[Profile.E.name].families = {
                     family.name: assessment(disposition)
                     for family, disposition in convergence_assessments(contract).items()
                 }
                 parameters = suite_cases(contract, covers=getattr(item.cls, "__due_work_sources__", ()))
-            else:
+            elif isinstance(contract, SafetyContract):
                 parameters = safety_contract_cases(contract)
+            else:
+                parameters = scheduled_selection_cases(contract)
             tickets = {(entry.case, entry.kind): entry.ticket for entry in baseline.of(suite)}
             debt = {
                 entry.case: entry.model_copy(update={"ticket": tickets.get((entry.case, entry.kind))})
@@ -95,19 +116,20 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             additional_cases: dict[str, CaseEvidence] = {}
             for parameter in parameters:
                 case = parameter.values[0]
+                if isinstance(contract, ScheduledSelection) and case.id != "schedule_evidence-declined":
+                    profiles["selection"].cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
+                    continue
                 if case.profile is None or case.assessment_only:
                     additional_cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
                     continue
                 for profile in (case.profile, *case.related_profiles):
                     profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
-            from .source import contract_source
-
             reports[suite] = SuiteCoverage(
                 name=contract.name,
                 profiles=profiles,
                 additional_cases=additional_cases,
                 source=contract_source(item.cls, contract, Path(os.environ.get("GITHUB_WORKSPACE", config.rootpath))),
-                exploration={},
+                exploration=None if isinstance(contract, ScheduledSelection) else {},
             )
         if item.get_closest_marker("due_work_exploration") and hasattr(item, "callspec"):
             scenario = str(item.callspec.params["interleaving_name"])
@@ -120,6 +142,30 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             case = item.callspec.params["case"]
             assert isinstance(case, ContractCase), "generated profile test must carry the canonical case"
             names[item.nodeid] = (suite, case.id)
+    # Exemptions have one generated non-parametrized proof. Add its narrow
+    # scope independently so a class carrying another contract keeps both.
+    for item in items:
+        if not isinstance(item, pytest.Function) or item.cls is None:
+            continue
+        exemption = getattr(item.cls, "__due_work_exemption__", None)
+        if exemption is None:
+            continue
+        source, reason = exemption
+        suite = f"{item.cls.__module__}.{item.cls.__qualname__}"
+        if suite not in reports:
+            reports[suite] = SuiteCoverage(
+                name=f"{source.callable.__qualname__} exemption",
+                profiles={},
+                source=contract_source(item.cls, exemption, Path(os.environ.get("GITHUB_WORKSPACE", config.rootpath))),
+            )
+        if "exemption" not in reports[suite].profiles:
+            reports[suite].profiles["exemption"] = ProfileCoverage(
+                title="Handoff exemption",
+                assessment=Assessment(state="claimed", because=reason),
+                cases={EXEMPTION_TEST_NAME: CaseEvidence(family="exemption")},
+            )
+        if item.originalname == EXEMPTION_TEST_NAME:
+            names[item.nodeid] = (suite, EXEMPTION_TEST_NAME)
     config.stash[_REPORT] = reports
     config.stash[_ITEMS] = names
     config.stash[_EXPLORATION_ITEMS] = exploration_names

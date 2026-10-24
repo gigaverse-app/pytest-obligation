@@ -235,6 +235,17 @@ def _suite(
     ]
     if not compact and glyph_base and application_name(suite.name)[1]:
         lines += [f"Application: {code(suite.name)}", ""]
+    if "selection" in suite.profiles:
+        lines += [
+            "Scope: **Scheduled selection and loop**. Covers the declared query and loop checks; does not establish full automatic recovery (profile A).",
+            "",
+        ]
+    if "exemption" in suite.profiles:
+        lines += [
+            "Scope: **Handoff exemption**. Application reason: "
+            + cell(suite.profiles["exemption"].assessment.because or "None supplied."),
+            "",
+        ]
     cases = all_cases(suite)
     for title, states in (
         ("Failures", {"Check failed"}),

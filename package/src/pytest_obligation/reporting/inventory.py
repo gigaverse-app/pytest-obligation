@@ -9,7 +9,7 @@ from pydantic import Field
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SourceLocation
 
-_DECORATORS = {"due_work_contract_suite", "safety_contract_suite"}
+_DECORATORS = {"due_work_contract_suite", "safety_contract_suite", "scheduled_selection_suite", "exempt_due_work_suite"}
 _DUE_DECORATOR = "due.django.conformance.suite.effect_contract_suite"
 
 
@@ -141,7 +141,7 @@ def discover(root: Path, paths: list[str], *, suite_decorators: Sequence[str] = 
                     contract = (
                         decorator.args[0]
                         if decorator.args
-                        else next((kw.value for kw in decorator.keywords if kw.arg == "contract"), None)
+                        else next((kw.value for kw in decorator.keywords if kw.arg in ("contract", "selection")), None)
                     )
                     try:
                         name = sources.contract_name(contract, path, set()) if contract else None
