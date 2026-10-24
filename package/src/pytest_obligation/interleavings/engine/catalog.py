@@ -40,6 +40,8 @@ def in_flight_histories(
     acknowledgement_only_seams: tuple[str, ...] = (),
     replay_safe: bool = True,
     repair_triggers: Mapping[str, str] | None = None,
+    recreation: bool = False,
+    rejected_retirement_seams: tuple[str, ...] = (),
 ) -> tuple[History, ...]:
     histories = []
     admit = step(Op.ADMIT, value=intents[0])
@@ -149,6 +151,33 @@ def in_flight_histories(
                     for index in order:
                         body += [step(Op.COMPLETE, index=index), step(Op.RECOVER)]
                     add(family, f"{seam}/{''.join(map(str, order))}", [*body, settle, quiet])
+    if recreation:
+        restore = step(Op.RECREATE, value=intents[-1])
+        for seam in seams:
+            add(
+                "IF.recreate-before-completion",
+                seam,
+                [admit, step(Op.ARM, seam=seam), start, changed, restore, settle, step(Op.COMPLETE), settle, quiet],
+            )
+        for seam in rejected_retirement_seams:
+            add(
+                "IF.rejected-retirement",
+                seam,
+                [
+                    admit,
+                    start,
+                    settle,
+                    step(Op.ARM, seam=seam),
+                    step(Op.REJECT_RETIRE),
+                    changed,
+                    restore,
+                    settle,
+                    step(Op.COMPLETE),
+                    settle,
+                    quiet,
+                ],
+            )
+
     for seam in repair_seams or (() if retirement else seams):
         # Exercise repair after the old accepted call overwrites the newer
         # authority. Arming before retirement tests command rejection instead:
