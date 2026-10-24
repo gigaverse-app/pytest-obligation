@@ -293,7 +293,7 @@ class Host(HarnessModel):
     sweep_proofs: tuple[Callable[[Any], None], ...] = ()
 
     #: Exception raised by a cooperative worker stop (Celery uses SoftTimeLimitExceeded).
-    stop_exception: type[Exception] | None = None
+    stop_exception: type[BaseException] | None = None
 
     #: Run an entry point and its downstream handoffs, including delayed work.
     handoff_runner: Callable[[Callable[[], object]], None] | None = None
