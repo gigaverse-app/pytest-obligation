@@ -133,8 +133,11 @@ from pytest_obligation.profiles.eventual_convergence import (
     assert_superseded_snapshot_does_not_write,
 )
 from pytest_obligation.profiles.fact_derived_obligations import (
+    FIXED_EFFECT_DERIVED_PROOFS,
     STATE_DERIVED_PROOFS,
+    FixedEffectDerived,
     StateDerived,
+    assert_fixed_effect_derived_contract,
     assert_state_derived_contract,
 )
 from pytest_obligation.profiles.gated_execution import (
@@ -258,6 +261,9 @@ __all__ = [
     "ExecutionGate",
     # Profile F: fact-derived obligations.
     "STATE_DERIVED_PROOFS",
+    "FixedEffectDerived",
+    "FIXED_EFFECT_DERIVED_PROOFS",
+    "assert_fixed_effect_derived_contract",
     "StateDerived",
     "assert_state_derived_contract",
     # Execution safety.

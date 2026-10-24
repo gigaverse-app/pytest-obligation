@@ -100,6 +100,18 @@ versus level-triggering, and the failure F catches is invisible to every other
 profile: an obligation nothing wrote down produces no row, so discovery,
 ownership and ambiguity all pass by having nothing to look at.
 
+For a fixed operation such as deleting an expired account, bind
+`FixedEffectDerived` through `ObligationContract(fixed_effect_derivation=...)`.
+It uses the same product-state factory, real selection, derivation, settlement,
+complete record observation and stopped-work factory as `StateDerived`.
+`materialises_records=False` still describes selection-only derivation.
+
+The fixed-effect family proves that settlement removes the obligation and a
+later derivation does not rediscover it. It generates no desired-value
+supersession case. Use `StateDerived` and `derivation=` whenever the same
+obligation can want a replacement value; the two shapes cannot be combined.
+Both shapes retain the A/F proof when automatic recovery is also claimed.
+
 ### Declining is an answer, not a gap
 
 Every profile needs a disposition: `Claim`, `Decline`, `NotApplicable` or
