@@ -12,7 +12,19 @@ from pytest_obligation.reporting.inventory import ApplicationInventory
 from tests.core.test_profile_summary import contract_project  # noqa: F401
 
 
-def test_collect_missing_once_then_reuse_inventory(contract_project: pytest.Pytester) -> None:  # noqa: F811
+@pytest.mark.parametrize("options_source", ["ini", "environment"])
+def test_collect_missing_once_then_reuse_inventory(
+    contract_project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, options_source: str  # noqa: F811
+) -> None:
+    contract_project.makepyfile(
+        counting_bootstrap="from pathlib import Path\n"
+        "def pytest_configure(config):\n    Path('bootstrap-loaded').touch()\n"
+    )
+    options = "-p counting_bootstrap -n 2 --dist=loadgroup"
+    if options_source == "ini":
+        contract_project.makeini(f"[pytest]\naddopts = {options}\n")
+    else:
+        monkeypatch.setenv("PYTEST_ADDOPTS", options)
     contract_project.makepyfile(test_unrelated="raise RuntimeError('Do not collect unrelated tests for counts')")
     contract_project.makeconftest(
         "import pytest\nfrom pathlib import Path\n"
@@ -42,6 +54,7 @@ def test_collect_missing_once_then_reuse_inventory(contract_project: pytest.Pyte
     inventory = json.loads(output.read_text())
     count = sum(len(app["nodeids"]) for app in inventory["applications"].values())
     assert count > 0
+    assert (contract_project.path / "bootstrap-loaded").exists()
     assert not (contract_project.path / "tests-executed").exists()
     reused = subprocess.run(
         command + ["--pytest-command", "must-not-be-launched"],

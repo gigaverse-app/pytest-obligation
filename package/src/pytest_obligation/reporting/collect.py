@@ -65,14 +65,11 @@ def main() -> None:
                 "PYTHONPATH": os.pathsep.join(
                     filter(None, [str(Path(__file__).parent), os.environ.get("PYTHONPATH", "")])
                 ),
-                "PYTEST_ADDOPTS": "",
             }
             # --collect-only is unconditional. No fixtures or test bodies run.
             command = [
                 *shlex.split(args.pytest_command),
                 "--collect-only",
-                "-o",
-                "addopts=",
                 "-q",
                 "-p",
                 "_nodeids_plugin",

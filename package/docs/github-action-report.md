@@ -149,7 +149,7 @@ Omit `pytest-command` for a cheap planning pass. Restore dependencies and call t
 action again only when `outputs.required == 'true'`. Both calls reuse the same
 `inventory-path`. Use your project's pytest command; `--no-selective` above is
 appropriate when using pytest-selective. The collector always adds `--collect-only`,
-clears configured addopts and targets only missing files. Collection imports those
+preserves configured pytest plugins and targets only missing files. Collection imports those
 files and runs collection hooks, but does not execute fixtures or test bodies.
 The timeout defaults to 120 seconds and is configurable.
 
