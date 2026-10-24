@@ -81,6 +81,45 @@ is outside this view. Existing fixed-history proof rules remain unchanged.
 
 ## Start with your existing test job
 
+### Account for applications outside the selected tests
+
+Pass `application-paths` as newline-separated source roots after checking out the
+tested revision. The reporter reads Python source without importing applications,
+loading fixtures or collecting tests. It recognizes directly decorated
+`due_work_contract_suite` and `safety_contract_suite` classes, including import
+aliases, and follows local named bindings for literal application names.
+Declarations remain in the tests; no second application registry is needed.
+
+```yaml
+- uses: actions/checkout@v7
+- uses: gigaverse-app/pytest-obligation/report@v1
+  if: always()
+  with:
+    application-paths: tests
+    report-path: evidence/**/obligation-*.json
+    expected-reports: ${{ needs.plan.outputs.report-count }}
+    test-outcome: ${{ needs.tests.result }}
+```
+
+Use a count derived from the admitted sessions, not the number of downloaded
+files. A wholly skipped lane uses `expected-reports: '0'` and
+`test-outcome: skipped`. Keep the reporting job admitted on that path so it
+replaces an older sticky. This does not require running any tests.
+
+The application table distinguishes recorded results from **Not run** (not
+collected or filtered out in this invocation). If expected reports are missing
+or invalid, absent applications are **Unknown**, not assumed skipped. Valid empty
+`{}` reports say no application contract checks ran and never claim passing
+contract coverage. Without an inventory, the report explicitly says it cannot
+list uncollected applications.
+
+Static discovery does not certify a complete inventory of dynamic factories,
+generated classes or custom decorators. Those limits and unresolved names are
+shown; suites observed at runtime still appear in the evidence details. The full
+inventory is preserved beside the Markdown artifact. Restrict the roots to
+application contract tests if the repository is very large. The CLI equivalent is
+`python -m pytest_obligation.reporting --application-path tests --input 'evidence/*.json' --output report.md`.
+
 Your project needs pytest-obligation with profile reporting (the current source
 includes structured failures; older profile JSON remains readable). Install it in
 your normal test environment and bind your application's contract using the
@@ -151,7 +190,7 @@ head and refuses older run IDs/attempts; GitHub comments have no atomic update A
 Fork PRs receive a summary and artifact without a comment. `post-comment: 'false'`
 also disables publication; remove the write permission in that case. Missing
 comment permission preserves the summary/artifact. A missing, empty or invalid
-JSON file produces **Evidence unavailable**, never a green verdict. Do not run
+JSON file with missing or invalid evidence produces **Evidence unavailable**, never a green verdict. Valid empty objects report that no application contract checks ran. Do not run
 untrusted PR code with a write token under `pull_request_target` to bypass this.
 
 Pass `test-outcome` so a collection error or a failure outside the generated
