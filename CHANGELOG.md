@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.16.0...v0.16.1) (2026-10-24)
+
+### Performance
+
+* **report:** reuse content-keyed application inventories and avoid repeated virtual-environment scans ([71e2293](https://github.com/gigaverse-app/pytest-obligation/commit/71e22939ab999bd7d62397c2df85c14080825c89)).
+
+
+### Bug fixes
+
+* **release:** keep stable v1 actions current ([c866b13](https://github.com/gigaverse-app/pytest-obligation/commit/c866b138d61aff31b80f4f121459000e700ba7a7))
+
 ## [0.16.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.15.0...v0.16.0) (2026-10-24)
 
 
