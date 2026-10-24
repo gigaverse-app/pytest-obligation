@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.15.0...v0.16.0) (2026-10-24)
+
+
+### Features
+
+* **report:** separate defects, unassessed coverage and exclusions ([f759e9d](https://github.com/gigaverse-app/pytest-obligation/commit/f759e9d54cdb4f2abfd2a651400a480568001402))
+
+
+### Bug fixes
+
+* **report:** preserve visual hierarchy in large sticky reports ([3d137a5](https://github.com/gigaverse-app/pytest-obligation/commit/3d137a57a340e677e3d33235921afae1183dd3ca))
+
 ## [0.15.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.14.2...v0.15.0) (2026-10-23)
 
 
