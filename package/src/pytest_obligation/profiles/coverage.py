@@ -75,7 +75,7 @@ class CaseEvidence(_ExecutedEvidence):
 class ProfileCoverage(_ExecutedEvidence):
     """Named guarantee, independently assessed families, and evidence for its expected cases."""
 
-    title: str = Field(description="Canonical profile name from the A–J catalog.")
+    title: str = Field(description="Canonical A–J guarantee or the narrower scheduled-selection scope.")
     assessment: Assessment
     families: dict[str, Assessment] = Field(default_factory=dict, description="Independent family coverage decisions.")
     cases: dict[str, CaseEvidence] = Field(

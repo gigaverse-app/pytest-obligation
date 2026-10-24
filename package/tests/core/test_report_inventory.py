@@ -168,3 +168,17 @@ def test_report_cli_inventories_a_configured_wrapper(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "TestOrders" in (tmp_path / "report.md").read_text()
     assert "**1** applications not run" in (tmp_path / "report.md").read_text()
+
+
+@pytest.mark.parametrize("style", ["positional", "keyword"])
+def test_static_inventory_finds_selection_aliases_without_importing(tmp_path, style):
+    argument = "selection=SELECTION" if style == "keyword" else "SELECTION"
+    (tmp_path / "test_selection.py").write_text(
+        "raise RuntimeError('must not import')\n"
+        "from pytest_obligation import ScheduledSelection, scheduled_selection_suite as suite\n"
+        "SELECTION = ScheduledSelection(name='Hourly repair query')\n"
+        f"@suite({argument})\nclass TestSelection: pass\n"
+    )
+    inventory = discover(tmp_path, ["."])
+    assert inventory.applications["test_selection.TestSelection"].name == "Hourly repair query"
+    assert "Hourly repair query" in unescape(render({}, inventory=inventory))

@@ -79,6 +79,15 @@ shrinking statistics and replay histories are not captured here. Failing histori
 remain in the pytest log. Hypothesis use inside arbitrary application callbacks
 is outside this view. Existing fixed-history proof rules remain unchanged.
 
+Scheduled-selection suites report a separate **Scheduled selection and loop** scope.
+It covers the declared query, schedule evidence and any supplied loop checks. It
+never claims the full automatic-recovery profile A. Expected failures retain their
+reasons and tickets, filtered checks remain incomplete, and an explicit
+`unscheduled_because` declaration stays visible as excluded schedule evidence.
+The JSON uses the `selection` key in the existing `profiles` mapping; this is a
+reporting scope, not an additional profile in the A–J catalog. Older JSON keeps
+its original interpretation.
+
 ## Start with your existing test job
 
 ### Account for applications outside the selected tests
@@ -86,7 +95,7 @@ is outside this view. Existing fixed-history proof rules remain unchanged.
 Pass `application-paths` as newline-separated source roots after checking out the
 tested revision. The reporter reads Python source without importing applications,
 loading fixtures or collecting tests. It recognizes directly decorated
-`due_work_contract_suite`, `safety_contract_suite` and Due
+`due_work_contract_suite`, `safety_contract_suite`, `scheduled_selection_suite` and Due
 `due.django.conformance.suite.effect_contract_suite` classes, including import
 aliases, and follows local named bindings for literal application names.
 Declarations remain in the tests; no second application registry is needed.
