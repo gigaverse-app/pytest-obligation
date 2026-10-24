@@ -162,6 +162,13 @@ models in [`bindings.py`](../src/pytest_obligation/interleavings/bindings.py),
 [`model.py`](../src/pytest_obligation/interleavings/model.py) and
 [`ports.py`](../src/pytest_obligation/interleavings/ports.py).
 
+Use `EvidenceArrival(publish=..., consume=...)` to separate a provider fact from
+the production entry point that consumes it. This also works when each fact has
+its own webhook consumer. Set `batchable=True` only when all arrivals share one
+consumer that can process their combined facts; the runner checks this promise
+before generating batch histories. Staging external evidence alone does not
+require a batch API in the application.
+
 ```python
 from pytest_obligation import Claim, ConvergenceFamily, NotApplicable, Profile
 from pytest_obligation.interleavings import InFlightConvergence
