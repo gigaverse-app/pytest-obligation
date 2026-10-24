@@ -54,9 +54,7 @@ from pytest_obligation.integrations.mongodb_selection import selection_built_by
 
 # Run the actual read to completion; use your existing async runner for Motor.
 query = selection_built_by(read_production_orders, orders_collection)
-inspector = mongodb_host(client, {"your_app"}).inspector_for(
-    query, capability="order selection"
-)
+inspector = mongodb_host(client, {"your_app"}).inspector_for(query, capability="order selection")
 served, evidence = inspector.index_served(query)
 assert served, evidence
 assert inspector.replica_read(query) is None
