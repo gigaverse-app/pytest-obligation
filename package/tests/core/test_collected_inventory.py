@@ -14,7 +14,9 @@ from tests.core.test_profile_summary import contract_project  # noqa: F401
 
 @pytest.mark.parametrize("options_source", ["ini", "environment"])
 def test_collect_missing_once_then_reuse_inventory(
-    contract_project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, options_source: str  # noqa: F811
+    contract_project: pytest.Pytester,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+    options_source: str,
 ) -> None:
     contract_project.makepyfile(
         counting_bootstrap="from pathlib import Path\n"
