@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-from uuid import uuid4
 
 import pytest
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -25,22 +24,6 @@ def test_wire_adapter_can_watch_and_release_the_installed_driver_without_connect
     with MongoClient(connect=False) as watched:
         with mongodb_worker_killer(watched)(None) as worker:
             assert worker.commits == 0
-
-
-@pytest.fixture
-def client():
-    with MongoClient(
-        os.environ.get("MONGODB_URI", "mongodb://localhost:27028/?directConnection=true"), retryWrites=False
-    ) as client:
-        client.admin.command("ping")
-        yield client
-
-
-@pytest.fixture
-def collection(client):
-    collection = client[f"due_work_{uuid4().hex}"].work
-    yield collection
-    client.drop_database(collection.database.name)
 
 
 def write_owed(collection, operation):
