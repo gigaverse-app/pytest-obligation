@@ -47,7 +47,8 @@ class TestBilling: pass
     )
     assert rendered.returncode == 0, rendered.stderr
     body = output.read_text()
-    assert "catalog derivation" in body and "Results recorded" in body
+    assert "catalog derivation" in body and "**1** applications with results" in body
+    assert "2 applications" in body
     assert "Unselected billing" in body and "Not run" in body
     assert "0 blocked checks" in body
     assert "Evidence unavailable" not in body

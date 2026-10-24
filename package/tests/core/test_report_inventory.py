@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from pytest_obligation.reporting.inventory import discover
+from pytest_obligation.reporting.markdown import render
 
 
 def test_unreadable_contract_name_preserves_known_suite(tmp_path: Path) -> None:
@@ -20,6 +21,21 @@ def test_unreadable_contract_name_preserves_known_suite(tmp_path: Path) -> None:
     inventory = discover(tmp_path, ["test_orders.py"])
     assert inventory.applications["test_orders.TestOrders"].name == "TestOrders"
     assert any("name unresolved" in limitation for limitation in inventory.limitations)
+
+
+def test_uncollected_applications_keep_numeric_design_without_inventing_test_counts(tmp_path: Path) -> None:
+    (tmp_path / "test_orders.py").write_text(
+        "from pytest_obligation import due_work_contract_suite, ObligationContract\n"
+        "@due_work_contract_suite(ObligationContract(name='Orders'))\nclass TestOrders: pass\n"
+    )
+    body = render({}, inventory=discover(tmp_path, ["test_orders.py"]), graphics=True)
+    assert 'alt="1 applications"' in body
+    assert 'alt="0 checks passed"' in body
+    assert "**1** applications not run" in body
+    assert "Checks skipped: **unknown**" in body
+    assert "| Application / suite |" not in body
+    assert "good-0" not in body
+    assert body.index("<details>") < body.index("Orders")
 
 
 @pytest.mark.parametrize("evidence", ["empty", "skipped", "missing"])
@@ -62,8 +78,8 @@ def test_unexecuted_applications_are_named_without_fabricating_results(tmp_path:
     assert result.returncode == 0, result.stderr
     body = unescape(output.read_text())
     assert "Order delivery" in body
-    assert "tests.test_orders.TestOrders" in body
-    assert "0 checks passed" not in body
+    assert "1 applications" in body
+    assert "0 checks passed" in body
     if evidence == "missing":
         assert "Evidence unavailable" in body
         assert "Unknown: reports incomplete" in body

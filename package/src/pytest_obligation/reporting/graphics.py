@@ -39,7 +39,7 @@ def _color(kind: str, value: int) -> str:
     return "warning" if kind in ("blocked", "gaps") else "bad"
 
 
-def summary_html(values: dict[str, int], base: str) -> str:
+def summary_html(values: dict[str, int], base: str, *, neutral: bool = False) -> str:
     positions = (0, 107, 235, 339, 442, 546, 640)
     parts = []
     for i, (key, label) in enumerate(zip(("applications", *METRICS), LABELS, strict=True)):
@@ -49,7 +49,9 @@ def summary_html(values: dict[str, int], base: str) -> str:
             return escape(
                 " · ".join(f"{values[k]} {label}" for k, label in zip(("applications", *METRICS), LABELS, strict=True))
             )
-        parts.append(_number(base, value, _color(key, value), width, width * 2, label))
+        parts.append(
+            _number(base, value, "neutral" if neutral and value == 0 else _color(key, value), width, width * 2, label)
+        )
         end = positions[i] + len(str(value)) * width
         if i == 1:
             parts += [_space(base, 222 - end), _picture(base, "divider", 1, 36), _space(base, 12)]
