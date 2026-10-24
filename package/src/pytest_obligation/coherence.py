@@ -12,7 +12,7 @@ backfill. Two green profiles, one permanently stranded class of work.
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from pytest_obligation.profiles.fact_derived_obligations import StateDerived
+from pytest_obligation.profiles.fact_derived_obligations import FixedEffectDerived, StateDerived
 
 
 class RecoverySurface(Protocol):
@@ -43,18 +43,20 @@ class RecoverySurface(Protocol):
 
 def assert_automatic_recovery_consumes_derived_obligations(
     sweep: RecoverySurface,
-    derived: StateDerived,
+    derived: StateDerived | FixedEffectDerived,
 ) -> None:
     """
     Profiles A and F agree on identity, eligibility, dispatch, and settlement.
 
-    Two scenarios, because they strand differently. A *fresh* implied
+    Mutable desired state has two scenarios, because they strand differently. A *fresh* implied
     obligation is the ordinary case every sweep serves. A *settled-then-moved*
     obligation is the gap-filling blind spot: once settled, a sweep keyed on
     "never reached a terminal state" no longer sees the row, so a desired-state
     move afterwards re-opens the obligation for the derivation while recovery
     never selects it. Immutable lifecycles that replace the row instead of
-    editing it declare the rotation with ``identity_after_move``.
+    editing it declare the rotation with ``identity_after_move``. Fixed effects
+    prove the ordinary selection/dispatch/settlement path; they have no
+    same-identity replacement operation to exercise.
     """
     assert derived.make_recovery_eligible is not None, (
         f"{derived.name}: profiles A and F are both claimed, but the derivation "
@@ -85,6 +87,11 @@ def assert_automatic_recovery_consumes_derived_obligations(
     assert identity not in derived.outstanding(), (
         f"{derived.name}: the obligation remains outstanding after the production settlement path"
     )
+
+    if isinstance(derived, FixedEffectDerived):
+        # A fixed operation has no same-identity replacement to exercise. The
+        # ordinary obligation still had to be selected, dispatched and settled.
+        return
 
     moved_from = derived.make_implied_obligation()
     derived.derive()
