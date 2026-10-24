@@ -199,6 +199,13 @@ the recorder of what its dispatch path sends: the gate's recovery is shown to be
 the sweep's by the gate's identity being dispatched there while it runs. See
 [what a green result means](what-a-green-result-means.md#execution-eligibility-owed-is-not-the-same-as-runnable).
 
+Keep obligation identity and retry budget in `reserved_state`. If a legitimate
+readiness command rebases an expired retry time to now, expose its timestamp as
+`not_before` separately. The proof then permits the same or a later timestamp,
+rejects an earlier one, and still requires recovery to complete within the bound.
+Every field must remain unchanged while blocked. Without `not_before`, include
+the timestamp in the original exact reserved-state snapshot.
+
 **Or exempt it, with proof**, when losing the handoff genuinely costs nothing:
 
 ```python
