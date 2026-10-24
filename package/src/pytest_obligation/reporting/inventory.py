@@ -9,7 +9,7 @@ from pydantic import Field
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SourceLocation
 
-_DECORATORS = {"due_work_contract_suite", "safety_contract_suite", "scheduled_selection_suite"}
+_DECORATORS = {"due_work_contract_suite", "safety_contract_suite", "scheduled_selection_suite", "exempt_due_work_suite"}
 _DUE_DECORATOR = "due.django.conformance.suite.effect_contract_suite"
 
 

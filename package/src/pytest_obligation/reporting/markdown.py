@@ -240,6 +240,12 @@ def _suite(
             "Scope: **Scheduled selection and loop**. Covers the declared query and loop checks; does not establish full automatic recovery (profile A).",
             "",
         ]
+    if "exemption" in suite.profiles:
+        lines += [
+            "Scope: **Handoff exemption**. Application reason: "
+            + cell(suite.profiles["exemption"].assessment.because or "None supplied."),
+            "",
+        ]
     cases = all_cases(suite)
     for title, states in (
         ("Failures", {"Check failed"}),

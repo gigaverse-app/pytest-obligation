@@ -54,7 +54,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         suite_cases,
     )
     from ..debt import DebtBaseline, load_baseline
+    from ..exemptions import EXEMPTION_TEST_NAME
     from .catalog import Profile
+    from .source import contract_source
 
     baseline_path = config.getoption("due_work_debt_baseline") or config.getini("due_work_debt_baseline")
     baseline = load_baseline(config.rootpath, baseline=Path(baseline_path)) if baseline_path else DebtBaseline()
@@ -122,8 +124,6 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                     continue
                 for profile in (case.profile, *case.related_profiles):
                     profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
-            from .source import contract_source
-
             reports[suite] = SuiteCoverage(
                 name=contract.name,
                 profiles=profiles,
@@ -142,6 +142,30 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             case = item.callspec.params["case"]
             assert isinstance(case, ContractCase), "generated profile test must carry the canonical case"
             names[item.nodeid] = (suite, case.id)
+    # Exemptions have one generated non-parametrized proof. Add its narrow
+    # scope independently so a class carrying another contract keeps both.
+    for item in items:
+        if not isinstance(item, pytest.Function) or item.cls is None:
+            continue
+        exemption = getattr(item.cls, "__due_work_exemption__", None)
+        if exemption is None:
+            continue
+        source, reason = exemption
+        suite = f"{item.cls.__module__}.{item.cls.__qualname__}"
+        if suite not in reports:
+            reports[suite] = SuiteCoverage(
+                name=f"{source.callable.__qualname__} exemption",
+                profiles={},
+                source=contract_source(item.cls, exemption, Path(os.environ.get("GITHUB_WORKSPACE", config.rootpath))),
+            )
+        if "exemption" not in reports[suite].profiles:
+            reports[suite].profiles["exemption"] = ProfileCoverage(
+                title="Handoff exemption",
+                assessment=Assessment(state="claimed", because=reason),
+                cases={EXEMPTION_TEST_NAME: CaseEvidence(family="exemption")},
+            )
+        if item.originalname == EXEMPTION_TEST_NAME:
+            names[item.nodeid] = (suite, EXEMPTION_TEST_NAME)
     config.stash[_REPORT] = reports
     config.stash[_ITEMS] = names
     config.stash[_EXPLORATION_ITEMS] = exploration_names

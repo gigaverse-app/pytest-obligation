@@ -88,6 +88,14 @@ The JSON uses the `selection` key in the existing `profiles` mapping; this is a
 reporting scope, not an additional profile in the A–J catalog. Older JSON keeps
 its original interpretation.
 
+Executable handoff exemptions report their own **Handoff exemption** scope and
+the application's reason. A passing probe verifies only that stated exemption;
+it does not claim A–J lifecycle coverage. Failed setup, proof or cleanup, and
+filtered exemption tests remain incomplete. A class declaring both a contract
+and an exemption retains both sets of evidence. Static discovery uses the
+exemption class name when no literal application name exists. The JSON uses the
+`exemption` key in the existing `profiles` mapping.
+
 ## Start with your existing test job
 
 ### Account for applications outside the selected tests
@@ -95,7 +103,7 @@ its original interpretation.
 Pass `application-paths` as newline-separated source roots after checking out the
 tested revision. The reporter reads Python source without importing applications,
 loading fixtures or collecting tests. It recognizes directly decorated
-`due_work_contract_suite`, `safety_contract_suite`, `scheduled_selection_suite` and Due
+`due_work_contract_suite`, `safety_contract_suite`, `scheduled_selection_suite`, `exempt_due_work_suite` and Due
 `due.django.conformance.suite.effect_contract_suite` classes, including import
 aliases, and follows local named bindings for literal application names.
 Declarations remain in the tests; no second application registry is needed.
