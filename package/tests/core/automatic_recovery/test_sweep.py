@@ -388,6 +388,38 @@ def test_a_tick_that_diverges_from_the_declared_selection_is_caught() -> None:
         assert_the_tick_selects_what_the_adapter_describes(sweep.binding(run_tick=skips_the_lead_row))
 
 
+@pytest.mark.parametrize("defect", [None, "drop_first", "drop_last", "truncate"])
+def test_selection_equivalence_does_not_invent_a_bound_for_inline_ticks(defect: str | None) -> None:
+    """An unbounded binding still has to describe every identity its tick serves."""
+    sweep = _InMemorySweep()
+
+    def inline_tick() -> int:
+        rows = list(sweep.due_work())
+        if defect == "drop_first":
+            rows = rows[1:]
+        elif defect == "drop_last":
+            rows = rows[:-1]
+        elif defect == "truncate":
+            rows = rows[:_PAGE_SIZE]
+        sweep.last_dispatched = [row.pk for row in rows]
+        return len(rows)
+
+    binding = sweep.binding(page_size=None, run_tick=inline_tick)
+    if defect is None:
+        assert_the_tick_selects_what_the_adapter_describes(binding)
+        assert len(sweep.last_dispatched) > _PAGE_SIZE
+    else:
+        with pytest.raises(AssertionError, match="tick's selection and the adapter's disagree"):
+            assert_the_tick_selects_what_the_adapter_describes(binding)
+
+
+def test_inline_selection_equivalence_still_refuses_a_counterfeit_recorder() -> None:
+    sweep = _InMemorySweep()
+    binding = sweep.binding(page_size=None, dispatched_ids=lambda: [row.pk for row in sweep.due_work()])
+    with pytest.raises(AssertionError, match="before any tick ran"):
+        assert_the_tick_selects_what_the_adapter_describes(binding)
+
+
 def test_invariant_0b_reads_the_declared_dispatch_identity() -> None:
     """
     A non-pk dispatch identity is compared as the adapter declares it.
