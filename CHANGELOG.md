@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.19.1...v0.19.2) (2026-10-24)
+
+
+### Bug fixes
+
+* **report:** retain expected-failure diagnostics without inferring reproduction ([#158](https://github.com/gigaverse-app/pytest-obligation/issues/158)) ([2d9859e](https://github.com/gigaverse-app/pytest-obligation/commit/2d9859e561fc353db782ea1571b360ba11878c1e))
+
 ## [0.19.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.19.0...v0.19.1) (2026-10-24)
 
 
