@@ -86,9 +86,28 @@ is outside this view. Existing fixed-history proof rules remain unchanged.
 Pass `application-paths` as newline-separated source roots after checking out the
 tested revision. The reporter reads Python source without importing applications,
 loading fixtures or collecting tests. It recognizes directly decorated
-`due_work_contract_suite` and `safety_contract_suite` classes, including import
+`due_work_contract_suite`, `safety_contract_suite` and Due
+`due.django.conformance.suite.effect_contract_suite` classes, including import
 aliases, and follows local named bindings for literal application names.
 Declarations remain in the tests; no second application registry is needed.
+
+For a project wrapper around these decorators, list its fully qualified import
+name in `suite-decorators`. This explicitly declares which wrappers create
+application suites; discovery does not execute wrappers or guess from their names.
+The same setting is available on both `collect` and `report` and as the repeatable
+CLI option `--suite-decorator`. Unresolved display names retain the class identity.
+
+Choose `python-version` when application source requires newer syntax than the
+actions' default Python 3.11. For example, a Python 3.14 application can use:
+
+```yaml
+    python-version: '3.14'
+    suite-decorators: project.testing.application_contract_suite
+```
+
+These options affect inventory only. A discovered declaration supplies neither
+passing evidence nor collected-test counts; real report and collection artifacts
+still provide those. The collector includes these settings in its cache identity.
 
 ```yaml
 - uses: actions/checkout@v7

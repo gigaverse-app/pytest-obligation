@@ -7,6 +7,7 @@ from functools import partial
 import pytest
 
 from pytest_obligation.interleavings.bindings import (
+    EvidenceArrival,
     EvidenceConfluence,
     EvidenceSession,
     InFlightConvergence,
@@ -45,6 +46,25 @@ def evidence_scenario() -> EvidenceConfluence[frozenset[str]]:
         no_ordered_pair_because="Root control isolates receipt batching rather than database connections.",
         no_retry_because="Reference has no sender; only evidence consumption is modeled here.",
     )
+
+
+@pytest.mark.parametrize("batchable", [False, True])
+def test_staged_external_evidence_does_not_require_a_shared_batch_consumer(batchable):
+    @contextmanager
+    def bind():
+        with evidence_reference() as session:
+            facts = {}
+            for key, arrival in session.facts.items():
+                assert isinstance(arrival, EvidenceArrival)
+                # Separate entry points can share fixture publication controls
+                # without promising that one consumer accepts every fact.
+                facts[key] = EvidenceArrival(publish=arrival.publish, consume=partial(arrival.consume))
+            yield session.model_copy(update={"facts": facts})
+
+    declaration = evidence_scenario().model_copy(update={"bind": bind, "batchable": batchable})
+    with pytest.raises(AssertionError, match="one production consumer") if batchable else nullcontext():
+        for history in declaration.histories():
+            declaration.run(history)
 
 
 def test_catalog_is_pure_unique_and_has_real_order_variation() -> None:

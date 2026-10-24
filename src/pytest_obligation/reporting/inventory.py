@@ -1,6 +1,7 @@
 """Find literal suite declarations without importing tests, fixtures or application code."""
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import Field
@@ -9,6 +10,7 @@ from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SourceLocation
 
 _DECORATORS = {"due_work_contract_suite", "safety_contract_suite"}
+_DUE_DECORATOR = "due.django.conformance.suite.effect_contract_suite"
 
 
 class Application(HarnessModel):
@@ -97,8 +99,10 @@ class _Sources:
         return self.contract_name(ast.Name(id=name), imported, seen) if imported.is_file() else None
 
 
-def discover(root: Path, paths: list[str]) -> ApplicationInventory:
+def discover(root: Path, paths: list[str], *, suite_decorators: Sequence[str] = ()) -> ApplicationInventory:
     """Scan explicit source roots once; unresolved names keep their suite identity visible."""
+    adapters = {_DUE_DECORATOR, *suite_decorators}
+    names = _DECORATORS | {name.rsplit(".", 1)[-1] for name in adapters}
     sources = _Sources(root)
     applications: dict[str, Application] = {}
     limitations = [
@@ -120,7 +124,7 @@ def discover(root: Path, paths: list[str]) -> ApplicationInventory:
             text = path.read_text(encoding="utf-8-sig")
             # Most test modules contain no contract declaration. Read them once,
             # but allocate ASTs only for possible suites and their named bindings.
-            if not any(name in text for name in _DECORATORS):
+            if not any(name in text for name in names):
                 continue
             tree = sources.tree(path, text)
             module = ".".join(path.relative_to(sources.root).with_suffix("").parts)
@@ -131,10 +135,8 @@ def discover(root: Path, paths: list[str]) -> ApplicationInventory:
                     if not isinstance(decorator, ast.Call):
                         continue
                     qualified = sources.qualified(decorator.func, path)
-                    if (
-                        not qualified.startswith("pytest_obligation.")
-                        or qualified.rsplit(".", 1)[-1] not in _DECORATORS
-                    ):
+                    native = qualified.startswith("pytest_obligation.") and qualified.rsplit(".", 1)[-1] in _DECORATORS
+                    if not native and qualified not in adapters:
                         continue
                     contract = (
                         decorator.args[0]
