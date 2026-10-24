@@ -66,6 +66,9 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
         assert set(session.intents) == set(scenario.intents), "session intents differ from collection metadata"
         assert (session.retire is not None) == scenario.retirement, "retirement seam mismatch"
         assert (session.transport is not None) == scenario.transport, "transport seam mismatch"
+        assert (session.uncertain_repair_owed is not None) == bool(scenario.unbounded_repair_because), (
+            "unbounded repair evidence seam mismatch"
+        )
         if not scenario.retirement:
             assert session.change and session.desired_identity and session.acknowledged_identity, (
                 "revision seams missing"
@@ -197,6 +200,14 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
                     for _ in range(-(-scenario.bounds.repair_window_seconds // scenario.bounds.interval_seconds)):
                         recover()
                     before = dict(session.provider.calls)
+                    # Unknown effect evidence is not proof of cancellation. An
+                    # explicit unbounded policy may keep repairing only those
+                    # exact provider keys whose debt already exists here.
+                    uncertain = {
+                        key
+                        for key in before
+                        if session.uncertain_repair_owed is not None and session.uncertain_repair_owed(key)
+                    }
                     for _ in range(2):
                         recover()
                         for alias in handles:
@@ -205,10 +216,16 @@ def run_in_flight(scenario: InFlightConvergence[H, V, ObservedT], history: Histo
                                 "settled-state",
                                 "settled product/provider state or revision acknowledgement regressed",
                             )
+                    changed = {key for key, count in session.provider.calls.items() if count != before.get(key, 0)}
                     require(
-                        dict(session.provider.calls) == before,
+                        all(
+                            key in uncertain
+                            and session.uncertain_repair_owed is not None
+                            and session.uncertain_repair_owed(key)
+                            for key in changed
+                        ),
                         "settled-churn",
-                        "recovery repeated settled provider work",
+                        "recovery repeated provider work without retained uncertainty for that exact key",
                     )
                 case Op.UNCONFIRMED:
                     assert session.desired_identity and session.acknowledged_identity, "revision seams missing"

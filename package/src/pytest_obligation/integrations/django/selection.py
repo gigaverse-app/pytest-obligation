@@ -37,6 +37,7 @@ from django.conf import settings
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from django.db.models import Model, QuerySet
 from django.test.utils import CaptureQueriesContext
+from psycopg import sql
 
 from pytest_obligation.host import ReadCosts
 from pytest_obligation.integrations.django.indexes import attach_catalog_facts, installed_indexes
@@ -74,9 +75,9 @@ def explain_index_eligibility(queryset: QuerySet[Any], *, bitmap_only: bool = Fa
     with transaction.atomic(using=database.alias), database.cursor() as cursor:
         previous = {}
         for setting in disabled:
-            cursor.execute(f"SHOW {setting}")
+            cursor.execute("SELECT current_setting(%s)", [setting])
             previous[setting] = cursor.fetchone()[0]
-            cursor.execute(f"SET LOCAL {setting} = off")
+            cursor.execute("SELECT set_config(%s, %s, true)", [setting, "off"])
         plan = _plan(queryset.explain(format="json"))
         for setting, value in previous.items():
             cursor.execute("SELECT set_config(%s, %s, true)", [setting, value])
@@ -190,7 +191,8 @@ class DjangoSelectionInspector(HarnessModel):
         with connections[queryset.db].cursor() as cursor:
             # The planner chooses from statistics: without fresh ones a table of
             # thousands of rows just inserted looks empty, and any plan is "cheap".
-            cursor.execute(f"ANALYZE {connections[queryset.db].ops.quote_name(table)}")
+            # Metadata remains one identifier even when its name contains SQL punctuation.
+            cursor.execute(sql.Composed([sql.SQL("ANALYZE "), sql.Identifier(table)]))
         whole_table = queryset.model._base_manager.using(queryset.db).all()
         return ReadCosts(
             selection=read_cost(_plan(queryset.explain(analyze=True, buffers=True, format="json")), table=table),
