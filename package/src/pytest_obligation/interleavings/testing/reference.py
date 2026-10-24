@@ -16,6 +16,7 @@ from ..engine.provider import ProviderControl
 def reference(
     *,
     forget: bool = False,
+    inline_retirement: bool = False,
     forget_at: int = 0,
     quiet_corruption: Literal["acknowledgement", "desired-revision"] | None = None,
     repair_recoveries: int = 0,
@@ -54,7 +55,7 @@ def reference(
         if applied.get(handle) == revisions[handle]:
             ack[handle] = revisions[handle]
 
-    def write(handle: int) -> None:
+    def write(handle: int, *, propagate: bool = False) -> None:
         value, revision = desired[handle], revisions[handle]
         identity = str(handle) if replay_safe else f"{handle}@{revision}"
         if not replay_safe and identity in sent:
@@ -63,6 +64,8 @@ def reference(
         try:
             provider.invoke("write", identity, partial(apply, handle, value, revision))
         except TimeoutError:
+            if propagate:
+                raise
             return
         finished.add(handle)
         if receipt_only and not (trust_receipts_from_revision and revision >= trust_receipts_from_revision):
@@ -82,6 +85,18 @@ def reference(
         desired[handle] = value
         revisions[handle] += 1
         write(handle)
+
+    def retire(handle: int) -> None:
+        previous, revision = desired[handle], revisions[handle]
+        desired[handle] = "B"
+        revisions[handle] += 1
+        try:
+            write(handle, propagate=True)
+        except TimeoutError:
+            # A synchronous command rejects instead of admitting retirement.
+            desired[handle], revisions[handle] = previous, revision
+            write(handle)
+            raise
 
     repairs_left = repair_recoveries
 
@@ -116,6 +131,8 @@ def reference(
         admit=admit,
         start=write,
         change=change,
+        retire=retire if inline_retirement else None,
+        retired="B" if inline_retirement else None,
         observe=lambda h: remote.get(h, ""),
         recover=recover,
         advance=lambda seconds: None,
@@ -153,3 +170,27 @@ def evidence_reference(*, forget: bool = False) -> Iterator[EvidenceSession[froz
         effects=lambda: {},
         actor_scope=nullcontext,
     )
+
+
+@contextmanager
+def retained_unknown_reference(
+    *, evidence_key=("write", "0"), corrupt=False, new_key=False, evidence_disappears=False, claim_all=False
+):
+    with reference(repair_recoveries=100_000, quiet_corruption="acknowledgement" if corrupt else None) as session:
+        original = session.recover
+        ticks = 0
+        evidence_reads = 0
+
+        def recover():
+            nonlocal ticks
+            original()
+            ticks += 1
+            if new_key:
+                session.provider.invoke("write", f"unowned-{ticks}", lambda: None)
+
+        def evidence(key):
+            nonlocal evidence_reads
+            evidence_reads += 1
+            return (claim_all or key == evidence_key) and not (evidence_disappears and evidence_reads > 1)
+
+        yield session.model_copy(update={"recover": recover, "uncertain_repair_owed": evidence})

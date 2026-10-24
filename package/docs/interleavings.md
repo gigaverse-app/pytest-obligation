@@ -17,6 +17,25 @@ stability. A repeated visible payload does not excuse corrupt revision or
 acknowledgement identities. Seams listed in `acknowledgement_only_seams` also
 get acknowledgement-without-application histories (below); nothing else does.
 
+### Repair without a provider lifetime bound
+
+The default `QUIET` check still forbids any repeated settled provider call. Some
+providers expose neither cancellation nor a later receipt for a request whose
+response was lost. A projection may intentionally retain that unknown effect
+and keep repairing without an expiry. Declare `unbounded_repair_because` with
+that concrete provider limitation and bind
+`InFlightSession.uncertain_repair_owed((seam, provider_identity))` to a read-only
+observation of durable unresolved effect evidence for the exact key.
+
+The check permits growing counters only for keys already present before `QUIET`
+whose evidence remains owed both before and after the check. Missing evidence,
+a different seam or identity, and new keys still fail `settled-churn`. Product
+state and acknowledged revision must remain correct on every recovery turn.
+An active work row alone is not evidence, and this declaration neither supplies
+a timeout nor turns unknown effects into confirmed cancellation. It expresses
+continued repair honestly; it does not prove that late provider writes have no
+transient exposure window.
+
 ### Acknowledgement without application (opt-in per seam)
 
 Test the failures the dependency's declared contract permits. An API that

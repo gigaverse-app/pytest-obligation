@@ -95,10 +95,10 @@ class HistoryTrace(HarnessModel):
         default=1, ge=1, le=1, description="Trace wire-format version; only version 1 is currently readable."
     )
     catalog_version: int = Field(
-        default=2,
+        default=3,
         ge=1,
-        le=2,
-        description="Catalog format generation; versions 1 and 2 replay their stored steps directly.",
+        le=3,
+        description="Catalog format generation; versions 1 and 2 replay their stored steps directly; version 3 repairs retirement histories.",
     )
     scenario: str = Field(description="Stable binding name; must match the target declaration.")
     scenario_version: int = Field(

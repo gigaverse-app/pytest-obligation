@@ -1,7 +1,8 @@
 """External-only controls; application admission and recovery remain untouched."""
 
 from collections import Counter, deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import TypeVar, cast
 
 from pydantic import Field, InstanceOf
@@ -51,6 +52,19 @@ class ProviderControl(MutableHarnessModel):
     """elapsed_seconds at which each pending request was accepted, by stable index."""
     expired: list[int] = Field(default_factory=list)
     """Indexes of held requests that outlived request_lifetime_seconds and never applied."""
+
+    @contextmanager
+    def explained_failures(self, *errors: type[BaseException]) -> Iterator[None]:
+        """Accept only an error accompanied by a fault injected in this call.
+
+        This is fault accounting, not application retry. Recovery still runs
+        once, and arbitrary or previously injected errors remain test failures.
+        """
+        before = len(self.reached)
+        try:
+            yield
+        except errors:
+            assert len(self.reached) > before, "uninjected provider failure"
 
     def arm(self, seam: str, fault: Fault) -> None:
         """Arm exactly one boundary; fail if a previous injection was never exercised."""
