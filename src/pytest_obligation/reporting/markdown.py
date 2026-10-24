@@ -21,6 +21,77 @@ from .evidence import (
     MAX_BODY as MAX_BODY,
 )
 from .graphics import application_html, application_name, summary_html
+from .inventory import ApplicationInventory
+
+
+def _skipped_checks(
+    reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
+) -> tuple[int, bool]:
+    declared = inventory.applications if inventory else {}
+    cases = [case for suite in reports.values() for case in all_cases(suite).values()]
+    # Count only known checks with explicit non-execution evidence. Interrupted
+    # selected checks and expected failures must not masquerade as skips.
+    skipped = sum(
+        not case.outcomes
+        and (not case.collected or not case.selected)
+        or case_status(case) == "Test skipped or incomplete"
+        and any("skipped" in outcomes for outcomes in case.outcomes.values())
+        for case in cases
+    )
+    incomplete = bool(unavailable or set(declared) - set(reports) or inventory is None)
+    return skipped, incomplete
+
+
+def _execution_summary(
+    reports: dict[str, SuiteCoverage],
+    inventory: ApplicationInventory | None,
+    unavailable: str,
+    collected_skips: int | None = None,
+) -> list[str]:
+    declared = inventory.applications if inventory else {}
+    applications = set(declared) | set(reports)
+    observed = {key for key, suite in reports.items() if any(c.outcomes for c in all_cases(suite).values())}
+    absent = applications - observed
+    unknown = absent if unavailable else set()
+    not_run = absent - unknown
+    skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
+    if collected_skips is not None:
+        skipped, incomplete = collected_skips, False
+    skip_count = f"**{skipped} known**" if skipped and incomplete else "**unknown**" if incomplete else f"**{skipped}**"
+    lines = [
+        "<details>",
+        "<summary>Application inventory and skipped tests</summary>",
+        "",
+        f"**{len(observed)}** applications with results · **{len(not_run)}** applications not run"
+        + (f" · **{len(unknown)}** unknown" if unknown else ""),
+        f"Checks skipped: {skip_count}."
+        + (
+            " Uncollected applications have no measured test count."
+            if incomplete and set(declared) - set(reports)
+            else ""
+        ),
+        "",
+    ]
+    if not reports:
+        lines += ["No application contract checks ran.", ""]
+    if absent or inventory is None or inventory.limitations:
+        used = 0
+        for key in sorted(absent):
+            name = declared[key].name if key in declared else reports[key].name
+            status = "Unknown: reports incomplete" if key in unknown else "Not run"
+            row = f"- **{cell(name)}**: {status}."
+            if used + len(row) > MAX_BODY // 3:
+                lines.append("Further applications omitted; see the inventory JSON artifact.")
+                break
+            lines.append(row)
+            used += len(row)
+        if inventory is None:
+            lines.append("Application inventory was not supplied; uncollected suites cannot be listed.")
+        else:
+            lines += ["", *[cell(limitation) for limitation in inventory.limitations[:10]]]
+    lines += ["", "</details>", ""]
+    return lines
+
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = {
@@ -72,11 +143,11 @@ def _priority(item: tuple[str, SuiteCoverage]) -> tuple[int, int, str]:
     return 4, 0, item[0]
 
 
-def _totals(values: dict[str, int], glyph_base: str) -> str:
+def _totals(values: dict[str, int], glyph_base: str, *, neutral: bool = False, skipped: int | None = None) -> str:
     alt = " · ".join(f"{values[kind]} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
     if not glyph_base:
-        return f"**{alt}**"
-    return summary_html(values, glyph_base)
+        return f"**{alt} · {skipped if skipped is not None else '?'} skipped tests**"
+    return summary_html({**values, "skipped": skipped}, glyph_base, neutral=neutral)
 
 
 def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> str:
@@ -285,17 +356,29 @@ def render(
     repository_url: str = "",
     revision: str = "",
     graphics: bool = False,
+    inventory: ApplicationInventory | None = None,
+    collected_skips: int | None = None,
 ) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
     glyph_base = f"{banner_assets}/report-glyphs/" if graphics else ""
-    totals: Counter[str] = Counter()
+    totals: Counter[str] = Counter(dict.fromkeys(METRICS, 0))
     for suite in reports.values():
         totals.update(counts(suite))
-    totals["applications"] = len(reports)
+    # Discovery widens the application denominator, never the passing evidence.
+    totals["applications"] = len(set(reports) | (set(inventory.applications) if inventory else set()))
     head = [
         f'<a href="{PROJECT}"><picture><source media="(prefers-color-scheme: dark)" srcset="{banner_assets}/sticky-banner-dark.svg">'
         f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
+        "",
+    ]
+    skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
+    if collected_skips is not None:
+        skipped, incomplete = collected_skips, False
+    head += [
+        _totals(
+            dict(totals), glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped
+        ),
         "",
     ]
     if test_outcome == "failure":
@@ -303,17 +386,17 @@ def render(
             f"**🔴 Test step failed. {totals['failed'] + totals['rejected']} failed contract checks recorded; inspect the run log for other failures.**",
             "",
         ]
-    elif test_outcome in ("cancelled", "skipped"):
+    elif test_outcome == "cancelled":
         head += ["**🟠 Test step did not complete.**", ""]
-    if unavailable or not reports:
+    if unavailable:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
-    else:
-        head += [_totals(dict(totals), glyph_base), ""]
+    elif reports:
         elapsed = next(iter(reports.values())).session_seconds
         timing = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
             _time(list(reports.values()), compact=True)
         ]
         head += ["<sub>" + " · ".join(timing) + "</sub>", ""]
+    head += _execution_summary(reports, inventory, unavailable, collected_skips)
     compact = len(reports) > 3
     if compact:
         head += _overview(reports)
@@ -331,6 +414,7 @@ def render(
         "Declined and not-applicable declarations remain separate and do not establish passing coverage. Graphics show zero issues in green; missing reports never show green zeroes.",
         "",
         "Elapsed time covers the pytest session. Summed check time includes setup, execution and cleanup; parallel work overlaps.",
+        "Application totals include discovered declarations and reported suites. Skipped checks count known deselections and explicit pytest skips; incomplete selected checks are not skips. Uncollected applications have unknown check counts. Zero recorded outcomes do not certify passing coverage.",
         "",
         "Application names, quoted reasons and diagnostic values come from application code. "
         "Guarantee labels come from pytest-obligation. Results cover collected suites only; passing checks do not rate every test's quality.",

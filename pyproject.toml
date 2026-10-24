@@ -37,7 +37,8 @@ dependencies = ["pytest>=8", "pydantic>=2.11"]
 
 [project.optional-dependencies]
 # Dependencies for the reusable tests shipped alongside the source.
-selftest = ["pytest-xdist>=3.6", "PyYAML>=6"]
+selftest = ["pytest-xdist>=3.6", "PyYAML>=6", "defusedxml>=0.7"]
+report = ["defusedxml>=0.7"]
 debt = ["PyYAML>=6"]
 exploration = ["hypothesis>=6.112"]
 django = ["django>=4.2", "pytest-django>=4.8", "psycopg[binary]>=3.1", "time-machine>=2.10"]

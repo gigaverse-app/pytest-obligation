@@ -10,6 +10,50 @@ import pytest
 from tests.core.test_profile_summary import contract_project  # noqa: F401
 
 
+def test_selective_execution_keeps_an_unimported_application_visible(contract_project: pytest.Pytester) -> None:  # noqa: F811
+    executed = next(contract_project.path.glob("test_*.py"))
+    contract_project.makepyfile(
+        test_unselected="""
+raise RuntimeError('Unselected application must not be imported for the report')
+from pytest_obligation import due_work_contract_suite, ObligationContract
+@due_work_contract_suite(ObligationContract(name='Unselected billing'))
+class TestBilling: pass
+"""
+    )
+    report = contract_project.path / "shard-1.json"
+    result = contract_project.runpytest_subprocess(str(executed), "-q", f"--due-work-profile-report={report}")
+    assert result.ret == pytest.ExitCode.OK
+    output = contract_project.path / "report.md"
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-m",
+            "pytest_obligation.reporting",
+            "--input",
+            str(report),
+            "--expected-reports",
+            "1",
+            "--output",
+            str(output),
+            "--application-path",
+            ".",
+            "--test-outcome",
+            "success",
+        ],
+        cwd=contract_project.path,
+        capture_output=True,
+        text=True,
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    body = output.read_text()
+    assert "catalog derivation" in body and "**1** applications with results" in body
+    assert "2 applications" in body
+    assert "Unselected billing" in body and "Not run" in body
+    assert "0 blocked checks" in body
+    assert "Evidence unavailable" not in body
+
+
 @pytest.mark.parametrize("damage", ["none", "missing", "invalid", "disagreement"])
 def test_shards_reach_one_report(contract_project: pytest.Pytester, damage: str) -> None:  # noqa: F811
     first = contract_project.path / "shard-1.json"
