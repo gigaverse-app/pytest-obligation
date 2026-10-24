@@ -6,7 +6,8 @@ explicit; the inspector never converts missing evidence into a passing proof.
 """
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
@@ -27,6 +28,34 @@ def selection_built_by(read: Callable[[], object], collection: Collection[Any]) 
     The first query's projection, sort, limit, hint and routing are preserved,
     including a pagination limit: this does not pretend a page is a whole sweep.
     """
+    _, cursors = _observed_read(read, collection)
+    return cursors[0]
+
+
+@dataclass(frozen=True)
+class MongoSelection:
+    """Actual production results beside every find executed to obtain them."""
+
+    rows: tuple[Any, ...]
+    cursors: tuple[Cursor[Any], ...]
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self.rows)
+
+
+def observe_selection(read: Callable[[], Iterable[Any]], collection: Collection[Any]) -> MongoSelection:
+    """Observe a complete production read, including every page it executes.
+
+    The callback owns all selection, pagination and result conversion. Its
+    iterator is exhausted inside the observation scope; no query is rebuilt,
+    limited or expanded by the harness. For async code, finish the read on its
+    owning loop and return its results through the callback.
+    """
+    rows, cursors = _observed_read(lambda: tuple(read()), collection)
+    return MongoSelection(rows, cursors)
+
+
+def _observed_read(read: Callable[[], Any], collection: Collection[Any]) -> tuple[Any, tuple[Cursor[Any], ...]]:
     if not isinstance(collection, Collection):
         raise ObligationContractDesignError("pass a synchronous PyMongo collection, or Motor collection.delegate")
     captured: list[Cursor[Any]] = []
@@ -34,8 +63,7 @@ def selection_built_by(read: Callable[[], object], collection: Collection[Any]) 
 
     def observed(cursor: Cursor[Any], operation: Any) -> None:
         if (
-            not captured
-            and cursor._id is None
+            cursor._id is None
             and not cursor._explain
             and cursor.collection.database.client is collection.database.client
             and cursor.collection.full_name == collection.full_name
@@ -44,9 +72,9 @@ def selection_built_by(read: Callable[[], object], collection: Collection[Any]) 
         send_message(cursor, operation)
 
     with patch.object(Cursor, "_send_message", observed):
-        read()
+        result = read()
     assert captured, f"the production read executed no find on {collection.full_name}, so no selection was observed"
-    return captured[0]
+    return result, tuple(captured)
 
 
 class MongoDBSelectionInspector:
@@ -64,16 +92,30 @@ class MongoDBSelectionInspector:
         self.client = client
 
     def understands(self, selection: object) -> bool:
-        return isinstance(selection, Cursor) and selection.collection.database.client is self.client
-
-    def _cursor(self, selection: object) -> Cursor[Any]:
-        assert isinstance(selection, Cursor) and self.understands(selection), (
-            "MongoDB selection evidence needs a find cursor on the configured synchronous client"
+        cursors = selection.cursors if isinstance(selection, MongoSelection) else (selection,)
+        return bool(cursors) and all(
+            isinstance(cursor, Cursor) and cursor.collection.database.client is self.client for cursor in cursors
         )
-        return selection
+
+    def _cursors(self, selection: object) -> tuple[Cursor[Any], ...]:
+        assert self.understands(selection), (
+            "MongoDB selection evidence needs find cursors on the configured synchronous client"
+        )
+        if isinstance(selection, MongoSelection):
+            return selection.cursors
+        assert isinstance(selection, Cursor)
+        return (selection,)
 
     def index_served(self, selection: object) -> tuple[bool, str]:
-        cursor = self._cursor(selection)
+        evidence = []
+        for cursor in self._cursors(selection):
+            served, plan = self._index_served(cursor)
+            if not served:
+                return served, plan
+            evidence.append(plan)
+        return True, "\n".join(evidence)
+
+    def _index_served(self, cursor: Cursor[Any]) -> tuple[bool, str]:
         explained = cursor.explain()
         plan = explained["queryPlanner"]["winningPlan"]
         plan = plan.get("queryPlan", plan)
@@ -94,8 +136,11 @@ class MongoDBSelectionInspector:
     def replica_read(self, selection: object) -> str | None:
         # Use the driver's effective preference (including an explicit session),
         # not whichever server a one-node test deployment happened to choose.
-        preference = self._cursor(selection)._get_read_preference()
-        return None if preference == ReadPreference.PRIMARY else repr(preference)
+        for cursor in self._cursors(selection):
+            preference = cursor._get_read_preference()
+            if preference != ReadPreference.PRIMARY:
+                return repr(preference)
+        return None
 
     def scan_counts(self, selection: object) -> tuple[float, float]:
         raise AssertionError(

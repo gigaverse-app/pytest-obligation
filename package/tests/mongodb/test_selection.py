@@ -203,3 +203,38 @@ def test_a_partial_index_covering_the_whole_collection_is_not_narrowing(client, 
     served, reason = inspector(client, query).index_served(query)
     assert not served, "the partial-index flag cannot certify a walk of every historical document"
     assert "entire representative collection" in reason
+
+
+def test_observed_selection_keeps_all_results_and_all_executed_pages(client, populated):
+    from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+    populated.create_index([("state", 1), ("sequence", 1)])
+
+    def read_pages():
+        for offset in (0, 2):
+            for row in populated.find({"state": "pending"}).sort("sequence").skip(offset).limit(2):
+                yield (row["_id"], row["state"])
+
+    selection = observe_selection(read_pages, populated)
+    assert list(selection) == [(0, "pending"), (1, "pending"), (2, "pending")]
+    assert len(selection.cursors) == 2
+    assert inspector(client, selection).index_served(selection)[0]
+    assert inspector(client, selection).replica_read(selection) is None
+
+
+def test_observed_selection_inspects_later_pages_too(client, populated):
+    from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+    populated.create_index([("state", 1), ("sequence", 1)])
+    populated.create_index("sequence")
+    replica_capable = populated.with_options(read_preference=ReadPreference.SECONDARY_PREFERRED)
+
+    def read_pages():
+        yield from populated.find({"state": "pending"}).limit(1)
+        yield from replica_capable.find({"state": "pending"}).hint("sequence_1").skip(1)
+
+    selection = observe_selection(read_pages, populated)
+    served, reason = inspector(client, selection).index_served(selection)
+    assert not served
+    assert "unbounded leading" in reason
+    assert inspector(client, selection).replica_read(selection) is not None

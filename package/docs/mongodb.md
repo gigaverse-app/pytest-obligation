@@ -93,3 +93,27 @@ are different units. Existing write/death and lost-reply behavior is unchanged.
 
 References: [PyMongo cursor cloning and explain](https://pymongo.readthedocs.io/en/4.18.0/api/pymongo/cursor.html)
 and [MongoDB winning-plan shapes](https://www.mongodb.com/docs/manual/reference/explain-results/).
+
+
+## Observe every page and the returned rows
+
+Use `observe_selection` when the production read owns pagination or converts raw
+MongoDB documents into application objects:
+
+```python
+from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+selection = observe_selection(read_all_production_orders, orders_collection)
+rows = list(selection)  # exactly the rows returned by the production read
+```
+
+The callback owns its query, pagination and conversion. The helper exhausts its
+iterator inside the observation scope and keeps the actual rows alongside every
+executed find cursor. Index and routing checks inspect every captured page, so a
+healthy first page cannot hide a full scan or secondary preference on a later one.
+For Motor, finish the complete async read on its owning loop and pass the
+synchronous collection delegate.
+
+This is read-only test observation. It introduces no pagination policy, batch
+execution mode or production bound. `selection_built_by` remains available when
+the first native cursor itself is the required evidence.
