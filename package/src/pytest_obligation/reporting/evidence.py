@@ -47,7 +47,7 @@ def case_status(case: CaseEvidence) -> str:
     if any("xpass" in results for results in case.outcomes.values()):
         return "Expected failure passed; review declaration"
     if case.debt and case.debt.kind == "known-defect" and "xfail" in case.outcomes.get("call", ()):
-        return "Known failure reproduced (expected)"
+        return "Known expected failure"
     if any("xfail" in results for results in case.outcomes.values()):
         return "Expected failure; no passing proof"
     if not case.collected:
@@ -73,7 +73,7 @@ def advice(profile: ProfileCoverage) -> str:
         return "Repair the test binding. This rejected check provides no evidence for the claim."
     if "Test setup/cleanup failed" in statuses:
         return "Repair the test environment or fixture; rerun the affected checks."
-    if statuses & {"Check failed", "Known failure reproduced (expected)"}:
+    if statuses & {"Check failed", "Known expected failure"}:
         return (
             "Inspect the failed assertion and application state; fix the behavior or an incorrect contract assumption."
         )

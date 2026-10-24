@@ -156,7 +156,7 @@ def test_only_executed_known_failures_join_the_failure_total(kind, outcomes, cat
     if known:
         # The explanation is visible without opening any disclosure; CI success is separate.
         assert "**Failures: 0 unexpected + 1 known expected.**" in body.split("<details>")[0]
-        assert "Known failure reproduced (expected)" in body
+        assert "Known expected failure" in body
         assert "**Test step succeeded with known expected failures.**" in body
 
 
