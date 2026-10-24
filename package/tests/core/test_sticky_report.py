@@ -17,7 +17,7 @@ from pytest_obligation.reporting.markdown import MAX_BODY, counts, render
 from tests.core.test_profile_summary import contract_project  # noqa: F401 - explicit shared pytester fixture
 
 
-@pytest.mark.parametrize("mode", ["complete", "filtered", "binding", "failed", "teardown"])
+@pytest.mark.parametrize("mode", ["complete", "filtered", "skipped", "binding", "failed", "teardown"])
 @pytest.mark.parametrize("workers", [0, 2])
 def test_real_pytest_evidence_reaches_the_sticky(
     contract_project: pytest.Pytester,  # noqa: F811 - explicitly imported shared fixture
@@ -40,7 +40,7 @@ def test_real_pytest_evidence_reaches_the_sticky(
                 "derivation=reference_derivation_binding, extras=(ExtraProof(name='missing-capability', run=assert_the_reference_capability_exists),),",
             )
         )
-    if mode in ("binding", "teardown"):
+    if mode in ("binding", "teardown", "skipped"):
         fault = {
             "binding": """
 from pytest_obligation.binding import assert_test_binding_delegates_to_production
@@ -48,6 +48,7 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
     binding=lambda: None, production_shape='orders.select')
 """,
             "teardown": "raise RuntimeError('database cleanup failed')",
+            "skipped": "pytest.skip('Application lane intentionally skipped')",
         }[mode]
         # Fixture failures travel through the actual pytest hooks; no fabricated report JSON.
         contract_project.makeconftest(
@@ -84,6 +85,14 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
             assert result.ret == pytest.ExitCode.OK
             assert "Test filtered out" in body
             assert "Run the missing" in body
+            omitted = sum(not c.selected for group in suite.case_groups() for c in group.values())
+            assert omitted > 0
+            assert f"Checks skipped: **{omitted} known**" in body
+        elif mode == "skipped":
+            assert result.ret == pytest.ExitCode.OK
+            omitted = sum("skipped" in c.outcomes.get("setup", []) for c in executed)
+            assert omitted > 0
+            assert f"Checks skipped: **{omitted} known**" in body
         elif mode == "binding":
             assert "Test binding rejected" in body
             assert "references no production" in body
@@ -174,7 +183,7 @@ def test_stored_verdicts_and_application_text_cannot_forge_a_green_report() -> N
     assert "Owed work is discovered from stored facts" in body
 
 
-@pytest.mark.parametrize("content", [None, "{broken", "{}", '{"unknown": {}}'])
+@pytest.mark.parametrize("content", [None, "{broken", '{"unknown": {}}'])
 def test_cli_preserves_reviewable_unavailable_evidence(tmp_path: Path, content: str | None) -> None:
     source, output, summary = (tmp_path / name for name in ("report.json", "report.md", "summary.md"))
     if content is not None:

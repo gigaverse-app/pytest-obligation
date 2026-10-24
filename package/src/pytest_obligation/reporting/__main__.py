@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from pytest_obligation.profiles.coverage import SuiteCoverage
 from pytest_obligation.profiles.reporting import merge_reports
+from pytest_obligation.reporting.inventory import ApplicationInventory, discover
 from pytest_obligation.reporting.markdown import render
 
 
@@ -25,17 +26,36 @@ def main() -> None:
     parser.add_argument("--run-url", default="")
     parser.add_argument("--repository-url", default="")
     parser.add_argument("--revision", default="")
+    parser.add_argument("--inventory", type=Path)
+    parser.add_argument("--collection-revision", default="")
+    parser.add_argument("--junit-input", default="")
     parser.add_argument("--graphics", action="store_true", help="Compose fixed themed glyphs in the Markdown report")
+    parser.add_argument(
+        "--application-path",
+        action="append",
+        default=[],
+        help="Source file/directory to inventory without imports; repeat for multiple roots",
+    )
     parser.add_argument(
         "--test-outcome", choices=("success", "failure", "cancelled", "skipped", "unknown"), default="unknown"
     )
     args = parser.parse_args()
+    inventory = discover(Path.cwd(), args.application_path) if args.application_path else None
     if args.run_url and (urlparse(args.run_url).scheme != "https" or any(c in args.run_url for c in "()\r\n<>")):
         parser.error("run URL must be an HTTPS URL without Markdown delimiters")
     reports: dict[str, SuiteCoverage] = {}
     problems: list[str] = []
+    if args.inventory:
+        try:
+            collected = ApplicationInventory.model_validate_json(args.inventory.read_bytes())
+            if not args.collection_revision or collected.revision != args.collection_revision:
+                raise ValueError("Collection revision mismatch")
+            inventory = collected
+        except (OSError, ValueError):
+            problems.append("Collected test inventory is missing, invalid, or from a different revision.")
     paths = sorted(glob.glob(args.input, recursive=True))
-    if not paths or (args.expected_reports and len(paths) != args.expected_reports):
+    skipped = args.test_outcome == "skipped" and args.expected_reports == 0
+    if (not paths and not skipped) or (args.expected_reports and len(paths) != args.expected_reports):
         problems.append(f"Expected {args.expected_reports or 'at least one'} report(s); found {len(paths)}.")
     for source in paths:
         try:
@@ -43,6 +63,19 @@ def main() -> None:
             if path.stat().st_size > 10_000_000:
                 raise ValueError("report exceeds 10 MB")
             incoming = TypeAdapter(dict[str, SuiteCoverage]).validate_json(path.read_bytes())
+            if inventory is not None:
+                # Older pytest import modes use only the file's module basename.
+                # Resolve only an unambiguous module/class suffix with the same
+                # declared application name; never merge merely similar names.
+                for key in list(incoming):
+                    if key not in inventory.applications:
+                        matches = [
+                            identity
+                            for identity, app in inventory.applications.items()
+                            if identity.endswith("." + key) and app.name == incoming[key].name
+                        ]
+                        if len(matches) == 1:
+                            incoming[matches[0]] = incoming.pop(key)
             # Reuse the plugin's declaration checks and evidence merge. Missing or
             # incompatible shards must never turn a partial run into an all-green report.
             merge_reports(reports, incoming)
@@ -50,6 +83,24 @@ def main() -> None:
             # Preserve valid evidence; never print application input or exception messages.
             problems.append(f"A report could not be read or combined ({type(error).__name__}).")
     unavailable = " ".join(problems)
+    collected_skips = None
+    if args.junit_input and inventory is not None and not unavailable:
+        from xml.etree.ElementTree import ParseError
+
+        from defusedxml.common import DefusedXmlException
+
+        from .collected import skipped_tests
+
+        junit_paths = [Path(path) for path in sorted(glob.glob(args.junit_input, recursive=True))]
+        if len(junit_paths) < args.expected_reports or (not junit_paths and args.test_outcome != "skipped"):
+            unavailable = "Expected JUnit reports are missing; skipped-test count is unknown."
+        elif args.test_outcome in ("failure", "cancelled"):
+            unavailable = "Test execution did not complete; unreported tests cannot be classified as skips."
+        else:
+            try:
+                collected_skips = skipped_tests(inventory, junit_paths)
+            except (OSError, ParseError, DefusedXmlException):
+                unavailable = "JUnit evidence could not be read; skipped-test count is unknown."
     if unavailable:
         unavailable += " Check the JSON artifacts and pytest logs; available evidence is shown below."
     body = render(
@@ -62,9 +113,13 @@ def main() -> None:
         repository_url=args.repository_url,
         revision=args.revision,
         graphics=args.graphics,
+        inventory=inventory,
+        collected_skips=collected_skips,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(body, encoding="utf-8")
+    if inventory is not None:
+        args.output.with_suffix(".inventory.json").write_text(inventory.model_dump_json(indent=2), encoding="utf-8")
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(summary).open("a", encoding="utf-8") as stream:
             stream.write(body + "\n")

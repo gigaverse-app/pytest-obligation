@@ -278,6 +278,8 @@ requires-dist = [
     { name = "aiokafka", marker = "extra == 'aiokafka'", specifier = ">=0.12,<0.15" },
     { name = "celery", marker = "extra == 'celery'", specifier = ">=5.3" },
     { name = "dbos", marker = "extra == 'dbos'", specifier = ">=2.0" },
+    { name = "defusedxml", marker = "extra == 'report'", specifier = ">=0.7" },
+    { name = "defusedxml", marker = "extra == 'selftest'", specifier = ">=0.7" },
     { name = "django", marker = "extra == 'django'", specifier = ">=4.2" },
     { name = "hypothesis", marker = "extra == 'exploration'", specifier = ">=6.112" },
     { name = "motor", marker = "extra == 'mongodb'", specifier = ">=3.7,<4" },
@@ -298,7 +300,7 @@ requires-dist = [
     { name = "time-machine", marker = "extra == 'redis'", specifier = ">=2.10" },
     { name = "time-machine", marker = "extra == 'rq'", specifier = ">=2.10" },
 ]
-provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "rq", "selftest"]
+provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "report", "rq", "selftest"]
 
 [[package]]
 name = "sortedcontainers"

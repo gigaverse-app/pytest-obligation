@@ -17,6 +17,8 @@ def test_every_rendered_glyph_exists_in_the_hosted_asset_set() -> None:
     for digit in range(10):
         values = dict(applications=digit, passed=digit, failed=digit, blocked=digit, gaps=digit, rejected=digit)
         body = summary_html(values, BASE) + application_html("orders", values, BASE)
+        body += summary_html(dict(values, skipped=digit), BASE)
+        body += summary_html({**values, "skipped": None}, BASE)
         for url in re.findall(r'(?:src|srcset)="([^"]+)"', body):
             name = Path(urlparse(unescape(url)).path).name
             assert (ASSETS / name).is_file(), name
@@ -24,7 +26,7 @@ def test_every_rendered_glyph_exists_in_the_hosted_asset_set() -> None:
 
 def test_fixed_assets_are_small_passive_images_with_both_themes() -> None:
     files = list(ASSETS.glob("*.svg"))
-    assert len(files) == 95 and sum(p.stat().st_size for p in files) < 25_000
+    assert len(files) == 99 and sum(p.stat().st_size for p in files) < 28_000
     for path in files:
         root = ElementTree.fromstring(path.read_text(encoding="utf-8"))
         assert all(n.tag.rsplit("}")[-1] in {"svg", "text", "path"} for n in root.iter())
