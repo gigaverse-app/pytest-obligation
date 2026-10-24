@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.17.0...v0.17.1) (2026-10-24)
+
+
+### Bug fixes
+
+* **testing:** support independent evidence consumers and complete inventory ([#143](https://github.com/gigaverse-app/pytest-obligation/issues/143)) ([e230d38](https://github.com/gigaverse-app/pytest-obligation/commit/e230d380c7817d9ddce773aa95a3ac36231b142e))
+
 ## [0.17.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.16.1...v0.17.0) (2026-10-24)
 
 
