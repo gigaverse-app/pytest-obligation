@@ -113,6 +113,12 @@ or invalid, absent applications are **Unknown**, not assumed skipped. Valid empt
 contract coverage. Without an inventory, the report explicitly says it cannot
 list uncollected applications.
 
+The graphical summary counts the union of discovered and reported applications,
+even when none ran. Its **Skipped tests** counter uses known deselections and
+explicit pytest skips. It shows **?** when uncollected applications or incomplete
+reports prevent an exact total. Application lists and skip explanations stay
+collapsed; zero recorded checks use neutral colors when no execution was reported.
+
 Static discovery does not certify a complete inventory of dynamic factories,
 generated classes or custom decorators. Those limits and unresolved names are
 shown; suites observed at runtime still appear in the evidence details. The full

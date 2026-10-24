@@ -9,11 +9,31 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
 
+import pytest
+
 from pytest_obligation.profiles.coverage import CaseEvidence, SuiteCoverage
 from pytest_obligation.reporting.graphics import application_html, summary_html
+from pytest_obligation.reporting.inventory import ApplicationInventory
 from pytest_obligation.reporting.markdown import render
 
 BASE = "https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/test-ref/docs/assets/report-glyphs/"
+
+
+@pytest.mark.parametrize(
+    "selected,outcomes,skipped",
+    [(False, {}, 1), (True, {"setup": ["skipped"]}, 1), (True, {}, 0), (True, {"call": ["xfail"]}, 0)],
+)
+def test_skipped_tests_counter_is_top_level_and_does_not_count_interruptions(
+    selected: bool, outcomes: dict[str, list[str]], skipped: int
+) -> None:
+    case = CaseEvidence(family="replay", collected=True, selected=selected, outcomes=outcomes)
+    suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": case})
+    body = render({"tests.Orders": suite}, inventory=ApplicationInventory(), graphics=True)
+    headline = body.split("<details>")[0]
+    assert f'alt="{skipped} skipped tests"' in headline
+    assert "applications not run" not in headline
+    assert "Checks skipped:" not in headline
+    assert "captions-with-skips" in headline
 
 
 def image_names(body: str) -> set[str]:

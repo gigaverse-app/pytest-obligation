@@ -1,5 +1,6 @@
 """Compose fixed SVG glyphs; no report-specific files or image service are needed."""
 
+from collections.abc import Mapping
 from html import escape
 from unicodedata import combining, east_asian_width
 
@@ -39,25 +40,45 @@ def _color(kind: str, value: int) -> str:
     return "warning" if kind in ("blocked", "gaps") else "bad"
 
 
-def summary_html(values: dict[str, int], base: str, *, neutral: bool = False) -> str:
+def summary_html(values: Mapping[str, int | None], base: str, *, neutral: bool = False) -> str:
+    keys = ("applications", *METRICS)
+    labels = LABELS
     positions = (0, 107, 235, 339, 442, 546, 640)
+    captions = "captions"
+    if "skipped" in values:
+        keys = (*keys, "skipped")
+        labels = (*labels, "skipped tests")
+        positions = (0, 87, 193, 279, 372, 462, 553, 640)
+        captions = "captions-with-skips"
     parts = []
-    for i, (key, label) in enumerate(zip(("applications", *METRICS), LABELS, strict=True)):
+    for i, (key, label) in enumerate(zip(keys, labels, strict=True)):
         value = values[key]
-        width = min(18, 90 // len(str(value)))
+        if value is None:
+            parts += [
+                _picture(base, "neutral-unknown", 18, 36, f"{label}: unknown"),
+                _space(base, positions[i + 1] - positions[i] - 18),
+            ]
+            continue
+        available = positions[i + 1] - positions[i] - (13 if i == 1 else 0)
+        width = min(18, available // len(str(value)))
         if width < 1:
-            return escape(
-                " · ".join(f"{values[k]} {label}" for k, label in zip(("applications", *METRICS), LABELS, strict=True))
-            )
+            return escape(" · ".join(f"{values[k]} {label}" for k, label in zip(keys, labels, strict=True)))
         parts.append(
-            _number(base, value, "neutral" if neutral and value == 0 else _color(key, value), width, width * 2, label)
+            _number(
+                base,
+                value,
+                "neutral" if key == "skipped" or neutral and value == 0 else _color(key, value),
+                width,
+                width * 2,
+                label,
+            )
         )
         end = positions[i] + len(str(value)) * width
         if i == 1:
-            parts += [_space(base, 222 - end), _picture(base, "divider", 1, 36), _space(base, 12)]
+            parts += [_space(base, positions[2] - 13 - end), _picture(base, "divider", 1, 36), _space(base, 12)]
         else:
             parts.append(_space(base, positions[i + 1] - end))
-    return "<p>" + "".join(parts) + "<br>" + _picture(base, "captions", 640, 22, " · ".join(LABELS)) + "</p>"
+    return "<p>" + "".join(parts) + "<br>" + _picture(base, captions, 640, 22, " · ".join(labels)) + "</p>"
 
 
 def application_name(name: str) -> tuple[str, bool]:

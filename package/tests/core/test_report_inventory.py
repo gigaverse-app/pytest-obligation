@@ -31,11 +31,13 @@ def test_uncollected_applications_keep_numeric_design_without_inventing_test_cou
     body = render({}, inventory=discover(tmp_path, ["test_orders.py"]), graphics=True)
     assert 'alt="1 applications"' in body
     assert 'alt="0 checks passed"' in body
+    assert 'alt="skipped tests: unknown"' in body
     assert "**1** applications not run" in body
     assert "Checks skipped: **unknown**" in body
     assert "| Application / suite |" not in body
     assert "good-0" not in body
     assert body.index("<details>") < body.index("Orders")
+    assert "applications not run" not in body.split("<details>")[0]
 
 
 @pytest.mark.parametrize("evidence", ["empty", "skipped", "missing"])

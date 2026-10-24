@@ -24,15 +24,10 @@ from .graphics import application_html, application_name, summary_html
 from .inventory import ApplicationInventory
 
 
-def _execution_summary(
+def _skipped_checks(
     reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
-) -> list[str]:
+) -> tuple[int, bool]:
     declared = inventory.applications if inventory else {}
-    applications = set(declared) | set(reports)
-    observed = {key for key, suite in reports.items() if any(c.outcomes for c in all_cases(suite).values())}
-    absent = applications - observed
-    unknown = absent if unavailable else set()
-    not_run = absent - unknown
     cases = [case for suite in reports.values() for case in all_cases(suite).values()]
     # Count only known checks with explicit non-execution evidence. Interrupted
     # selected checks and expected failures must not masquerade as skips.
@@ -44,16 +39,33 @@ def _execution_summary(
         for case in cases
     )
     incomplete = bool(unavailable or set(declared) - set(reports) or inventory is None)
+    return skipped, incomplete
+
+
+def _execution_summary(
+    reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
+) -> list[str]:
+    declared = inventory.applications if inventory else {}
+    applications = set(declared) | set(reports)
+    observed = {key for key, suite in reports.items() if any(c.outcomes for c in all_cases(suite).values())}
+    absent = applications - observed
+    unknown = absent if unavailable else set()
+    not_run = absent - unknown
+    skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
     skip_count = f"**{skipped} known**" if skipped and incomplete else "**unknown**" if incomplete else f"**{skipped}**"
     lines = [
+        "<details>",
+        "<summary>Application inventory and skipped tests</summary>",
+        "",
         f"**{len(observed)}** applications with results · **{len(not_run)}** applications not run"
         + (f" · **{len(unknown)}** unknown" if unknown else ""),
         f"Checks skipped: {skip_count}."
         + (" Uncollected applications have no measured test count." if set(declared) - set(reports) else ""),
         "",
     ]
+    if not reports:
+        lines += ["No application contract checks ran.", ""]
     if absent or inventory is None or inventory.limitations:
-        lines += ["<details>", "<summary>Application inventory and skipped execution</summary>", ""]
         used = 0
         for key in sorted(absent):
             name = declared[key].name if key in declared else reports[key].name
@@ -68,7 +80,7 @@ def _execution_summary(
             lines.append("Application inventory was not supplied; uncollected suites cannot be listed.")
         else:
             lines += ["", *[cell(limitation) for limitation in inventory.limitations[:10]]]
-        lines += ["", "</details>", ""]
+    lines += ["", "</details>", ""]
     return lines
 
 
@@ -122,11 +134,11 @@ def _priority(item: tuple[str, SuiteCoverage]) -> tuple[int, int, str]:
     return 4, 0, item[0]
 
 
-def _totals(values: dict[str, int], glyph_base: str, *, neutral: bool = False) -> str:
+def _totals(values: dict[str, int], glyph_base: str, *, neutral: bool = False, skipped: int | None = None) -> str:
     alt = " · ".join(f"{values[kind]} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
     if not glyph_base:
-        return f"**{alt}**"
-    return summary_html(values, glyph_base, neutral=neutral)
+        return f"**{alt} · {skipped if skipped is not None else '?'} skipped tests**"
+    return summary_html({**values, "skipped": skipped}, glyph_base, neutral=neutral)
 
 
 def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> str:
@@ -350,24 +362,23 @@ def render(
         f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
         "",
     ]
-    head += [_totals(dict(totals), glyph_base, neutral=not reports or bool(unavailable)), ""]
+    skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
+    head += [
+        _totals(
+            dict(totals), glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped
+        ),
+        "",
+    ]
     if test_outcome == "failure":
         head += [
             f"**🔴 Test step failed. {totals['failed'] + totals['rejected']} failed contract checks recorded; inspect the run log for other failures.**",
             "",
         ]
-    elif test_outcome == "skipped":
-        head += ["**Test lane skipped; no new execution evidence.**", ""]
     elif test_outcome == "cancelled":
         head += ["**🟠 Test step did not complete.**", ""]
     if unavailable:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
-    elif not reports:
-        head += [
-            "**No application contract checks ran.**",
-            "",
-        ]
-    else:
+    elif reports:
         elapsed = next(iter(reports.values())).session_seconds
         timing = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
             _time(list(reports.values()), compact=True)
