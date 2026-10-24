@@ -16,6 +16,12 @@ inputs:
   timeout:
     description: Maximum seconds allowed for targeted collection.
     default: '120'
+  cache-inputs:
+    description: Opt-in inventory caching. Newline-separated literal tracked paths covering all collection inputs (source, tests, configuration and locks). Use . for the entire tracked checkout. Empty disables cross-run caching.
+    default: ''
+  cache-context:
+    description: Collection interpreter, command and environment identity not already covered by cache-inputs. Only enable caching for deterministic collection.
+    default: ''
 outputs:
   required:
     description: Whether some application suites still need collection.
@@ -23,10 +29,37 @@ outputs:
   inventory-path:
     description: Collected application inventory bound to the checkout revision.
     value: ${{ steps.collect.outputs.inventory-path }}
+  reused:
+    description: Whether a validated inventory avoided fresh collection.
+    value: ${{ steps.collect.outputs.reused }}
 runs:
   using: composite
   steps:
+    - id: runtime
+      shell: bash
+      env:
+        INVENTORY_PATH: ${{ inputs.inventory-path }}
+      run: |
+        if command -v uv >/dev/null; then echo 'uv=true' >> "$GITHUB_OUTPUT"; fi
+        if [[ -f "$INVENTORY_PATH" ]]; then echo 'inventory=true' >> "$GITHUB_OUTPUT"; fi
+    - id: identity
+      shell: bash
+      env:
+        CACHE_INPUTS: ${{ inputs.cache-inputs }}
+        CACHE_CONTEXT: ${{ format('{0}|applications={1}', inputs.cache-context, inputs.application-paths) }}
+        KEY_SCRIPT: ${{ github.action_path }}/../package/src/pytest_obligation/reporting/cache_key.py
+      run: python3 "$KEY_SCRIPT" --inputs "$CACHE_INPUTS" --context "$CACHE_CONTEXT"
+    - name: Restore matching collected inventory
+      if: ${{ steps.identity.outputs.key != '' && steps.runtime.outputs.inventory != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ inputs.inventory-path }}
+        key: ${{ steps.identity.outputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: ${{ steps.identity.outputs.key }}-
     - uses: astral-sh/setup-uv@v7
+      if: ${{ steps.runtime.outputs.uv != 'true' }}
+      with:
+        enable-cache: 'false'
     - id: collect
       shell: bash
       env:
@@ -35,6 +68,7 @@ runs:
         INVENTORY_PATH: ${{ inputs.inventory-path }}
         PYTEST_COMMAND: ${{ inputs.pytest-command }}
         COLLECTION_TIMEOUT: ${{ inputs.timeout }}
+        COLLECTION_KEY: ${{ steps.identity.outputs.key }}
         REPORTER_PACKAGE: ${{ github.action_path }}/../package
       run: |
         paths=()
@@ -43,4 +77,11 @@ runs:
         done <<< "$APPLICATION_PATHS"
         uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting.collect \
           "${paths[@]}" --input "$COLLECTION_INPUT" --output "$INVENTORY_PATH" \
-          --revision "$(git rev-parse HEAD)" --pytest-command "$PYTEST_COMMAND" --timeout "$COLLECTION_TIMEOUT"
+          --revision "$(git rev-parse HEAD)" --collection-key "$COLLECTION_KEY" \
+          --pytest-command "$PYTEST_COMMAND" --timeout "$COLLECTION_TIMEOUT"
+    - name: Save complete collected inventory
+      if: ${{ steps.identity.outputs.key != '' && steps.collect.outputs.required == 'false' && steps.collect.outputs.reused != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ inputs.inventory-path }}
+        key: ${{ steps.identity.outputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}

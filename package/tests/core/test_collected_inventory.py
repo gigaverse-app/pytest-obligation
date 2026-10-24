@@ -137,6 +137,46 @@ def test_existing_selector_nodeids_avoid_collection(tmp_path: Path) -> None:
     ] == ["test_orders.py::TestOrders::test_contract[a]"]
 
 
+def test_content_key_reuses_collection_across_revisions_and_rejects_changed_inputs(
+    contract_project: pytest.Pytester,  # noqa: F811
+) -> None:
+    command = [
+        sys.executable,
+        "-I",
+        "-m",
+        "pytest_obligation.reporting.collect",
+        "--application-path",
+        ".",
+        "--output",
+        "inventory.json",
+        "--revision",
+        "first",
+        "--collection-key",
+        "same-inputs",
+        "--pytest-command",
+        f"{sys.executable} -m pytest",
+    ]
+    first = subprocess.run(command, cwd=contract_project.path, capture_output=True, text=True)
+    assert first.returncode == 0, first.stderr
+    inventory = contract_project.path / "inventory.json"
+    original = json.loads(inventory.read_text())
+    reused_command = ["second" if x == "first" else x for x in command]
+    reused_command[-1] = "must-not-launch-pytest"
+    reused = subprocess.run(reused_command, cwd=contract_project.path, capture_output=True, text=True)
+    assert reused.returncode == 0, reused.stderr
+    refreshed = json.loads(inventory.read_text())
+    assert refreshed["revision"] == "second"
+    assert refreshed["applications"] == original["applications"]
+    assert "reused: True" in reused.stdout
+    changed_command = ["changed-inputs" if x == "same-inputs" else x for x in reused_command]
+    changed = subprocess.run(changed_command, cwd=contract_project.path, capture_output=True, text=True)
+    assert changed.returncode != 0  # A stale cache cannot suppress fresh collection.
+    changed_command[-1] = command[-1]
+    repaired = subprocess.run(changed_command, cwd=contract_project.path, capture_output=True, text=True)
+    assert repaired.returncode == 0, repaired.stderr
+    assert json.loads(inventory.read_text())["collection_key"] == "changed-inputs"
+
+
 @pytest.mark.parametrize("damage", ["none", "stale", "broken", "xdist"])
 def test_collection_then_partial_execution_counts_remaining_tests(
     contract_project: pytest.Pytester,  # noqa: F811
