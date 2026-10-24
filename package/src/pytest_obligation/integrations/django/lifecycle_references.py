@@ -25,11 +25,11 @@ from datetime import timedelta
 from typing import Any
 
 from django.db import connection, models, transaction
+from django.db.backends.postgresql.psycopg_any import sql
 from django.db.models import QuerySet
 from django.dispatch import Signal
 from django.test.utils import isolate_apps
 from django.utils import timezone
-from psycopg import sql
 
 from pytest_obligation.crash_histories import CallableDelivery
 from pytest_obligation.host import current_host
@@ -78,10 +78,10 @@ def lifecycle_attempt_table() -> Iterator[None]:
         table=sql.Identifier(table), status=sql.Literal(Status.RETRYABLE_FAILED)
     )
     create_function = sql.SQL("CREATE FUNCTION {name}(attempt_id bigint) RETURNS void LANGUAGE sql AS {body}").format(
-        name=sql.Identifier(FAIL_ATTEMPT_FUNCTION), body=sql.Literal(body.as_string())
+        name=sql.Identifier(FAIL_ATTEMPT_FUNCTION), body=sql.Literal(body.as_string(connection.connection))
     )
     with connection.cursor() as cursor:
-        cursor.execute(create_function.as_string())
+        cursor.execute(create_function.as_string(connection.connection))
     try:
         yield
     finally:
@@ -89,7 +89,7 @@ def lifecycle_attempt_table() -> Iterator[None]:
         RECIPIENT.received.clear()
         drop_function = sql.SQL("DROP FUNCTION IF EXISTS {}(bigint)").format(sql.Identifier(FAIL_ATTEMPT_FUNCTION))
         with connection.cursor() as cursor:
-            cursor.execute(drop_function.as_string())
+            cursor.execute(drop_function.as_string(connection.connection))
         with connection.schema_editor() as editor:
             editor.delete_model(LifecycleAttempt)
 
@@ -214,7 +214,7 @@ def fail_attempt_through_a_function_then_hand_off(pk: int) -> None:
     statement = sql.SQL("SELECT {}(%s)").format(sql.Identifier(FAIL_ATTEMPT_FUNCTION))
     with connection.cursor() as cursor:
         # Execution observers consume SQL text; render only after quoting the name.
-        cursor.execute(statement.as_string(), [pk])
+        cursor.execute(statement.as_string(connection.connection), [pk])
     _create_successor(LifecycleAttempt.objects.get(pk=pk))
 
 

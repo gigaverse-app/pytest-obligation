@@ -35,9 +35,9 @@ from unittest import mock
 
 from django.conf import settings
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
+from django.db.backends.postgresql.psycopg_any import sql
 from django.db.models import Model, QuerySet
 from django.test.utils import CaptureQueriesContext
-from psycopg import sql
 
 from pytest_obligation.host import ReadCosts
 from pytest_obligation.integrations.django.indexes import attach_catalog_facts, installed_indexes
