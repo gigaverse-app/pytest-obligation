@@ -326,7 +326,7 @@ def validate_evidence_session(scenario: EvidenceConfluence[ObservedT], session: 
         guard(scenario, "retry", session.retry.send)
     guard(scenario, "recover", session.recover)
     for name, fact in session.facts.items():
-        assert isinstance(fact, EvidenceArrival) == scenario.batchable, "evidence batching metadata mismatch"
+        assert not scenario.batchable or isinstance(fact, EvidenceArrival), "evidence batching metadata mismatch"
         guard(scenario, name, fact.consume if isinstance(fact, EvidenceArrival) else fact)
     if scenario.batchable:
         consumers = [fact.consume for fact in session.facts.values() if isinstance(fact, EvidenceArrival)]

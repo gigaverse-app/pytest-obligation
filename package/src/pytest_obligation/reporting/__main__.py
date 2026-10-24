@@ -39,8 +39,18 @@ def main() -> None:
     parser.add_argument(
         "--test-outcome", choices=("success", "failure", "cancelled", "skipped", "unknown"), default="unknown"
     )
+    parser.add_argument(
+        "--suite-decorator",
+        action="append",
+        default=[],
+        help="Additional fully-qualified application wrapper to inventory without imports; repeat for multiple wrappers",
+    )
     args = parser.parse_args()
-    inventory = discover(Path.cwd(), args.application_path) if args.application_path else None
+    inventory = (
+        discover(Path.cwd(), args.application_path, suite_decorators=args.suite_decorator)
+        if args.application_path
+        else None
+    )
     if args.run_url and (urlparse(args.run_url).scheme != "https" or any(c in args.run_url for c in "()\r\n<>")):
         parser.error("run URL must be an HTTPS URL without Markdown delimiters")
     reports: dict[str, SuiteCoverage] = {}

@@ -103,11 +103,21 @@ def test_collect_missing_once_then_reuse_inventory(
     assert 'alt="skipped tests: unknown"' in (contract_project.path / "report.md").read_text()
 
 
-def test_existing_selector_nodeids_avoid_collection(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "module,decorator,options",
+    [
+        ("pytest_obligation", "due_work_contract_suite", []),
+        ("due.django.conformance.suite", "effect_contract_suite", []),
+        ("project.testing", "suite", ["--suite-decorator", "project.testing.suite"]),
+    ],
+)
+def test_existing_selector_nodeids_avoid_collection(
+    tmp_path: Path, module: str, decorator: str, options: list[str]
+) -> None:
     (tmp_path / "test_orders.py").write_text(
         "raise RuntimeError('must not import')\n"
-        "from pytest_obligation import due_work_contract_suite\n"
-        "@due_work_contract_suite(contract)\nclass TestOrders: pass\n"
+        f"from {module} import {decorator} as suite\n"
+        "@suite(contract)\nclass TestOrders: pass\n"
     )
     (tmp_path / "selected.json").write_text(json.dumps({"test_orders.py::TestOrders::test_contract[a]": {}}))
     result = subprocess.run(
@@ -126,6 +136,7 @@ def test_existing_selector_nodeids_avoid_collection(tmp_path: Path) -> None:
             "head-one",
             "--pytest-command",
             "must-not-be-launched",
+            *options,
         ],
         cwd=tmp_path,
         capture_output=True,

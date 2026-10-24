@@ -120,7 +120,11 @@ class InFlightSession(HarnessModel, Generic[HandleT, ValueT, ObservationT]):
 
 
 class EvidenceArrival(HarnessModel):
-    """Publish an external fact, then invoke the production consumer of available facts."""
+    """Separate external publication from production consumption, with optional batch histories.
+
+    Distinct fact consumers are valid for ordinary arrival histories. Only
+    ``batchable=True`` promises one shared consumer for a combined arrival.
+    """
 
     publish: Callable[[], None] = Field(
         description="Expose a fact only in the external evidence source; never write production outcome rows."

@@ -21,8 +21,14 @@ def main() -> None:
     parser.add_argument("--collection-key", default="", help="Content identity permitting cross-revision reuse")
     parser.add_argument("--pytest-command", default="", help="Empty plans only; otherwise collect missing files")
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument(
+        "--suite-decorator",
+        action="append",
+        default=[],
+        help="Additional fully-qualified application wrapper to inventory without imports; repeat for multiple wrappers",
+    )
     args = parser.parse_args()
-    inventory = discover(Path.cwd(), args.application_path).model_copy(
+    inventory = discover(Path.cwd(), args.application_path, suite_decorators=args.suite_decorator).model_copy(
         update={"revision": args.revision, "collection_key": args.collection_key}
     )
     reused = False

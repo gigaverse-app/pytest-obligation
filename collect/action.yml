@@ -1,6 +1,12 @@
 name: Collect application test inventory
 description: Reuse current-run collected test IDs, then optionally collect only missing application files. Never runs tests.
 inputs:
+  python-version:
+    description: Python used to parse application source; choose a version supporting the adopter's syntax.
+    default: '3.11'
+  suite-decorators:
+    description: Newline-separated fully-qualified application wrapper decorators. Native obligation and Due suites are recognized by default.
+    default: ''
   application-paths:
     description: Newline-separated source roots containing application contract suites.
     default: tests
@@ -46,7 +52,7 @@ runs:
       shell: bash
       env:
         CACHE_INPUTS: ${{ inputs.cache-inputs }}
-        CACHE_CONTEXT: ${{ format('{0}|applications={1}', inputs.cache-context, inputs.application-paths) }}
+        CACHE_CONTEXT: ${{ format('{0}|applications={1}|decorators={2}|parser={3}', inputs.cache-context, inputs.application-paths, inputs.suite-decorators, inputs.python-version) }}
         KEY_SCRIPT: ${{ github.action_path }}/../package/src/pytest_obligation/reporting/cache_key.py
       run: python3 "$KEY_SCRIPT" --inputs "$CACHE_INPUTS" --context "$CACHE_CONTEXT"
     - name: Restore matching collected inventory
@@ -63,6 +69,8 @@ runs:
     - id: collect
       shell: bash
       env:
+        INVENTORY_PYTHON: ${{ inputs.python-version }}
+        SUITE_DECORATORS: ${{ inputs.suite-decorators }}
         APPLICATION_PATHS: ${{ inputs.application-paths }}
         COLLECTION_INPUT: ${{ inputs.collection-input }}
         INVENTORY_PATH: ${{ inputs.inventory-path }}
@@ -75,7 +83,10 @@ runs:
         while IFS= read -r path; do
           if [[ -n "$path" ]]; then paths+=(--application-path "$path"); fi
         done <<< "$APPLICATION_PATHS"
-        uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting.collect \
+        while IFS= read -r decorator; do
+          if [[ -n "$decorator" ]]; then paths+=(--suite-decorator "$decorator"); fi
+        done <<< "$SUITE_DECORATORS"
+        uvx --python "$INVENTORY_PYTHON" --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting.collect \
           "${paths[@]}" --input "$COLLECTION_INPUT" --output "$INVENTORY_PATH" \
           --revision "$(git rev-parse HEAD)" --collection-key "$COLLECTION_KEY" \
           --pytest-command "$PYTEST_COMMAND" --timeout "$COLLECTION_TIMEOUT"
