@@ -67,7 +67,9 @@ notification lost. Four standalone proofs run against a fresh example each:
   that restores the same state, which an independent mutation count sees);
 - once eligible, recovery alone completes it, and readiness released the
   existing obligation without a new revision, a reset retry budget or an
-  earlier not-before time;
+  earlier not-before time. Identity and budget use exact `reserved_state`
+  equality. A separately declared `not_before` permits a later timestamp, such
+  as rebasing expired backoff to now, while blocked work cannot change it at all;
 - the fallback inspection (`recheck_after`) happens on its declared boundary
   from admission, probed one `clock_resolution` before the boundary and across
   it by moving the clock; then, from that inspection, not before the boundary
