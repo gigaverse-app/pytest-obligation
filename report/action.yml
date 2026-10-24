@@ -10,6 +10,9 @@ inputs:
   expected-reports:
     description: Expected number of shard reports. Missing shards keep the aggregate from claiming complete evidence.
     default: '0'
+  application-paths:
+    description: Newline-separated repository-relative Python source files/directories to inventory without importing or collecting tests. Checkout the tested revision first. Static decorator declarations are listed even when their tests are not selected.
+    default: ''
   github-token:
     description: Token with pull-requests write for same-repository PR comments. No token is needed for summary-only use.
     default: ${{ github.token }}
@@ -46,16 +49,22 @@ runs:
         REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
         REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
         REPORT_GRAPHICS: ${{ inputs.graphics }}
+        APPLICATION_PATHS: ${{ inputs.application-paths }}
       run: |
         output="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")/report.md"
         graphics_args=()
         if [[ "$REPORT_GRAPHICS" == 'true' ]]; then graphics_args+=(--graphics); fi
+        inventory_args=()
+        while IFS= read -r path; do
+          if [[ -n "$path" ]]; then inventory_args+=(--application-path "$path"); fi
+        done <<< "$APPLICATION_PATHS"
         uvx --python 3.11 --from "$REPORTER_PACKAGE" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
-          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}"
+          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}" "${inventory_args[@]}"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
+        echo "inventory-path=${output%.md}.inventory.json" >> "$GITHUB_OUTPUT"
     - name: Preserve full evidence and rendered report
       uses: actions/upload-artifact@v7
       with:
@@ -63,6 +72,7 @@ runs:
         path: |
           ${{ inputs.report-path }}
           ${{ steps.render.outputs.markdown-path }}
+          ${{ steps.render.outputs.inventory-path }}
         if-no-files-found: error
     - name: Update PR report
       if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}

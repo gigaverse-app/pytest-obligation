@@ -174,7 +174,7 @@ def test_stored_verdicts_and_application_text_cannot_forge_a_green_report() -> N
     assert "Owed work is discovered from stored facts" in body
 
 
-@pytest.mark.parametrize("content", [None, "{broken", "{}", '{"unknown": {}}'])
+@pytest.mark.parametrize("content", [None, "{broken", '{"unknown": {}}'])
 def test_cli_preserves_reviewable_unavailable_evidence(tmp_path: Path, content: str | None) -> None:
     source, output, summary = (tmp_path / name for name in ("report.json", "report.md", "summary.md"))
     if content is not None:

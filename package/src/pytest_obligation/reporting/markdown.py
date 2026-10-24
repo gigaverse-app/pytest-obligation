@@ -21,6 +21,35 @@ from .evidence import (
     MAX_BODY as MAX_BODY,
 )
 from .graphics import application_html, application_name, summary_html
+from .inventory import ApplicationInventory
+
+
+def _inventory_rows(
+    reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
+) -> list[str]:
+    if inventory is None:
+        return ["Application inventory was not supplied; uncollected suites cannot be listed.", ""]
+    lines = ["### Application execution", "", "| Application / suite | This invocation |", "| --- | --- |"]
+    for key, application in inventory.applications.items():
+        suite = reports.get(key)
+        if suite is not None and any(case.outcomes for case in all_cases(suite).values()):
+            status = "Results recorded; see evidence below"
+        elif unavailable:
+            status = "Unknown: reports incomplete"
+        else:
+            status = "Not run: not collected or filtered out in this invocation"
+        lines.append(f"| {code(application.name)} · {code(key)} | {status} |")
+        if sum(len(line) for line in lines) > MAX_BODY // 3:
+            lines.append("Further inventory rows omitted; see the inventory JSON artifact.")
+            break
+    lines += [
+        "",
+        "Inventory describes declarations, not passing coverage. Observed suites are detailed below, including any absent from this static inventory.",
+        "",
+    ]
+    lines += [f"- {cell(limitation)}" for limitation in inventory.limitations[:10]]
+    return [*lines, ""]
+
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = {
@@ -285,6 +314,7 @@ def render(
     repository_url: str = "",
     revision: str = "",
     graphics: bool = False,
+    inventory: ApplicationInventory | None = None,
 ) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
@@ -303,10 +333,18 @@ def render(
             f"**🔴 Test step failed. {totals['failed'] + totals['rejected']} failed contract checks recorded; inspect the run log for other failures.**",
             "",
         ]
-    elif test_outcome in ("cancelled", "skipped"):
+    elif test_outcome == "skipped":
+        head += ["**Test lane skipped; no new execution evidence.**", ""]
+    elif test_outcome == "cancelled":
         head += ["**🟠 Test step did not complete.**", ""]
-    if unavailable or not reports:
+    if unavailable:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
+    elif not reports:
+        head += [
+            "**No application contract checks ran.**",
+            "The available reports contain no collected application suites. This is not a passing contract verdict.",
+            "",
+        ]
     else:
         head += [_totals(dict(totals), glyph_base), ""]
         elapsed = next(iter(reports.values())).session_seconds
@@ -314,6 +352,7 @@ def render(
             _time(list(reports.values()), compact=True)
         ]
         head += ["<sub>" + " · ".join(timing) + "</sub>", ""]
+    head += _inventory_rows(reports, inventory, unavailable)
     compact = len(reports) > 3
     if compact:
         head += _overview(reports)

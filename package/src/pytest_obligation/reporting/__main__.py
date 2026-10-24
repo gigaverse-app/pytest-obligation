@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from pytest_obligation.profiles.coverage import SuiteCoverage
 from pytest_obligation.profiles.reporting import merge_reports
+from pytest_obligation.reporting.inventory import discover
 from pytest_obligation.reporting.markdown import render
 
 
@@ -27,15 +28,23 @@ def main() -> None:
     parser.add_argument("--revision", default="")
     parser.add_argument("--graphics", action="store_true", help="Compose fixed themed glyphs in the Markdown report")
     parser.add_argument(
+        "--application-path",
+        action="append",
+        default=[],
+        help="Source file/directory to inventory without imports; repeat for multiple roots",
+    )
+    parser.add_argument(
         "--test-outcome", choices=("success", "failure", "cancelled", "skipped", "unknown"), default="unknown"
     )
     args = parser.parse_args()
+    inventory = discover(Path.cwd(), args.application_path) if args.application_path else None
     if args.run_url and (urlparse(args.run_url).scheme != "https" or any(c in args.run_url for c in "()\r\n<>")):
         parser.error("run URL must be an HTTPS URL without Markdown delimiters")
     reports: dict[str, SuiteCoverage] = {}
     problems: list[str] = []
     paths = sorted(glob.glob(args.input, recursive=True))
-    if not paths or (args.expected_reports and len(paths) != args.expected_reports):
+    skipped = args.test_outcome == "skipped" and args.expected_reports == 0
+    if (not paths and not skipped) or (args.expected_reports and len(paths) != args.expected_reports):
         problems.append(f"Expected {args.expected_reports or 'at least one'} report(s); found {len(paths)}.")
     for source in paths:
         try:
@@ -62,9 +71,12 @@ def main() -> None:
         repository_url=args.repository_url,
         revision=args.revision,
         graphics=args.graphics,
+        inventory=inventory,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(body, encoding="utf-8")
+    if inventory is not None:
+        args.output.with_suffix(".inventory.json").write_text(inventory.model_dump_json(indent=2), encoding="utf-8")
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(summary).open("a", encoding="utf-8") as stream:
             stream.write(body + "\n")
