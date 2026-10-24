@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.16.0...v0.16.1) (2026-10-24)
+
+
+### Bug fixes
+
+* **release:** keep stable v1 actions current ([c866b13](https://github.com/gigaverse-app/pytest-obligation/commit/c866b138d61aff31b80f4f121459000e700ba7a7))
+
 ## [0.16.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.15.0...v0.16.0) (2026-10-24)
 
 
