@@ -220,7 +220,7 @@ jobs:
         run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
   move-major-tag:
-    # `uses: gigaverse-app/pytest-obligation/check@v0` follows the latest v0.x.y release.
+    # Stable v1 actions also follow compatible v0.x package releases.
     needs: [build, publish-pypi]
     if: always() && needs.publish-pypi.result == 'success' && needs.build.outputs.tag != ''
     runs-on: ubuntu-latest
@@ -230,9 +230,26 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.build.outputs.tag }}
+          fetch-depth: 0
       - env:
           TAG: ${{ needs.build.outputs.tag }}
         run: |
           MAJOR="${TAG%%.*}"
-          git tag --force "$MAJOR" "$TAG"
-          git push --force origin "refs/tags/$MAJOR"
+          TARGET=$(git rev-parse "$TAG^{commit}")
+          ALIASES=("$MAJOR")
+          if [[ "$MAJOR" == v0 ]]; then
+            ALIASES+=(v1)
+          fi
+          for ALIAS in "${ALIASES[@]}"; do
+            REF="refs/tags/$ALIAS"
+            PREVIOUS=""
+            if [[ -n "$(git ls-remote --refs origin "$REF")" ]]; then
+              git fetch origin "$REF"
+              PREVIOUS=$(git rev-parse FETCH_HEAD)
+              if ! git merge-base --is-ancestor "$PREVIOUS" "$TARGET"; then
+                echo "Keeping $ALIAS: this release does not advance its current commit."
+                continue
+              fi
+            fi
+            git push --force-with-lease="$REF:$PREVIOUS" origin "$TARGET:$REF"
+          done
