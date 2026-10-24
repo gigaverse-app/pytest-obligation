@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from pytest_obligation.profiles.coverage import SuiteCoverage
 
-from .evidence import GUARANTEES, all_cases, assessment_status, case_status, cell, code
+from .evidence import GUARANTEES, _failure_details, all_cases, assessment_status, case_status, cell, code
 
 
 def ticket_link(ticket: str | None) -> str:
@@ -28,10 +28,12 @@ def ticket_link(ticket: str | None) -> str:
 
 def decision_sections(suite: SuiteCoverage) -> list[str]:
     lines: list[str] = []
-    defects: dict[tuple[str, str | None], list[str]] = {}
+    defects: dict[tuple[str, str | None], list[tuple[str, list[str]]]] = {}
     for name, case in all_cases(suite).items():
         if case.debt and case.debt.kind == "known-defect":
-            defects.setdefault((case.debt.reason, case.debt.ticket), []).append(f"- {code(name)}: {case_status(case)}")
+            defects.setdefault((case.debt.reason, case.debt.ticket), []).append(
+                (f"- {code(name)}: {case_status(case)}", _failure_details(case))
+            )
     if defects:
         lines += [
             "<details>",
@@ -47,13 +49,13 @@ def decision_sections(suite: SuiteCoverage) -> list[str]:
                 "<details>",
                 f"<summary>{len(checks)} affected checks · execution evidence</summary>",
                 "",
-                *checks,
+                *(line for check, details in checks for line in (check, *details)),
                 "",
                 "</details>",
                 "",
             ]
         lines += [
-            "These declarations identify known behavior problems; inspect each check's execution status before treating this run as a reproduction.",
+            "These are application declarations. An expected failure can come from a declared gap or an unmet proof precondition; inspect its execution and diagnostics before treating it as a reproduced product defect.",
             "",
             "</details>",
             "",

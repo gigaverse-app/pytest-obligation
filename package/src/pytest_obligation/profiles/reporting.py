@@ -198,7 +198,7 @@ def pytest_runtest_makereport(
         if case_id in cases:
             cases[case_id].outcomes.setdefault(report.when, []).append(outcome)
             cases[case_id].durations.append(report.duration)
-            if report.failed and call.excinfo is not None:
+            if (report.failed or outcome == "xfail") and call.excinfo is not None:
                 from .failures import failure_evidence
 
                 cases[case_id].failures.append(failure_evidence(call.excinfo.value, report.when))
