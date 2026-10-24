@@ -8,7 +8,9 @@ check, even though the selection/index cases initialized the same resources.
 - [x] Forward the existing fixtures to schedule evidence and declared absence cases.
 - [x] Verify a valid fixture-backed schedule passes and a missing schedule still fails.
 - [x] Run core contract/report checks: 239 pass, including serial/xdist reporting.
-- [ ] Run the actual Shopify binding suite.
+- [x] Actual Shopify, retained MongoDB/Kafka and cache-exemption suite: 307 passed,
+  16 strict expected failures for existing application behavior. All seven declared
+  suites appear in the report; the schedule evidence now passes.
 
 No new API, application behavior, batching policy or Due runtime mode is introduced.
 
