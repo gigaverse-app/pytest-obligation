@@ -78,6 +78,15 @@ class MongoDBSelectionInspector:
         plan = explained["queryPlanner"]["winningPlan"]
         plan = plan.get("queryPlan", plan)
         catalog = {index["name"]: index for index in cursor.collection.list_indexes()}
+        partial = [index for index in catalog.values() if index.get("partialFilterExpression")]
+        if partial:
+            total = cursor.collection.count_documents({})
+            for index in partial:
+                # A partial flag can still cover every historical document
+                # (for example _id exists). The fixture must exhibit narrowing.
+                index["narrows_representative_collection"] = (
+                    cursor.collection.count_documents(index["partialFilterExpression"]) < total
+                )
         reason = _unserved(plan, catalog)
         evidence = json.dumps(plan, default=str, indent=2)
         return reason is None, f"{reason}\n{evidence}" if reason else evidence
@@ -120,7 +129,9 @@ def _unserved(plan: dict[str, Any], catalog: dict[str, Any]) -> str | None:
             return None
         index = catalog.get(plan.get("indexName", ""), {})
         if index.get("partialFilterExpression"):
-            return None
+            if index.get("narrows_representative_collection"):
+                return None
+            return f"partial index {plan.get('indexName')!r} spans the entire representative collection"
         return f"index {plan.get('indexName')!r} has an unbounded leading key {leading!r}"
     if stage in {
         "FETCH",

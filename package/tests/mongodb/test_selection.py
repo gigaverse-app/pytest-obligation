@@ -195,3 +195,11 @@ def test_existing_shared_selection_proofs_use_the_mongodb_host(client, collectio
         collection.drop_index("done_1__id_1")
         with pytest.raises(AssertionError, match="unbounded leading|collection scan"):
             assert_selection_is_index_served(selection)
+
+
+def test_a_partial_index_covering_the_whole_collection_is_not_narrowing(client, populated):
+    populated.create_index("sequence", name="all_documents", partialFilterExpression={"_id": {"$exists": True}})
+    query = populated.find({"state": "pending"}).hint("all_documents")
+    served, reason = inspector(client, query).index_served(query)
+    assert not served, "the partial-index flag cannot certify a walk of every historical document"
+    assert "entire representative collection" in reason

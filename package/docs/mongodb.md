@@ -71,7 +71,9 @@ that a whole tick has a page bound.
 
 The inspector explains the captured cursor using MongoDB's normal planner.
 Every scan in the winning classic or SBE find plan must narrow a leading
-index key, or use a partial index verified in the server catalog. An index
+index key, or use a partial index verified in the server catalog whose predicate
+excludes part of the representative collection. A partial flag with a predicate
+such as `_id exists` does not excuse a full history scan. An index
 name alone, a trailing-key bound behind an unbounded leading key, or another
 healthy branch cannot excuse a full scan. Seed representative data: an EOF
 plan supplies no index evidence. Unsupported stages, including sharded and

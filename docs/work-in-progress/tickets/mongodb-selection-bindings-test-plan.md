@@ -14,7 +14,9 @@ It does not change any application or Due runtime, or introduce batch execution.
 - A normal bounded leading-key index passes. Missing indexes, an unrelated hinted
   index, and a bound only on a trailing key fail on real MongoDB plans.
 - OR branches must all be served. A catalog-confirmed partial index passes;
-  replacing it with a full index under the same name fails.
+  replacing it with a full index under the same name fails. A partial predicate
+  matching every document also fails; this control first reproduced a false pass
+  and now requires an observed subset of the representative collection.
 - Primary routing passes; primaryPreferred, secondaryPreferred and nearest cannot
   become green because the fixture has only one primary.
 - Motor executor reads use the same observations. EOF and unsupported plan shapes
