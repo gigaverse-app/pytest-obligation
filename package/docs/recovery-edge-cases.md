@@ -242,6 +242,19 @@ progress. In autocommit the failed statement rolls back independently. Use a
 broker refusal instead when database isolation is not the boundary under test.
 
 
+## Retry waits inside the executor
+
+A persistent-retry selector may return waiting candidates while the production
+runner checks their deadline. With `PersistentRetry(waits=True)`, the proof now
+invokes that runner when a waiting identity remains selected. Its failure-attempt
+count, terminal status and observable state must stay unchanged. Once the bound
+wait is advanced, the next invocation must reach the failing dependency again.
+
+This supports an execution gate without copying its predicate into the test's
+selection. A hot-looping runner, a hidden state change or abandoned work still
+fails. `waits=False` continues to describe a lifecycle with no per-identity delay;
+the separate schedule binding establishes its recurring cadence.
+
 ## Eligibility inside a recovery loop
 
 A recovery read can return owed candidates and let the real worker check their
