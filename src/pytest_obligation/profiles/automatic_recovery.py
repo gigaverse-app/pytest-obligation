@@ -527,9 +527,12 @@ def assert_the_tick_selects_what_the_adapter_describes(sweep: DueWorkSweep) -> N
         f"declares. Pass `dispatched_ids=` — most adopters already record this"
     )
     recovery_delay = declared_recovery_delay(sweep)
-    page_size = _page_size(sweep)
+    # Equivalence does not establish boundedness. An inline/unbounded tick
+    # compares the entire selected fixture; the separate bound proof still
+    # refuses a missing limit. This count controls test data, never production.
+    example_count = sweep.page_size if sweep.page_size is not None else CONTRACT_PAGE_SIZE
 
-    for index in range(page_size + 3):
+    for index in range(example_count + 3):
         sweep.make_owed(age=recovery_delay + timedelta(minutes=index + 1))
     sweep.make_terminal(age=recovery_delay + timedelta(hours=1))
     # Inside the recovery delay: described by neither half, so its presence in
@@ -551,7 +554,7 @@ def assert_the_tick_selects_what_the_adapter_describes(sweep: DueWorkSweep) -> N
     # neither half has — the accusing direction this package treats as worse
     # than silence — and pressures the adopter into making `dispatched_ids`
     # contradict `identity_of` to get green.
-    described = _selected_identities(sweep, limit=page_size)
+    described = _selected_identities(sweep, limit=sweep.page_size)
     sweep.run_tick()
     actual = list(sweep.dispatched_ids())
 
