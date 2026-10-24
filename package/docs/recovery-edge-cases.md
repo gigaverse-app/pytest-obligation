@@ -240,3 +240,14 @@ The helper deliberately opens no transaction or savepoint: the production
 caller must roll back its own failed transaction before later identities can
 progress. In autocommit the failed statement rolls back independently. Use a
 broker refusal instead when database isolation is not the boundary under test.
+
+
+## Eligibility inside a recovery loop
+
+A recovery read can return owed candidates and let the real worker check their
+eligibility before mutation or effects. The A/G composition proof runs that
+actual sweep while the gate is blocked and applies the existing no-write,
+no-execution, no-provider-effect and retained-intent assertions. It then requires
+the released identity in the sweep selection and observes its recovery through
+the sweep's dispatch path. The binding does not need to move the application's
+gate into a copied database predicate.
