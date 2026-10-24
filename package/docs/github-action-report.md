@@ -189,8 +189,9 @@ head and refuses older run IDs/attempts; GitHub comments have no atomic update A
 
 Fork PRs receive a summary and artifact without a comment. `post-comment: 'false'`
 also disables publication; remove the write permission in that case. Missing
-comment permission preserves the summary/artifact. A missing, empty or invalid
-JSON file with missing or invalid evidence produces **Evidence unavailable**, never a green verdict. Valid empty objects report that no application contract checks ran. Do not run
+comment permission preserves the summary/artifact. Missing or invalid reports
+produce **Evidence unavailable**, never a green verdict. Valid empty objects report
+that no application contract checks ran. Do not run
 untrusted PR code with a write token under `pull_request_target` to bypass this.
 
 Pass `test-outcome` so a collection error or a failure outside the generated

@@ -138,14 +138,19 @@ def discover(root: Path, paths: list[str]) -> ApplicationInventory:
                         if decorator.args
                         else next((kw.value for kw in decorator.keywords if kw.arg == "contract"), None)
                     )
-                    name = sources.contract_name(contract, path, set()) if contract else None
+                    try:
+                        name = sources.contract_name(contract, path, set()) if contract else None
+                    except (OSError, ValueError, SyntaxError, UnicodeError):
+                        # The declaration is already known. Failure to inspect its
+                        # display name must not erase that application's existence.
+                        name = None
                     identity = f"{module}.{node.name}"
                     applications[identity] = Application(
                         name=name or node.name,
                         source=SourceLocation(path=path.relative_to(sources.root).as_posix(), line=node.lineno),
                     )
                     if name is None:
-                        limitations.append(f"Dynamic application name unresolved: {identity}; showing its suite name.")
+                        limitations.append(f"Application name unresolved: {identity}; showing its suite name.")
         except (OSError, ValueError, SyntaxError, UnicodeError):
             limitations.append(f"Application source could not be inspected: {path.name}")
     return ApplicationInventory(applications=applications, limitations=limitations)

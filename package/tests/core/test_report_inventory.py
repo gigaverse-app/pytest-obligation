@@ -7,6 +7,20 @@ from pathlib import Path
 
 import pytest
 
+from pytest_obligation.reporting.inventory import discover
+
+
+def test_unreadable_contract_name_preserves_known_suite(tmp_path: Path) -> None:
+    (tmp_path / "contracts.py").write_text("not valid Python !")
+    (tmp_path / "test_orders.py").write_text(
+        "from pytest_obligation.contract import due_work_contract_suite\n"
+        "from contracts import ORDERS\n"
+        "@due_work_contract_suite(ORDERS)\nclass TestOrders: pass\n"
+    )
+    inventory = discover(tmp_path, ["test_orders.py"])
+    assert inventory.applications["test_orders.TestOrders"].name == "TestOrders"
+    assert any("name unresolved" in limitation for limitation in inventory.limitations)
+
 
 @pytest.mark.parametrize("evidence", ["empty", "skipped", "missing"])
 def test_unexecuted_applications_are_named_without_fabricating_results(tmp_path: Path, evidence: str) -> None:
