@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.16.1...v0.17.0) (2026-10-24)
+
+
+### Features
+
+* **interleavings:** generate recreation and rejected-command histories ([#141](https://github.com/gigaverse-app/pytest-obligation/issues/141)) ([3323c29](https://github.com/gigaverse-app/pytest-obligation/commit/3323c2986ec72c3cc90ff64a7be17e66c015def3))
+
 ## [0.16.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.16.0...v0.16.1) (2026-10-24)
 
 ### Performance
