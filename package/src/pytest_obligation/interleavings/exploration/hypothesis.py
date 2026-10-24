@@ -16,7 +16,28 @@ def _draw_history(draw: "st.DrawFn", scenario: Scenario, max_steps: int) -> Hist
     """Draw legal alias-only histories within the budget, preserving causal prerequisites."""
     from hypothesis import strategies as st
 
-    if isinstance(scenario, InFlightConvergence) and not scenario.retirement and len(scenario.intents) >= 3:
+    if isinstance(scenario, InFlightConvergence) and scenario.recreation:
+        # Exercise repeated lifetimes of the SAME authority, not unrelated admissions.
+        # Every accepted old call remains independently reorderable after restoration.
+        rejected = bool(scenario.rejected_retirement_seams) and max_steps >= 12 and draw(st.booleans())
+        actions = [step(Op.ADMIT, value=scenario.intents[0])]
+        if rejected:
+            actions += [step(Op.START), step(Op.SETTLE)]
+        if not rejected:
+            actions += [step(Op.ARM, seam=draw(st.sampled_from(scenario.seams))), step(Op.START)]
+        maximum = max(1, (max_steps - 5) // 7) if scenario.rejected_retirement_seams else 1
+        count = draw(st.integers(min_value=1, max_value=maximum))
+        for cycle in range(count):
+            if rejected or cycle:
+                actions += [
+                    step(Op.ARM, seam=draw(st.sampled_from(scenario.rejected_retirement_seams))),
+                    step(Op.REJECT_RETIRE),
+                ]
+            actions += [step(Op.RETIRE), step(Op.RECREATE, value=scenario.intents[-1]), step(Op.SETTLE)]
+        for index in draw(st.permutations(tuple(range(count)))):
+            actions += [step(Op.COMPLETE, index=index), step(Op.RECOVER)]
+        actions += [step(Op.SETTLE), step(Op.QUIET)]
+    elif isinstance(scenario, InFlightConvergence) and not scenario.retirement and len(scenario.intents) >= 3:
         seam = draw(st.sampled_from(scenario.seams))
         current = scenario.intents[0]
         actions = [step(Op.ADMIT, value=current), step(Op.ARM, seam=seam), step(Op.START)]
