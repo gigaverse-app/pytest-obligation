@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.19.0...v0.19.1) (2026-10-24)
+
+
+### Bug fixes
+
+* **report:** expose known failures and reconcile suite identities ([#156](https://github.com/gigaverse-app/pytest-obligation/issues/156)) ([e12400b](https://github.com/gigaverse-app/pytest-obligation/commit/e12400bc5a01e395955831e9640053b75c79f12a))
+
 ## [0.19.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.18.0...v0.19.0) (2026-10-24)
 
 
