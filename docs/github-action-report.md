@@ -153,6 +153,34 @@ preserves configured pytest plugins and targets only missing files. Collection i
 files and runs collection hooks, but does not execute fixtures or test bodies.
 The timeout defaults to 120 seconds and is configurable.
 
+### Reuse collection across runs
+
+For deterministic collection, add the same cache settings to both planning and
+collection calls. Start with the entire tracked checkout, then narrow the inputs
+only after reviewing imports, pytest plugins, data files, configuration and locks:
+
+```yaml
+    cache-inputs: .
+    cache-context: ubuntu-24.04/python-3.14/pytest-environment
+```
+
+`cache-inputs` accepts newline-separated literal files or directories. It hashes
+tracked file contents, including additions and deletions, without walking virtual
+environments. The key also includes the action's actual reporter code, application
+roots, platform and `cache-context`. Put interpreter and environment choices that
+affect collection in that context; do not cache time-, network- or secret-dependent
+collection. Empty `cache-inputs` disables cross-run caching.
+
+A matching complete inventory skips application dependency setup and collection.
+Only names and collected test IDs are cached. The collector validates the inventory
+and binds it to the current revision; JUnit and pass/fail evidence still come from
+the current run. Fresh current-run node IDs take precedence. Invalid or partial
+entries fall back to collection. Immutable run/attempt cache entries let a repaired
+inventory supersede a broken entry without mixing different input identities.
+
+The actions reuse an installed `uv` and disable setup-uv's recursive dependency
+cache scan. They do not traverse the application's `.venv` merely to prepare a report.
+
 The top-level **Skipped tests** counter joins collected IDs to the existing JUnit
 results. Tests absent from completed admitted sessions, deselections and explicit
 pytest skips count as skipped; executed failures remain failures. Repeated XML
