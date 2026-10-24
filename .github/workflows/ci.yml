@@ -30,8 +30,6 @@ jobs:
         uses: gigaverse-app/pytest-selective/actions/plan-lanes@v1
         with:
           config: .github/test-lanes.json
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
-          full: ${{ contains(fromJSON('["workflow_dispatch","workflow_call","schedule","release"]'), github.event_name) || contains(github.event.pull_request.labels.*.name, 'test:full') }}
 
   ci-contracts:
     needs: select-tests
