@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.17.0...v0.18.0) (2026-10-24)
+
+
+### Features
+
+* **mongodb:** inspect production selection queries ([#147](https://github.com/gigaverse-app/pytest-obligation/issues/147)) ([6ee3f1b](https://github.com/gigaverse-app/pytest-obligation/commit/6ee3f1b7fa6a994e026236c9b3a2c28466d56d6e))
+
+
+### Bug fixes
+
+* **reporting:** include selection and exemption evidence ([#146](https://github.com/gigaverse-app/pytest-obligation/issues/146)) ([ec74566](https://github.com/gigaverse-app/pytest-obligation/commit/ec74566144a32b37638b1ce48989d9d84c17fbc0))
+* **testing:** compare inline selections without inventing a page limit ([#148](https://github.com/gigaverse-app/pytest-obligation/issues/148)) ([123f229](https://github.com/gigaverse-app/pytest-obligation/commit/123f2294aa74464882f64deac8a59eb531d717a1))
+* **testing:** distinguish gate identity from monotonic scheduling ([#145](https://github.com/gigaverse-app/pytest-obligation/issues/145)) ([e46a241](https://github.com/gigaverse-app/pytest-obligation/commit/e46a241eb6a8577a59e08f35f98241bf0173f384))
+* **testing:** support independent evidence consumers and complete inventory ([#143](https://github.com/gigaverse-app/pytest-obligation/issues/143)) ([e230d38](https://github.com/gigaverse-app/pytest-obligation/commit/e230d380c7817d9ddce773aa95a3ac36231b142e))
+
 ## [0.17.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.16.1...v0.17.0) (2026-10-24)
 
 

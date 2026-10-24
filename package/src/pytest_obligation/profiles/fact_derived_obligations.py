@@ -27,7 +27,12 @@ capability an implementation either claims or declines, both can be true at once
 not visible in the state that asked for the work, is making a real statement
 rather than failing a test.
 
-Two adapter invariants and four behavioral invariants:
+``StateDerived`` also proves desired-value replacement. ``FixedEffectDerived``
+models a fixed operation such as deletion: it proves terminal settlement instead
+of inventing a replacement value. Both share discovery, idempotence and stopped-work
+checks, including the same production-binding guards.
+
+Two adapter invariants and four behavioral invariants for mutable state:
 
 0a. **Settlement is production-bound** — the adapter invokes the real
     completion transition instead of writing the terminal fields itself.
@@ -83,7 +88,7 @@ def _same_identity(identity: Any) -> Any:
     return identity
 
 
-class StateDerived(HarnessModel):
+class _DerivedObligation(HarnessModel):
     """
     One domain's derivation of obligations from product state.
 
@@ -125,15 +130,6 @@ class StateDerived(HarnessModel):
     #: so that it is no longer outstanding.
     settle: Callable[[Any], None]
 
-    #: Change the product state so a *different* effect is now desired. Returns
-    #: the new desired state, for comparison against :attr:`desired_of`.
-    move_desired_state: Callable[[Any], Any]
-
-    #: The desired state the obligation currently carries. Invariant 3 uses this
-    #: to tell superseding from gap-filling: both re-open the obligation, only
-    #: one re-opens it against the state that is actually wanted.
-    desired_of: Callable[[Any], Any]
-
     #: Create product state that someone deliberately stopped — cancelled,
     #: soft-deleted, abandoned. Returns its identity.
     make_stopped: Callable[[], Any]
@@ -146,22 +142,44 @@ class StateDerived(HarnessModel):
     #: that materialises records still has to face the guard.
     materialises_records: bool = True
 
-    #: Resolve the obligation identity after ``move_desired_state``. Mutable-row
-    #: implementations keep the same identity; immutable-row lifecycles may
-    #: replace it with a new row while preserving the logical obligation.
-    identity_after_move: Callable[[Any], Any] = _same_identity
-
     #: Arrange an outstanding identity past Profile A's recovery grace. This is
     #: fault/setup injection, used only by the A/F composition proof.
     make_recovery_eligible: Callable[[Any], None] | None = None
 
 
-def assert_derived_transitions_are_production_bound(derived: StateDerived) -> None:
+class StateDerived(_DerivedObligation):
+    """A derived obligation whose desired value can change after settlement."""
+
+    #: Change the product state so a *different* effect is now desired. Returns
+    #: the new desired state, for comparison against :attr:`desired_of`.
+    move_desired_state: Callable[[Any], Any]
+
+    #: The desired state the obligation currently carries. Invariant 3 uses this
+    #: to tell superseding from gap-filling: both re-open the obligation, only
+    #: one re-opens it against the state that is actually wanted.
+    desired_of: Callable[[Any], Any]
+
+    #: Resolve the obligation identity after ``move_desired_state``. Mutable-row
+    #: implementations keep the same identity; immutable-row lifecycles may
+    #: replace it with a new row while preserving the logical obligation.
+    identity_after_move: Callable[[Any], Any] = _same_identity
+
+
+class FixedEffectDerived(_DerivedObligation):
+    """A fixed operation, such as deletion, implied by product facts.
+
+    This shape proves discovery, stable derivation, stopped-work exclusion and
+    settlement that remains terminal. It makes no desired-value supersession
+    claim. Use ``StateDerived`` when the same obligation can want a new value.
+    """
+
+
+def assert_derived_transitions_are_production_bound(derived: _DerivedObligation) -> None:
     """INVARIANT 0a: derivation and desired-state moves invoke production."""
-    for field, binding, shape in (
-        ("derive", derived.derive, "the production derivation pass"),
-        ("move_desired_state", derived.move_desired_state, "the production desired-state transition"),
-    ):
+    bindings: list[tuple[str, Callable[..., Any], str]] = [("derive", derived.derive, "the production derivation pass")]
+    if isinstance(derived, StateDerived):
+        bindings.append(("move_desired_state", derived.move_desired_state, "the production desired-state transition"))
+    for field, binding, shape in bindings:
         assert_test_binding_forwards(
             adopter=derived.name,
             field=field,
@@ -171,7 +189,7 @@ def assert_derived_transitions_are_production_bound(derived: StateDerived) -> No
         )
 
 
-def assert_settlement_is_production_bound(derived: StateDerived) -> None:
+def assert_settlement_is_production_bound(derived: _DerivedObligation) -> None:
     """INVARIANT 0: settling invokes runtime behavior, not a test-side update."""
     assert_test_binding_forwards(
         adopter=derived.name,
@@ -182,7 +200,7 @@ def assert_settlement_is_production_bound(derived: StateDerived) -> None:
     )
 
 
-def assert_outstanding_selection_is_production_bound(derived: StateDerived) -> None:
+def assert_outstanding_selection_is_production_bound(derived: _DerivedObligation) -> None:
     """INVARIANT 0b: outstanding work is selected by runtime code."""
     assert_test_binding_forwards(
         adopter=derived.name,
@@ -193,7 +211,7 @@ def assert_outstanding_selection_is_production_bound(derived: StateDerived) -> N
     )
 
 
-def assert_derivation_bindings_are_production_bound(derived: StateDerived) -> None:
+def assert_derivation_bindings_are_production_bound(derived: _DerivedObligation) -> None:
     """
     INVARIANT 0c, delegation half: profile F's semantic fields REACH production.
 
@@ -209,11 +227,10 @@ def assert_derivation_bindings_are_production_bound(derived: StateDerived) -> No
     materialising shape; the selection-is-derivation shape declares
     ``derive=lambda: None`` legitimately.
     """
-    for field, binding in (
-        ("move_desired_state", derived.move_desired_state),
-        ("settle", derived.settle),
-        ("outstanding", derived.outstanding),
-    ):
+    bindings = [("settle", derived.settle), ("outstanding", derived.outstanding)]
+    if isinstance(derived, StateDerived):
+        bindings.append(("move_desired_state", derived.move_desired_state))
+    for field, binding in bindings:
         assert_test_binding_delegates_to_production(
             adopter=derived.name,
             field=field,
@@ -229,7 +246,7 @@ def assert_derivation_bindings_are_production_bound(derived: StateDerived) -> No
         )
 
 
-def assert_unrecorded_obligation_is_discovered(derived: StateDerived) -> None:
+def assert_unrecorded_obligation_is_discovered(derived: _DerivedObligation) -> None:
     """
     INVARIANT 1: an obligation nothing recorded is still found.
 
@@ -264,7 +281,7 @@ def assert_unrecorded_obligation_is_discovered(derived: StateDerived) -> None:
     )
 
 
-def assert_derivation_is_idempotent(derived: StateDerived) -> None:
+def assert_derivation_is_idempotent(derived: _DerivedObligation) -> None:
     """
     INVARIANT 2: a second pass over unchanged state changes nothing.
 
@@ -334,7 +351,7 @@ def assert_moved_desired_state_is_superseded(derived: StateDerived) -> None:
     )
 
 
-def assert_stopped_work_is_not_revived(derived: StateDerived) -> None:
+def assert_stopped_work_is_not_revived(derived: _DerivedObligation) -> None:
     """
     INVARIANT 4: cancellation survives the next derivation pass.
 
@@ -386,4 +403,39 @@ def assert_state_derived_contract(derived: StateDerived) -> None:
     """
     assert_derivation_bindings_are_production_bound(derived)
     for proof in STATE_DERIVED_PROOFS:
+        proof(derived)
+
+
+def assert_fixed_effect_bindings_are_production_bound(derived: FixedEffectDerived) -> None:
+    """A fixed-effect declaration cannot silently accept a mutable-state binding."""
+    assert isinstance(derived, FixedEffectDerived), "fixed_effect_derivation requires FixedEffectDerived"
+    assert_derivation_bindings_are_production_bound(derived)
+
+
+def assert_settled_obligation_is_not_rediscovered(derived: FixedEffectDerived) -> None:
+    """Settling the fixed operation removes it, and a later pass cannot revive it."""
+    identity = derived.make_implied_obligation()
+    derived.derive()
+    assert identity in derived.outstanding(), f"{derived.name}: no ordinary obligation was discovered"
+    derived.settle(identity)
+    assert identity not in derived.outstanding(), f"{derived.name}: settle() left the obligation outstanding"
+    derived.derive()
+    assert identity not in derived.outstanding(), f"{derived.name}: derivation rediscovered an already settled effect"
+
+
+FIXED_EFFECT_DERIVED_PROOFS: tuple[Callable[[FixedEffectDerived], None], ...] = (
+    assert_derived_transitions_are_production_bound,
+    assert_settlement_is_production_bound,
+    assert_outstanding_selection_is_production_bound,
+    assert_unrecorded_obligation_is_discovered,
+    assert_derivation_is_idempotent,
+    assert_settled_obligation_is_not_rediscovered,
+    assert_stopped_work_is_not_revived,
+)
+
+
+def assert_fixed_effect_derived_contract(derived: FixedEffectDerived) -> None:
+    """Run the fixed-effect binding guard and its applicable derivation proofs."""
+    assert_fixed_effect_bindings_are_production_bound(derived)
+    for proof in FIXED_EFFECT_DERIVED_PROOFS:
         proof(derived)

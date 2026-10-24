@@ -254,3 +254,13 @@ This supports an execution gate without copying its predicate into the test's
 selection. A hot-looping runner, a hidden state change or abandoned work still
 fails. `waits=False` continues to describe a lifecycle with no per-identity delay;
 the separate schedule binding establishes its recurring cadence.
+
+## Eligibility inside a recovery loop
+
+A recovery read can return owed candidates and let the real worker check their
+eligibility before mutation or effects. The A/G composition proof runs that
+actual sweep while the gate is blocked and applies the existing no-write,
+no-execution, no-provider-effect and retained-intent assertions. It then requires
+the released identity in the sweep selection and observes its recovery through
+the sweep's dispatch path. The binding does not need to move the application's
+gate into a copied database predicate.

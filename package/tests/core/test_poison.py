@@ -1,5 +1,7 @@
 """Every isolation/stop verdict needs a conforming control and a specific counterfeit."""
 
+import asyncio
+
 import pytest
 
 from pytest_obligation.host import Host, hosted
@@ -85,7 +87,8 @@ def test_poison_oracle(mode: str, expected: type[Exception] | None) -> None:
         ("never-fires", AssertionError),
     ],
 )
-def test_stop_oracle(mode: str, expected: type[Exception] | None) -> None:
+@pytest.mark.parametrize("stop_kind", [StopRequested, asyncio.CancelledError])
+def test_stop_oracle(mode: str, expected: type[Exception] | None, stop_kind: type[BaseException]) -> None:
     switch = PoisonSwitch()
     progressed: list[int] = []
     owed = {1, 2}
@@ -94,26 +97,27 @@ def test_stop_oracle(mode: str, expected: type[Exception] | None) -> None:
         try:
             if mode != "never-fires":
                 switch.check(1)
-        except StopRequested as error:
+        except stop_kind as error:
             if mode == "drop":
                 owed.remove(1)
             if mode == "swallow":
                 return
             if mode == "isolate":
                 progressed.append(2)
-                raise ExceptionGroup("wrongly isolated", [error]) from None
+                raise BaseExceptionGroup("wrongly isolated", [error]) from None
             if mode == "continue":
                 progressed.append(2)
             raise
 
     def prove() -> None:
-        assert_a_stop_request_ends_the_tick(
-            name="loop",
-            poison=switch.poisoned(1),
-            run_tick=tick,
-            progressed=lambda: 2 in progressed,
-            still_owed=lambda: 1 in owed,
-        )
+        with hosted(Host(stop_exception=stop_kind)):
+            assert_a_stop_request_ends_the_tick(
+                name="loop",
+                poison=switch.poisoned(1),
+                run_tick=tick,
+                progressed=lambda: 2 in progressed,
+                still_owed=lambda: 1 in owed,
+            )
 
     if expected is None:
         prove()
@@ -170,3 +174,20 @@ def test_rearming_a_switch_counts_only_this_scope_and_preserves_outer_scopes() -
     with switch.poisoned(1) as again:
         assert again() == 0
     switch.check(1)
+
+
+@pytest.mark.parametrize("interrupt", [KeyboardInterrupt, SystemExit])
+def test_unrelated_process_interrupt_is_not_a_stop_verdict(interrupt):
+    switch = PoisonSwitch()
+
+    def tick():
+        raise interrupt()
+
+    with pytest.raises(interrupt):
+        assert_a_stop_request_ends_the_tick(
+            name="unrelated process interruption",
+            poison=switch.poisoned(1),
+            run_tick=tick,
+            progressed=lambda: False,
+            still_owed=lambda: True,
+        )

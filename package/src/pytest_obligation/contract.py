@@ -214,9 +214,12 @@ from pytest_obligation.profiles.eventual_convergence import (
     assert_convergence_bindings_are_production_bound,
 )
 from pytest_obligation.profiles.fact_derived_obligations import (
+    FIXED_EFFECT_DERIVED_PROOFS,
     STATE_DERIVED_PROOFS,
+    FixedEffectDerived,
     StateDerived,
     assert_derivation_bindings_are_production_bound,
+    assert_fixed_effect_bindings_are_production_bound,
 )
 from pytest_obligation.profiles.gated_execution import (
     ELIGIBILITY_PROOFS,
@@ -488,7 +491,7 @@ _PROFILE_BINDINGS: dict[Profile, tuple[str, ...]] = {
     Profile.CRASH_AMBIGUITY: ("ambiguity",),
     Profile.DURABLE_RETENTION: ("retention",),
     Profile.EVENTUAL_CONVERGENCE: ("convergence", "snapshot", "in_flight", "evidence_confluence"),
-    Profile.FACT_DERIVED_OBLIGATIONS: ("derivation",),
+    Profile.FACT_DERIVED_OBLIGATIONS: ("derivation", "fixed_effect_derivation"),
     Profile.G: ("eligibility",),
     Profile.H: ("replay",),
     Profile.I: ("admission",),
@@ -519,6 +522,7 @@ _BINDING_PROOFS: dict[str, tuple[Callable[[Any], None], ...]] = {
     "persistent_retry": PERSISTENT_RETRY_PROOFS,
     "classified_failures": CLASSIFIED_FAILURE_PROOFS,
     "derivation": (assert_derivation_bindings_are_production_bound, *STATE_DERIVED_PROOFS),
+    "fixed_effect_derivation": (assert_fixed_effect_bindings_are_production_bound, *FIXED_EFFECT_DERIVED_PROOFS),
 }
 
 
@@ -586,6 +590,7 @@ UNWAIVABLE_PROOFS = frozenset(
         "assert_settlement_is_production_bound",
         "assert_outstanding_selection_is_production_bound",
         "assert_derivation_bindings_are_production_bound",
+        "assert_fixed_effect_bindings_are_production_bound",
     }
 )
 
@@ -661,6 +666,10 @@ class ObligationContract(HarnessModel):
 
     #: Profile F: the domain's derivation of obligations from product state.
     derivation: Binding[StateDerived] | None = None
+
+    #: Profile F for a fixed operation with no changeable desired payload.
+    #: Its generated cases do not claim desired-state supersession.
+    fixed_effect_derivation: Binding[FixedEffectDerived] | None = None
 
     #: Optional execution gate: work that is owed but blocked by something the
     #: product decides (see :mod:`pytest_obligation.profiles.gated_execution`),
@@ -891,7 +900,7 @@ def _profile_design_errors(contract: ObligationContract | SafetyContract, scope:
                 isinstance(contract, ObligationContract)
                 and profile in (Profile.A, Profile.F)
                 and contract.sweep is not None
-                and contract.derivation is not None
+                and (contract.derivation is not None or contract.fixed_effect_derivation is not None)
             ):
                 valid.add(_COHERENCE_PROOF_NAME)
             for gap_name, reason in disposition.gaps.items():
@@ -1052,6 +1061,8 @@ def _design_errors(contract: ObligationContract) -> list[str]:
             errors.append("E-family gaps belong to existing profile proof IDs or exact scenario history IDs")
     if contract.prove_selection_complete and not _claims_recovery(contract):
         errors.append("prove_selection_complete requires a profile-A claim with a sweep")
+    if contract.derivation is not None and contract.fixed_effect_derivation is not None:
+        errors.append("profile F must choose mutable-state derivation or fixed-effect derivation, not both")
     errors.extend(_profile_design_errors(contract, tuple(Profile)))
     errors.extend(_extra_design_errors(contract.extras))
     errors.extend(_gap_policy_violations(contract))
@@ -1559,7 +1570,8 @@ def _coherence_cases(contract: ObligationContract) -> list[Any]:
     """
     if not (isinstance(contract.profiles.get(Profile.A), Claim) and contract.sweep is not None):
         return []
-    if not (isinstance(contract.profiles.get(Profile.F), Claim) and contract.derivation is not None):
+    derivation = contract.derivation or contract.fixed_effect_derivation
+    if not (isinstance(contract.profiles.get(Profile.F), Claim) and derivation is not None):
         return []
 
     reason: str | None = None
@@ -1572,7 +1584,7 @@ def _coherence_cases(contract: ObligationContract) -> list[Any]:
         family="recovery-composition",
         related_profiles=(Profile.A,),
         id=f"AF-{_COHERENCE_PROOF_NAME}",
-        run=_coherence_runner(contract.sweep, contract.derivation),
+        run=_coherence_runner(contract.sweep, derivation),
         fixtures=contract.fixtures,
     )
     return [case.parameter(transactional=contract.transactional, gap=reason)]
@@ -2088,12 +2100,12 @@ def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
         params.append(case.parameter(transactional=False, gap=selection.gaps.get(proof.__name__)))
     evidence = selection.assert_scheduled
     if evidence is not None:
-        case = ContractCase(id="assert_the_selection_is_actually_scheduled", run=evidence)
+        case = ContractCase(id="assert_the_selection_is_actually_scheduled", run=evidence, fixtures=selection.fixtures)
         params.append(case.parameter())
     else:
         # The declared absence collects as a visible row, the same way a
         # declined profile does: reviewable, never silently skipped.
-        case = ContractCase(id="schedule_evidence-declined", run=lambda: None)
+        case = ContractCase(id="schedule_evidence-declined", run=lambda: None, fixtures=selection.fixtures)
         params.append(case.parameter())
     params.extend(_extra_cases(selection.extras, selection.fixtures))
     return params

@@ -6,6 +6,9 @@ Install `pytest-obligation[prefect]` for Prefect 3.7.
 history binding. It executes `flow.fn`, awaits the entire coroutine on the
 caller-owned `asyncio.Runner`, and retains the production function's identity for
 binding checks. Reuse the same runner for loop-bound clients such as Motor.
+Each invocation copies the current context into the coroutine, even if the runner
+was initialized earlier. The current host, fault scopes and tenant context
+therefore reach the flow body.
 
 This proves application recovery through the flow body. It does not run Prefect's
 engine, task retries, hooks, result persistence or remote worker delivery. Test
@@ -42,3 +45,30 @@ a collected `@due_work_contract_suite(CONTRACT)` class. Put histories in
 Calling the adapter in ordinary tests alone is incomplete domain adoption; see
 [required adoption shape](adopting.md#required-adoption-shape) for generated
 cases and report artifacts.
+
+
+## Native cancellation and database hosts
+
+Compose `prefect_host` with the host that owns your database bindings:
+
+```python
+from pytest_obligation.host import hosted
+from pytest_obligation.integrations.mongodb import mongodb_host
+from pytest_obligation.integrations.prefect import prefect_host
+
+with hosted(prefect_host(mongodb_host(client, {"your_app"}))):
+    # Run the generated flow-body histories with this composed host.
+    run_histories()
+```
+
+`prefect_host` returns a copy with Prefect 3.7's native `CancelledError` as its
+cooperative stop signal. It preserves database inspectors, write/reply faults
+and other capabilities. This cancellation derives from `BaseException`; injecting
+an ordinary `Exception` would incorrectly blame a flow that catches individual
+provider failures but correctly allows cancellation to escape.
+
+The stop oracle checks that cancellation escapes, leaves the interrupted identity
+owed and prevents later work. It detects swallowed or grouped cancellation, while
+unrelated process interrupts still escape the harness. Tests exercise Prefect's
+actual cancellation scope as well as the injected signal. This verifies flow-body
+handling; it does not claim that a remote worker received a cancellation request.

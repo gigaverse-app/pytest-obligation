@@ -10,10 +10,12 @@ checks the supplied deployment declaration, not that a remote worker is running.
 import asyncio
 import inspect
 from collections.abc import Callable
+from contextvars import copy_context
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any
 
+from pytest_obligation.host import Host
 from pytest_obligation.models import ObligationContractDesignError
 
 
@@ -45,7 +47,8 @@ def prefect_flow_call(flow: Any, runner: asyncio.Runner) -> Callable[..., Any]:
     def invoke(*args: Any, **kwargs: Any) -> Any:
         result = flow.fn(*args, **kwargs)
         if inspect.iscoroutine(result):
-            result = runner.run(result)
+            # Each history owns its current host/fault scope; Runner may predate it.
+            result = runner.run(result, context=copy_context())
         if inspect.isawaitable(result) or inspect.isgenerator(result) or inspect.isasyncgen(result):
             _discard_deferred(result, runner)
             raise ObligationContractDesignError("flow body returned deferred work; bind a coroutine that awaits it")
@@ -84,3 +87,15 @@ def assert_prefect_recurs(
     for date in following:
         assert date - previous <= within, "the recovery schedule exceeds its declared interval"
         previous = date
+
+
+def prefect_host(base: Host | None = None) -> Host:
+    """Add Prefect's native cancellation signal, preserving the database host's capabilities.
+
+    The flow-body binding does not start the Prefect engine. Explicitly compose
+    this host for Prefect stop histories; other workers can retain their own
+    stop signal in a separate hosted scope.
+    """
+    from prefect._internal.concurrency.cancellation import CancelledError
+
+    return (base or Host()).model_copy(update={"stop_exception": CancelledError})

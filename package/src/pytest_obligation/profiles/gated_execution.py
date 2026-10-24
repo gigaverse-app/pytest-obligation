@@ -370,7 +370,7 @@ def assert_gate_is_recovered_by_the_contract_sweep(gate: ExecutionGate, sweep: D
     Bound to a directly invoked worker, or to a selection the sweep never runs,
     they would all pass while the sweep that profile A proves never releases the
     work. So the sweep's own selection (compared through its ``identity_of``) must
-    leave the blocked work out and take it in once eligible, and ``gate.recover``
+    take the work in once eligible, and ``gate.recover``
     must make the sweep's dispatch path send it: the number of times the gate's
     identity appears in the sweep's ``dispatched_ids``, the recorder of what its
     dispatch path sent, must rise while ``gate.recover`` runs. A readiness
@@ -389,7 +389,12 @@ def assert_gate_is_recovered_by_the_contract_sweep(gate: ExecutionGate, sweep: D
     def selected() -> set[Any]:
         return {sweep.identity_of(row) for row in sweep.due_work()}
 
-    assert gate.identity not in selected(), f"{gate.name}: blocked work is in the contract sweep's selection"
+    # Some sweeps select owed candidates and gate inside their loop. Exercise
+    # that actual path against the same no-write/no-effect invariants, instead
+    # of requiring the eligibility decision to live in a database predicate.
+    assert_blocked_gate_preserves_intent(
+        gate.model_copy(update={"routes": {"contract sweep": sweep.run_tick}, "recover": sweep.run_tick})
+    )
     gate.make_eligible()
     assert gate.identity in selected(), (
         f"{gate.name}: eligible work is absent from the contract sweep's selection: the gate describes another "

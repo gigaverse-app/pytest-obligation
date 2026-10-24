@@ -93,3 +93,43 @@ are different units. Existing write/death and lost-reply behavior is unchanged.
 
 References: [PyMongo cursor cloning and explain](https://pymongo.readthedocs.io/en/4.18.0/api/pymongo/cursor.html)
 and [MongoDB winning-plan shapes](https://www.mongodb.com/docs/manual/reference/explain-results/).
+
+
+## Observe every page and the returned rows
+
+Use `observe_selection` when the production read owns pagination or converts raw
+MongoDB documents into application objects:
+
+```python
+from pytest_obligation.integrations.mongodb_selection import observe_selection
+
+selection = observe_selection(read_all_production_orders, orders_collection)
+rows = list(selection)  # exactly the rows returned by the production read
+```
+
+The callback owns its query, pagination and conversion. The helper exhausts its
+iterator inside the observation scope and keeps the actual rows alongside every
+executed find cursor or collection aggregate/distinct command. Index and routing
+checks inspect every captured read, so a
+healthy first page cannot hide a full scan or secondary preference on a later one.
+For Motor, finish the complete async read on its owning loop and pass the
+synchronous collection delegate.
+
+This is read-only test observation. It introduces no pagination policy, batch
+execution mode or production bound. `selection_built_by` remains available when
+the first native cursor itself is the required evidence.
+
+
+The observer also captures the driver's native `distinct` query and read-only
+aggregation pipeline, including its options, hint and collation. The inspector
+explains the captured command; it does not reconstruct a find filter from an
+aggregation. Supported pipelines consume one collection using match, unwind,
+sort, limit/skip, projection/replacement, group/count and field transformations.
+Foreign-collection stages and writing pipelines raise explicit capability errors.
+
+Routing comes from the native collection and session policy. In direct-connection
+tests PyMongo can translate PRIMARY to PRIMARY_PREFERRED on the wire; that
+transport adaptation must not create a false replica warning. Explicit
+PRIMARY_PREFERRED and SECONDARY_PREFERRED remain replica-capable and fail.
+Command capture is scoped to the selected client/collection and follows Motor's
+synchronous delegate. It is not monitoring of independent clients or processes.
