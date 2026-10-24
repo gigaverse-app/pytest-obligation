@@ -182,3 +182,48 @@ def test_static_inventory_finds_selection_aliases_without_importing(tmp_path, st
     inventory = discover(tmp_path, ["."])
     assert inventory.applications["test_selection.TestSelection"].name == "Hourly repair query"
     assert "Hourly repair query" in unescape(render({}, inventory=inventory))
+
+
+@pytest.mark.parametrize("source_path", ["tests/test_cache.py", "unrelated/test_cache.py", None])
+def test_short_runtime_identity_uses_source_to_resolve_unreadable_display_name(tmp_path, source_path):
+    from pytest_obligation.profiles.coverage import CaseEvidence, SourceLocation, SuiteCoverage
+
+    for folder in ("tests", "other"):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "test_cache.py").write_text(
+            "from pytest_obligation import exempt_due_work_suite\n"
+            "@exempt_due_work_suite(exemption)\nclass TestCache: pass\n"
+        )
+    suite = SuiteCoverage(
+        name="Lost invalidation is TTL bounded",
+        profiles={},
+        source=SourceLocation(path=source_path, line=2) if source_path else None,
+        additional_cases={"exemption": CaseEvidence(family="exemption", collected=True)},
+    )
+    (tmp_path / "shard.json").write_text('{"test_cache.TestCache":' + suite.model_dump_json() + "}")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-m",
+            "pytest_obligation.reporting",
+            "--input",
+            "shard.json",
+            "--output",
+            "report.md",
+            "--application-path",
+            "tests",
+            "--application-path",
+            "other",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    body = (tmp_path / "report.md").read_text()
+    expected = 2 if source_path == "tests/test_cache.py" else 3
+    assert f"**{expected} applications" in body
+    assert f"**{expected}** applications not run" in body
+    assert "1 blocked checks" in body
+    assert "0 checks passed" in body

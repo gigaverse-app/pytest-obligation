@@ -102,7 +102,7 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
             assert ("**Check failed**" if mode == "failed" else "Test setup/cleanup failed") in body
 
 
-def test_known_gap_probe_is_explicit_but_never_a_failed_behavior_claim(pytester: pytest.Pytester) -> None:
+def test_known_gap_probe_counts_as_an_expected_failure_without_failing_ci(pytester: pytest.Pytester) -> None:
     pytester.makepyfile("""
 from pytest_obligation import Adoption, KnownGap, NotApplicable, ObligationContract, Profile, due_work_contract_suite
 from pytest_obligation.references.in_memory import assert_the_reference_capability_exists
@@ -119,7 +119,7 @@ class TestOrders: pass
     assert "Known gap declared" in body
     assert "Application reason: Recovery worker" in body
     assert "✅ All claims" not in body
-    assert "🔴 1 checks failed" not in body
+    assert "**Failures: 0 unexpected + 1 known expected.**" in body
 
 
 def test_failure_state_roundtrips_and_survives_worker_merge() -> None:
