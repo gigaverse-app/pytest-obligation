@@ -36,7 +36,7 @@ own sweep.
 
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Generic, TypeAlias, TypeVar
 
 from pytest_obligation.binding import (
@@ -70,9 +70,16 @@ class ExecutionGate(HarnessModel, Generic[IdentityT, SnapshotT, ObservationT]):
     owed_work: Callable[[], Iterable[IdentityT]]
 
     #: An immutable observation covering the obligation's identity and revision,
-    #: attempts, retry budget and not-before time. No persisted field names or
-    #: states are prescribed.
+    #: attempts and retry budget. Include the not-before time here unless it is
+    #: separately declared below. No persisted field names or states are prescribed.
     reserved_state: Callable[[], SnapshotT]
+
+    #: Optional independent scheduling observation. While blocked it must stay
+    #: unchanged. Readiness may move it later (for example rebase an expired
+    #: retry timestamp to now), never earlier. Identity and retry budgets still
+    #: belong in reserved_state and must remain identical. Without this field,
+    #: reserved_state retains the original stricter snapshot comparison.
+    not_before: Callable[[], datetime] | None = None
 
     #: The production entry points that could execute the blocked work (a task, a
     #: request handler, a scheduled runner), by name. Each is run while the work is blocked.
@@ -214,6 +221,7 @@ def assert_blocked_gate_preserves_intent(gate: ExecutionGate) -> None:
     assert gate.identity in gate.owed_work(), f"{gate.name}: blocked intent must remain owed"
     assert gate.identity not in gate.due_work(), f"{gate.name}: blocked intent was selected"
     state, outcome, calls, executions = gate.reserved_state(), gate.observe(), gate.effect_calls(), gate.executions()
+    not_before = gate.not_before() if gate.not_before else None
     assert outcome != gate.expected, f"{gate.name}: positive control: example is already complete"
     mutations, inspections = gate.mutation_count(), _inspected(gate)
     for name, run in (*gate.routes.items(), ("recovery", gate.recover)):
@@ -221,6 +229,8 @@ def assert_blocked_gate_preserves_intent(gate: ExecutionGate) -> None:
         assert gate.identity in gate.owed_work(), f"{gate.name}: {name}: blocked intent was lost"
         assert gate.mutation_count() == mutations, f"{gate.name}: {name}: blocked work mutated durable state"
         assert gate.reserved_state() == state, f"{gate.name}: {name}: blocked execution mutated reserved state"
+        if gate.not_before:
+            assert gate.not_before() == not_before, f"{gate.name}: {name}: blocked work changed not-before"
         assert gate.executions() == executions, f"{gate.name}: {name}: blocked work executed"
         assert _inspected(gate) == inspections, f"{gate.name}: {name}: blocked work was inspected before it was due"
         assert gate.effect_calls() == calls, f"{gate.name}: {name}: blocked work called its provider"
@@ -240,8 +250,12 @@ def assert_eligible_gate_recovers_lost_notification(gate: ExecutionGate) -> None
     assert_blocked_gate_preserves_intent(gate)
     calls = gate.effect_calls()
     reserved = gate.reserved_state()
+    not_before = gate.not_before() if gate.not_before else None
     gate.make_eligible()
     assert gate.reserved_state() == reserved, f"{gate.name}: readiness rewrote reserved intent or retry state"
+    if gate.not_before:
+        assert not_before is not None
+        assert gate.not_before() >= not_before, f"{gate.name}: readiness moved not-before earlier"
     assert gate.identity in gate.due_work(), f"{gate.name}: eligible intent is absent from production selection"
     elapsed = timedelta(0)
     while True:
