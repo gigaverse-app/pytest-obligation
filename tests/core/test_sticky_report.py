@@ -17,7 +17,7 @@ from pytest_obligation.reporting.markdown import MAX_BODY, counts, render
 from tests.core.test_profile_summary import contract_project  # noqa: F401 - explicit shared pytester fixture
 
 
-@pytest.mark.parametrize("mode", ["complete", "filtered", "skipped", "binding", "failed", "teardown"])
+@pytest.mark.parametrize("mode", ["complete", "filtered", "skipped", "binding", "xfail_binding", "failed", "teardown"])
 @pytest.mark.parametrize("workers", [0, 2])
 def test_real_pytest_evidence_reaches_the_sticky(
     contract_project: pytest.Pytester,  # noqa: F811 - explicitly imported shared fixture
@@ -26,6 +26,9 @@ def test_real_pytest_evidence_reaches_the_sticky(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GITHUB_WORKSPACE", str(contract_project.path))
+    expected_binding_failure = mode == "xfail_binding"
+    if expected_binding_failure:
+        mode = "binding"
     if mode == "failed":
         source = next(contract_project.path.glob("test_*.py"))
         source.write_text(
@@ -57,6 +60,14 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
             + ("        yield\n" if mode == "teardown" else "")
             + "\n".join("        " + line for line in fault.strip().splitlines())
             + ("\n    else:\n        yield\n" if mode == "teardown" else "\n")
+            + (
+                "\ndef pytest_collection_modifyitems(items):\n"
+                "    for item in items:\n"
+                "        if item.callspec.params['case'].id.startswith('F-'):\n"
+                "            item.add_marker(pytest.mark.xfail(strict=True, reason='known failure'))\n"
+                if expected_binding_failure
+                else ""
+            )
         )
     path = contract_project.path / "profiles.json"
     args = ["-q", "-n", str(workers), f"--due-work-profile-report={path}"]
@@ -94,6 +105,9 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
             assert omitted > 0
             assert f"Checks skipped: **{omitted} known**" in body
         elif mode == "binding":
+            if expected_binding_failure:
+                assert result.ret == pytest.ExitCode.OK
+                assert counts(suite)["rejected"] > 0
             assert "Test binding rejected" in body
             assert "references no production" in body
             assert "Connect the binding to production code" in body
@@ -102,8 +116,9 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
             assert ("**Check failed**" if mode == "failed" else "Test setup/cleanup failed") in body
 
 
-def test_known_gap_probe_counts_as_an_expected_failure_without_failing_ci(pytester: pytest.Pytester) -> None:
-    pytester.makepyfile("""
+@pytest.mark.parametrize("has_probe", [False, True])
+def test_known_gap_failure_does_not_invent_behavioral_reproduction(pytester: pytest.Pytester, has_probe: bool) -> None:
+    source = """
 from pytest_obligation import Adoption, KnownGap, NotApplicable, ObligationContract, Profile, due_work_contract_suite
 from pytest_obligation.references.in_memory import assert_the_reference_capability_exists
 contract = ObligationContract(name='orders', adoption=Adoption.LEGACY,
@@ -111,7 +126,10 @@ contract = ObligationContract(name='orders', adoption=Adoption.LEGACY,
               Profile.A: KnownGap('Recovery worker has not been implemented.', detect=assert_the_reference_capability_exists)})
 @due_work_contract_suite(contract)
 class TestOrders: pass
-""")
+"""
+    if not has_probe:
+        source = source.replace(", detect=assert_the_reference_capability_exists", "")
+    pytester.makepyfile(source)
     path = pytester.path / "profiles.json"
     result = pytester.runpytest_subprocess("-q", f"--due-work-profile-report={path}")
     assert result.ret == pytest.ExitCode.OK
@@ -120,6 +138,11 @@ class TestOrders: pass
     assert "Application reason: Recovery worker" in body
     assert "✅ All claims" not in body
     assert "**Failures: 0 unexpected + 1 known expected.**" in body
+    assert "Known expected failure" in body
+    assert "Known failure reproduced" not in body
+    assert "Expected failures reproduce" not in body
+    if has_probe:
+        assert "self-test: the deliberately absent capability is still absent" in body
 
 
 def test_failure_state_roundtrips_and_survives_worker_merge() -> None:

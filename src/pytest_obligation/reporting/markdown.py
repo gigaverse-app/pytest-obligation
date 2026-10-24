@@ -127,7 +127,7 @@ def counts(suite: SuiteCoverage) -> dict[str, int]:
             else "rejected"
             if status == "Test binding rejected"
             else "failed"
-            if status in ("Check failed", "Known failure reproduced (expected)")
+            if status in ("Check failed", "Known expected failure")
             else "blocked"
         )
         result[category] += 1
@@ -253,7 +253,7 @@ def _suite(
         (
             "Blocked checks",
             {case_status(c) for c in cases.values()}
-            - {"Passed", "Check failed", "Known failure reproduced (expected)", "Test binding rejected"},
+            - {"Passed", "Check failed", "Known expected failure", "Test binding rejected"},
         ),
     ):
         affected = [
@@ -394,14 +394,14 @@ def render(
         "",
     ]
     known_failures = sum(
-        case_status(case) == "Known failure reproduced (expected)"
+        case_status(case) == "Known expected failure"
         for suite in reports.values()
         for case in all_cases(suite).values()
     )
     if known_failures:
         head += [
             f"**Failures: {totals['failed'] - known_failures} unexpected + {known_failures} known expected.** "
-            "Expected failures reproduce application-declared findings and do not fail CI. "
+            "Expected failures are declared by the application and do not fail CI. "
             "Review their reasons and evidence below; counts are checks, not distinct product bugs.",
             "",
         ]
@@ -431,7 +431,7 @@ def render(
         "<details>",
         "<summary><strong>What do these numbers mean?</strong></summary>",
         "",
-        "- **Failures:** an executed assertion failed unexpectedly or reproduced an application-declared known failure. Expected failures still permit successful CI; the visible breakdown distinguishes them.",
+        "- **Failures:** an executed assertion failed unexpectedly or was an application-declared expected failure. Expected failures still permit successful CI; the visible breakdown distinguishes them.",
         "- **Rejected bindings:** repair the connection to production code; these checks provide no supporting evidence.",
         "- **Blocked checks:** checks could not establish a result, including missing execution, setup/cleanup errors, binding-debt or unclassified expected failures, and unexpected passes requiring declaration review.",
         "- **Coverage gaps:** guarantees not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once. Deliberate exclusions are shown separately.",

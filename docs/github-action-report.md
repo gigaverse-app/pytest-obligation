@@ -43,13 +43,13 @@ and artifact without posting a comment.
 Passing, failed, blocked and rejected counts partition unique expected checks.
 Related guarantees referencing the same check do not multiply its count. A setup
 or cleanup failure is blocked execution; a harness binding rejection takes
-precedence over that classification. An executed known-defect assertion that
+precedence over that classification. An executed check declared as a known defect that
 xfails counts as a failure, alongside unexpected assertion failures. The headline
 breaks these down as unexpected and known expected, and explicitly says when CI
 succeeded with expected failures. These are failed checks, not distinct product
 bugs; inspect the application reasons and test assumptions before deciding on a fix.
 
-An unexecuted known-defect declaration does not count as a reproduced failure.
+An unexecuted known-defect declaration does not count as an executed failure.
 Binding-debt and unclassified expected failures, setup-phase xfails, and unexpected
 passes remain blocked evidence with their explicit outcome in the details.
 
@@ -60,8 +60,10 @@ filtered check alone, without such a declaration, does not add a coverage gap.
 Declined and not-applicable guarantees are deliberate exclusions, listed
 separately with their application reasons; they do not establish passing coverage.
 
-Application detail separates known defects, unassessed guarantees/scenarios and
-deliberate exclusions. Generated strict expected failures retain their canonical
+Application detail separates declared known defects, unassessed guarantees/scenarios and
+deliberate exclusions. Expected failures retain the underlying exception diagnostics,
+including binding rejections and setup errors. A declared gap without a behavior
+probe, or a failed proof precondition, is not a reproduced product defect. Generated strict expected failures retain their canonical
 debt classification and current declaration reason. When a debt baseline is
 configured, its matching case/kind supplies the ticket. Use a full HTTP(S) ticket
 URL in the baseline for a clickable link; issue keys remain text because the
