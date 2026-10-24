@@ -22,7 +22,7 @@ from pytest_obligation.interleavings.model import (
     InterleavingFailure,
     Operation,
 )
-from pytest_obligation.interleavings.testing.reference import evidence_reference, reference
+from pytest_obligation.interleavings.testing.reference import evidence_reference, reference, retained_unknown_reference
 
 
 def scenario(*, forget: bool = False) -> InFlightConvergence[int, str, str]:
@@ -284,7 +284,7 @@ def test_replay_rejects_incompatible_versions() -> None:
     with pytest.raises(AssertionError, match="incompatible replay"):
         replay_history(declaration, trace)
     with pytest.raises(ValidationError):
-        HistoryTrace.model_validate({**trace.model_dump(), "catalog_version": 3})
+        HistoryTrace.model_validate({**trace.model_dump(), "catalog_version": 4})
 
 
 def test_exploration_respects_step_budget_and_valid_revision_order() -> None:
@@ -590,7 +590,8 @@ def test_binding_cleanup_cannot_turn_a_failed_history_into_a_pass() -> None:
 
 # Acknowledgement without application is opt-in per seam. These digests are the
 # catalogs generated on main before the feature (f4de472); an unchanged
-# declaration must keep producing exactly them.
+# declaration must keep producing exactly them, except the reviewed v3 retirement
+# repair correction: fault recovery after a late write, not the retirement command.
 PRE_FEATURE_CATALOGS = {
     "revisions": (
         (("A", "B", "C"), ("write", "repair"), False, True, True, ()),
@@ -605,7 +606,7 @@ PRE_FEATURE_CATALOGS = {
     "retirement": (
         (("A", "B", "C"), ("write", "repair"), True, True, True, ("repair",)),
         19,
-        "8197059326362551cef3dd118427cc532fdade6b3b4f5d6df42be313a3dc14b1",
+        "f236518268726e11accaa0f0794821eddaf611849890756e17172ce38e553d1d",
     ),
     "retirement-plain": (
         (("A",), ("write",), True, False, False, ()),
@@ -859,3 +860,94 @@ def test_unconfirmed_receipts_cannot_erase_the_commanded_revision_during_recover
     with pytest.raises(InterleavingFailure) as caught:
         declaration.run(history)
     assert caught.value.invariant == "revision"
+
+
+def unbounded_scenario(**options):
+    return scenario().model_copy(
+        update={
+            "bind": partial(retained_unknown_reference, **options),
+            "unbounded_repair_because": "The provider exposes no lifetime bound or eventual receipt for an accepted call whose response was lost.",
+        }
+    )
+
+
+def test_retained_unknown_allows_repair_for_its_exact_provider_key():
+    declaration = unbounded_scenario()
+    declaration.run(next(history for history in declaration.histories() if history.id == "IF.control/normal"))
+
+
+@pytest.mark.parametrize("evidence_key", [("write", "other"), ("other-seam", "0"), None])
+def test_unbounded_repair_refuses_missing_or_cross_identity_evidence(evidence_key):
+    declaration = unbounded_scenario(evidence_key=evidence_key)
+    with pytest.raises(InterleavingFailure, match="settled-churn"):
+        declaration.run(next(history for history in declaration.histories() if history.id == "IF.control/normal"))
+
+
+def test_unbounded_repair_still_rejects_changed_settled_revision():
+    declaration = unbounded_scenario(corrupt=True)
+    with pytest.raises(InterleavingFailure):
+        declaration.run(next(history for history in declaration.histories() if history.id == "IF.control/normal"))
+
+
+def test_unbounded_repair_cannot_add_unowned_provider_keys():
+    declaration = unbounded_scenario(new_key=True, claim_all=True)
+    with pytest.raises(InterleavingFailure, match="settled-churn"):
+        declaration.run(next(history for history in declaration.histories() if history.id == "IF.control/normal"))
+
+
+def test_unbounded_repair_requires_explicit_evidence_binding():
+    declaration = scenario().model_copy(
+        update={
+            "unbounded_repair_because": "Provider timeouts cannot prove cancellation; unknown effects retain durable repair debt."
+        }
+    )
+    with pytest.raises(AssertionError, match="evidence seam mismatch"):
+        declaration.run(declaration.histories()[0])
+
+
+def test_default_quiet_still_rejects_repeated_settled_calls():
+    declaration = scenario().model_copy(update={"bind": partial(reference, repair_recoveries=100_000)})
+    with pytest.raises(InterleavingFailure, match="settled-churn"):
+        declaration.run(next(history for history in declaration.histories() if history.id == "IF.control/normal"))
+
+
+def test_unbounded_repair_requires_evidence_to_remain_owed_after_quiet():
+    declaration = unbounded_scenario(evidence_disappears=True)
+    with pytest.raises(InterleavingFailure, match="settled-churn"):
+        declaration.run(next(history for history in declaration.histories() if history.id == "IF.control/normal"))
+
+
+@pytest.mark.parametrize("forget", [False, True])
+def test_retirement_repair_failure_targets_recovery_after_a_late_write(forget: bool) -> None:
+    """A rejecting inline retirement is not a failed automatic repair attempt."""
+    declaration = InFlightConvergence(
+        name="inline-retirement-repair",
+        bind=lambda: reference(inline_retirement=True, forget=forget),
+        intents=("A", "B", "C"),
+        seams=("write",),
+        retirement=True,
+        repair_seams=("write",),
+        no_independent_because="This control isolates an inline retirement and subsequent automatic repair.",
+        no_transport_because="The reference has no broker; the fault is at its external provider boundary.",
+    )
+    history = next(h for h in declaration.histories() if h.id == "IF.repair-fails-once/write")
+    if forget:
+        with pytest.raises(InterleavingFailure, match="convergence"):
+            declaration.run(history)
+    else:
+        declaration.run(history)
+
+
+@pytest.mark.parametrize("injected", [False, True])
+def test_provider_failure_accounting_requires_a_fault_in_the_current_call(injected: bool) -> None:
+    provider = ProviderControl(accept=lambda apply: AcceptedProviderRequest(apply=apply))
+    if injected:
+        provider.arm("write", Fault.REFUSE)
+        with provider.explained_failures(TimeoutError):
+            provider.invoke("write", "member", lambda: None)
+    with pytest.raises(AssertionError, match="uninjected provider failure"):
+        with provider.explained_failures(TimeoutError):
+            raise TimeoutError("An unexplained production error must stay red")
+    with pytest.raises(ValueError, match="not a provider error"):
+        with provider.explained_failures(TimeoutError):
+            raise ValueError("not a provider error")

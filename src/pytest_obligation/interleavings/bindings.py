@@ -7,6 +7,7 @@ from typing import Annotated, Generic, Self, TypeVar
 
 from pydantic import Field, InstanceOf, StrictInt, model_validator
 
+from pytest_obligation.binding import is_real_reason
 from pytest_obligation.models import HarnessModel
 
 from .engine.provider import ProviderControl
@@ -84,6 +85,13 @@ class InFlightSession(HarnessModel, Generic[HandleT, ValueT, ObservationT]):
         description=(
             "Account for deliberately injected worker failures after each step/recovery; must not hide "
             "unrelated errors."
+        ),
+    )
+    uncertain_repair_owed: Callable[[tuple[str, str]], bool] | None = Field(
+        default=None,
+        description=(
+            "Read durable unresolved effect evidence for this exact existing (seam, provider identity) key. "
+            "Required only with unbounded_repair_because; active work alone is not evidence."
         ),
     )
     # Revision identity must be independent of payload equality; optional only for retirement.
@@ -274,6 +282,13 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
         default=(),
         description="External repair seam names exercised after retirement; empty when the domain has no repair seam.",
     )
+    repair_triggers: dict[_Alias, _Alias] = Field(
+        default_factory=dict,
+        description=(
+            "Repair seam to the original write seam whose late completion requires that repair. "
+            "Unspecified repairs use the first write seam. Names must belong to repair_seams and seams."
+        ),
+    )
     retirement: bool = Field(
         default=False, description="Generate retirement histories instead of desired-value revision histories."
     )
@@ -286,6 +301,14 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
     replay_safe: bool = Field(
         default=True,
         description="Whether repeating a provider call is allowed; False checks at most one call per seam/identity.",
+    )
+    unbounded_repair_because: str = Field(
+        default="",
+        description=(
+            "Provider evidence cannot bound an escaped call's lifetime. QUIET permits repeated calls only "
+            "for exact existing provider keys with durable unresolved evidence before and after the check; "
+            "ordinary settled-state and acknowledgement checks remain mandatory."
+        ),
     )
     # Reasons are required for domain shapes that cannot exercise revision cases.
     limited_revisions_because: str = Field(
@@ -312,10 +335,13 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
             self.repair_seams,
             self.acknowledgement_only_seams,
             self.replay_safe,
+            self.repair_triggers,
         )
 
     def limitations(self) -> Mapping[str, str]:
         result = {}
+        if self.unbounded_repair_because:
+            result["quiescence while unresolved evidence remains"] = self.unbounded_repair_because
         if self.retirement:
             result["revision histories"] = "Retirement lifecycle has no mutable desired-value command."
         elif len(self.intents) < 3:
@@ -334,8 +360,14 @@ class InFlightConvergence(Scenario, Generic[HandleT, ValueT, ObservationT]):
         return result
 
     def validate_definition(self) -> None:
+        if self.unbounded_repair_because:
+            assert is_real_reason(self.unbounded_repair_because), (
+                "unbounded repair requires its provider evidence boundary"
+            )
         assert self.intents and self.seams and len(set(self.seams)) == len(self.seams)
         assert len(set(self.intents)) == len(self.intents)
+        assert set(self.repair_triggers) <= set(self.repair_seams), "repair trigger names must be repair seams"
+        assert set(self.repair_triggers.values()) <= set(self.seams), "repair triggers must name write seams"
         assert self.retirement or len(self.intents) >= 2, "revision bindings require a legal transition"
         undeclared = [seam for seam in self.acknowledgement_only_seams if seam not in self.seams]
         assert not undeclared, f"acknowledgement_only_seams names undeclared seams: {undeclared}"

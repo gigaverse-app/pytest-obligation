@@ -1,5 +1,6 @@
 """Deterministic history generation, independent of Django and provider bindings."""
 
+from collections.abc import Mapping
 from itertools import combinations, permutations
 
 from ..model import Fault, History, Step
@@ -38,6 +39,7 @@ def in_flight_histories(
     repair_seams: tuple[str, ...] = (),
     acknowledgement_only_seams: tuple[str, ...] = (),
     replay_safe: bool = True,
+    repair_triggers: Mapping[str, str] | None = None,
 ) -> tuple[History, ...]:
     histories = []
     admit = step(Op.ADMIT, value=intents[0])
@@ -148,19 +150,22 @@ def in_flight_histories(
                         body += [step(Op.COMPLETE, index=index), step(Op.RECOVER)]
                     add(family, f"{seam}/{''.join(map(str, order))}", [*body, settle, quiet])
     for seam in repair_seams or (() if retirement else seams):
-        if retirement:
-            body = [admit, start, settle, step(Op.ARM, seam=seam, fault=Fault.REFUSE), changed]
-        else:
-            body = [
-                admit,
-                step(Op.ARM, seam=seams[0]),
-                start,
-                changed,
-                settle,
-                step(Op.COMPLETE),
-                step(Op.ARM, seam=seam, fault=Fault.REFUSE),
-                step(Op.RECOVER),
-            ]
+        # Exercise repair after the old accepted call overwrites the newer
+        # authority. Arming before retirement tests command rejection instead:
+        # a synchronous retire may correctly roll back and raise to its caller.
+        body = [
+            admit,
+            step(Op.ARM, seam=(repair_triggers or {}).get(seam, seams[0])),
+            start,
+            changed,
+            # Evidence-required retirement may correctly wait for this pending
+            # request. Give recovery a turn, without demanding completion before
+            # the provider has supplied the evidence it needs.
+            step(Op.RECOVER) if retirement else settle,
+            step(Op.COMPLETE),
+            step(Op.ARM, seam=seam, fault=Fault.REFUSE),
+            step(Op.RECOVER),
+        ]
         add("IF.repair-fails-once", seam, [*body, settle, quiet])
     if transport:
         add(

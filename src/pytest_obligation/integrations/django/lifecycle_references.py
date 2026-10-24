@@ -25,6 +25,7 @@ from datetime import timedelta
 from typing import Any
 
 from django.db import connection, models, transaction
+from django.db.backends.postgresql.psycopg_any import sql
 from django.db.models import QuerySet
 from django.dispatch import Signal
 from django.test.utils import isolate_apps
@@ -72,18 +73,23 @@ def lifecycle_attempt_table() -> Iterator[None]:
     with connection.schema_editor() as editor:
         editor.create_model(LifecycleAttempt)
     table = LifecycleAttempt._meta.db_table
+    # Identifiers and the SQL-language function body are quoted independently.
+    body = sql.SQL("UPDATE {table} SET status = {status} WHERE id = attempt_id").format(
+        table=sql.Identifier(table), status=sql.Literal(Status.RETRYABLE_FAILED)
+    )
+    create_function = sql.SQL("CREATE FUNCTION {name}(attempt_id bigint) RETURNS void LANGUAGE sql AS {body}").format(
+        name=sql.Identifier(FAIL_ATTEMPT_FUNCTION), body=sql.Literal(body.as_string(connection.connection))
+    )
     with connection.cursor() as cursor:
-        cursor.execute(
-            f"CREATE FUNCTION {FAIL_ATTEMPT_FUNCTION}(attempt_id bigint) RETURNS void LANGUAGE sql AS "
-            f"$$ UPDATE {table} SET status = '{Status.RETRYABLE_FAILED}' WHERE id = attempt_id $$"
-        )
+        cursor.execute(create_function.as_string(connection.connection))
     try:
         yield
     finally:
         OUTBOX.clear()
         RECIPIENT.received.clear()
+        drop_function = sql.SQL("DROP FUNCTION IF EXISTS {}(bigint)").format(sql.Identifier(FAIL_ATTEMPT_FUNCTION))
         with connection.cursor() as cursor:
-            cursor.execute(f"DROP FUNCTION IF EXISTS {FAIL_ATTEMPT_FUNCTION}(bigint)")
+            cursor.execute(drop_function.as_string(connection.connection))
         with connection.schema_editor() as editor:
             editor.delete_model(LifecycleAttempt)
 
@@ -205,8 +211,10 @@ def fail_attempt_in_autocommit(pk: int) -> None:
 
 def fail_attempt_through_a_function_then_hand_off(pk: int) -> None:
     """The split handoff again, with the failure written by a SQL function in autocommit."""
+    statement = sql.SQL("SELECT {}(%s)").format(sql.Identifier(FAIL_ATTEMPT_FUNCTION))
     with connection.cursor() as cursor:
-        cursor.execute(f"SELECT {FAIL_ATTEMPT_FUNCTION}(%s)", [pk])
+        # Execution observers consume SQL text; render only after quoting the name.
+        cursor.execute(statement.as_string(connection.connection), [pk])
     _create_successor(LifecycleAttempt.objects.get(pk=pk))
 
 
