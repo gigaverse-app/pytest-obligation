@@ -17,7 +17,8 @@ _conn_from_server; each boundary is patched where the installed driver has it.
 
 This integration supports synchronous PyMongo 4.9-4.18 and Motor 3.7+ via .delegate;
 native AsyncMongoClient requires a separate async wire adapter. It neither
-freezes server TTLs nor claims MongoDB query-plan or Kafka delivery coverage.
+freezes server TTLs nor claims Kafka delivery coverage. Find-query inspection
+is supplied separately by mongodb_selection and enabled by mongodb_host.
 """
 
 from collections.abc import Callable, Collection, Iterator
@@ -201,9 +202,12 @@ def mongodb_reply_breaker(client: Any) -> Callable[[int | None], AbstractContext
 
 
 def mongodb_host(client: Any, production_packages: Collection[str]) -> Host:
-    """Configure actual write/death and lost-reply proofs; other capabilities stay explicit."""
+    """Configure write/reply faults and native find-cursor selection evidence."""
+    from pytest_obligation.integrations.mongodb_selection import MongoDBSelectionInspector
+
     return Host(
         production_packages=frozenset(production_packages),
+        selection_inspectors=(MongoDBSelectionInspector(client),),
         worker_killer=mongodb_worker_killer(client),
         reply_breaker=mongodb_reply_breaker(client),
     )
