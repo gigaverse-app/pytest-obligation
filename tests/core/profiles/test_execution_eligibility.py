@@ -298,8 +298,42 @@ def test_a_gate_whose_selection_is_not_the_sweeps_is_refused() -> None:
         assert_gate_is_recovered_by_the_contract_sweep(reference.binding(), other.sweep())
 
 
-def test_a_sweep_that_selects_blocked_work_is_refused() -> None:
+def test_a_sweep_for_a_different_already_released_gate_is_refused() -> None:
     reference = GateReference()
     released = GateReference(eligible=True)
-    with pytest.raises(AssertionError, match="blocked work is in the contract sweep's selection"):
+    with pytest.raises(AssertionError, match="eligible work is absent from the contract sweep's selection"):
         assert_gate_is_recovered_by_the_contract_sweep(reference.binding(), released.sweep())
+
+
+class _GatesAfterSelecting(GateReference):
+    """A candidate reader enters the real gate before any execution or write."""
+
+    def tick(self) -> int:
+        candidates = self.owed()
+        self.dispatched.extend(candidates)
+        for _ in candidates:
+            self.execute()
+        return len(candidates)
+
+    def sweep(self):
+        return super().sweep().model_copy(update={"due_work": self.owed})
+
+
+def test_a_sweep_can_gate_owed_candidates_inside_its_loop():
+    reference = _GatesAfterSelecting()
+    assert_gate_is_recovered_by_the_contract_sweep(reference.binding(), reference.sweep())
+
+
+@pytest.mark.parametrize(
+    "fault,reason",
+    [
+        ("hidden_write", "mutated durable state"),
+        ("lost_intent", "blocked intent was lost"),
+        ("mutated_intent", "mutated reserved state"),
+        ("blocked_execution", "blocked work executed"),
+    ],
+)
+def test_candidate_sweep_must_preserve_the_actual_blocked_gate(fault, reason):
+    reference = _GatesAfterSelecting(fault=fault)
+    with pytest.raises(AssertionError, match=reason):
+        assert_gate_is_recovered_by_the_contract_sweep(reference.binding(), reference.sweep())
