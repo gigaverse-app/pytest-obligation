@@ -11,12 +11,18 @@ from pytest_obligation.reporting.markdown import render
 
 
 @pytest.mark.parametrize("workers", [0, 2])
-@pytest.mark.parametrize("scenario", ["passed", "known defect", "failed", "teardown", "filtered", "unscheduled"])
+@pytest.mark.parametrize(
+    "scenario", ["passed", "known defect", "failed", "teardown", "filtered", "unscheduled", "bad schedule"]
+)
 def test_generated_selection_evidence_is_reported(pytester, workers, scenario):
     # This self-test host supplies controlled planner observations. The actual
     # suite generator, pytest execution, xdist merge and sticky renderer all run.
     pytester.makepyfile(
         sample_selection="""
+from contextvars import ContextVar
+resources = ContextVar("schedule_resources")
+def assert_scheduled():
+    assert resources.get() == "scheduled", "recurring schedule is missing"
 def due_work():
     # ARRANGE: one row in a controlled reporting specimen.
     # REAL PRODUCTION: this specimen module owns the selection.
@@ -28,6 +34,14 @@ def due_work():
     pytester.makeconftest(f"""
 import pytest
 from pytest_obligation.host import Host, configure
+from sample_selection import resources
+@pytest.fixture
+def schedule_resources():
+    token = resources.set("missing" if {scenario!r} == "bad schedule" else "scheduled")
+    try:
+        yield
+    finally:
+        resources.reset(token)
 class Inspector:
     def understands(self, selection): return isinstance(selection, list)
     def index_served(self, selection): return ({scenario!r} not in ('known defect', 'failed'), 'missing index')
@@ -42,11 +56,12 @@ def teardown_control(request):
     source = pytester.makepyfile(
         test_selection=f"""
 from pytest_obligation import Adoption, ScheduledSelection, scheduled_selection_suite
-from sample_selection import due_work
+from sample_selection import due_work, assert_scheduled
 selection = ScheduledSelection(
     name='Hourly repair query', due_work=due_work, adoption=Adoption.LEGACY,
     gaps={{'assert_selection_is_index_served': 'Missing index'}} if {scenario!r} == 'known defect' else {{}},
-    assert_scheduled=None if {scenario!r} == 'unscheduled' else lambda: None,
+    assert_scheduled=None if {scenario!r} == 'unscheduled' else assert_scheduled,
+    fixtures=("schedule_resources",),
     unscheduled_because='Driven by an external runbook' if {scenario!r} == 'unscheduled' else None,
 )
 @scheduled_selection_suite(selection)
@@ -83,7 +98,9 @@ class TestSelection: pass
     if scenario == "known defect":
         args += [f"--due-work-debt-baseline={baseline}"]
     result = pytester.runpytest_subprocess(*args)
-    assert result.ret == (pytest.ExitCode.TESTS_FAILED if scenario in ("failed", "teardown") else pytest.ExitCode.OK)
+    assert result.ret == (
+        pytest.ExitCode.TESTS_FAILED if scenario in ("failed", "teardown", "bad schedule") else pytest.ExitCode.OK
+    )
     reports = TypeAdapter(dict[str, SuiteCoverage]).validate_json(destination.read_bytes())
     assert suite in reports, "scheduled selections must not disappear from the report"
     report = reports[suite]
@@ -100,6 +117,9 @@ class TestSelection: pass
         assert case.debt.ticket == "https://example.com/BUG-1"
         assert case.outcomes["call"] == ["xfail"]
         assert "Known defects" in body and "Missing index" in body
+    if scenario == "bad schedule":
+        assert profile.cases["assert_the_selection_is_actually_scheduled"].outcomes["call"] == ["failed"]
+        result.stdout.fnmatch_lines(["*AssertionError: recurring schedule is missing*"])
     if scenario == "filtered":
         assert not profile.cases["assert_selection_is_index_served"].selected
     if scenario == "unscheduled":

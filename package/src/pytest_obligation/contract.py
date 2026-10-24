@@ -2088,12 +2088,12 @@ def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
         params.append(case.parameter(transactional=False, gap=selection.gaps.get(proof.__name__)))
     evidence = selection.assert_scheduled
     if evidence is not None:
-        case = ContractCase(id="assert_the_selection_is_actually_scheduled", run=evidence)
+        case = ContractCase(id="assert_the_selection_is_actually_scheduled", run=evidence, fixtures=selection.fixtures)
         params.append(case.parameter())
     else:
         # The declared absence collects as a visible row, the same way a
         # declined profile does: reviewable, never silently skipped.
-        case = ContractCase(id="schedule_evidence-declined", run=lambda: None)
+        case = ContractCase(id="schedule_evidence-declined", run=lambda: None, fixtures=selection.fixtures)
         params.append(case.parameter())
     params.extend(_extra_cases(selection.extras, selection.fixtures))
     return params
