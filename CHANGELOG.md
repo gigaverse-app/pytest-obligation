@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.19.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.18.0...v0.19.0) (2026-10-24)
+
+
+### Features
+
+* **mongodb:** observe complete production selections ([#150](https://github.com/gigaverse-app/pytest-obligation/issues/150)) ([31f4abf](https://github.com/gigaverse-app/pytest-obligation/commit/31f4abfa3a91c97547b16aa4d4643a06735dc195))
+* **testing:** bind fact-derived fixed effects ([#154](https://github.com/gigaverse-app/pytest-obligation/issues/154)) ([1a502c0](https://github.com/gigaverse-app/pytest-obligation/commit/1a502c00028a9e88bb35866e4fdf42577ad3bf6a))
+
+
+### Bug fixes
+
+* **prefect:** preserve fault context and bind native cancellation ([#149](https://github.com/gigaverse-app/pytest-obligation/issues/149)) ([7c4405c](https://github.com/gigaverse-app/pytest-obligation/commit/7c4405c93d3f8c20e0fa3e6a430e9ac2abbdacd7))
+* **testing:** exercise blocked gates through the actual sweep ([#151](https://github.com/gigaverse-app/pytest-obligation/issues/151)) ([dbab2be](https://github.com/gigaverse-app/pytest-obligation/commit/dbab2be0e5079955d2264b3844d3bda607b5fdda))
+* **testing:** initialize fixtures for schedule evidence ([#153](https://github.com/gigaverse-app/pytest-obligation/issues/153)) ([34c1bfd](https://github.com/gigaverse-app/pytest-obligation/commit/34c1bfd6cbd8ce22da8aafe898af6efc86ea5f32))
+* **testing:** observe retry waits in production runners ([#152](https://github.com/gigaverse-app/pytest-obligation/issues/152)) ([bc73dc5](https://github.com/gigaverse-app/pytest-obligation/commit/bc73dc51e1f894e2d12df340eabaf2fa6c01999f))
+
 ## [0.18.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.17.0...v0.18.0) (2026-10-24)
 
 
