@@ -4,6 +4,12 @@ branding:
   icon: shield
   color: blue
 inputs:
+  python-version:
+    description: Python used to parse application source; choose a version supporting the adopter's syntax.
+    default: '3.11'
+  suite-decorators:
+    description: Newline-separated fully-qualified application wrapper decorators. Native obligation and Due suites are recognized by default.
+    default: ''
   report-path:
     description: JSON file or glob produced by pytest --due-work-profile-report in this run. Shards must share the same code revision and declarations.
     default: obligation-profiles.json
@@ -62,6 +68,8 @@ runs:
         REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
         REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
         REPORT_GRAPHICS: ${{ inputs.graphics }}
+        INVENTORY_PYTHON: ${{ inputs.python-version }}
+        SUITE_DECORATORS: ${{ inputs.suite-decorators }}
         APPLICATION_PATHS: ${{ inputs.application-paths }}
         INVENTORY_PATH: ${{ inputs.inventory-path }}
         JUNIT_PATH: ${{ inputs.junit-path }}
@@ -73,11 +81,14 @@ runs:
         while IFS= read -r path; do
           if [[ -n "$path" ]]; then inventory_args+=(--application-path "$path"); fi
         done <<< "$APPLICATION_PATHS"
+        while IFS= read -r decorator; do
+          if [[ -n "$decorator" ]]; then inventory_args+=(--suite-decorator "$decorator"); fi
+        done <<< "$SUITE_DECORATORS"
         if [[ -n "$INVENTORY_PATH" ]]; then
           inventory_args+=(--inventory "$INVENTORY_PATH" --collection-revision "$(git rev-parse HEAD)")
         fi
         if [[ -n "$JUNIT_PATH" ]]; then inventory_args+=(--junit-input "$JUNIT_PATH"); fi
-        uvx --python 3.11 --from "$REPORTER_PACKAGE[report]" python -I -m pytest_obligation.reporting \
+        uvx --python "$INVENTORY_PYTHON" --from "$REPORTER_PACKAGE[report]" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \

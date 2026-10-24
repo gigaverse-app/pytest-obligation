@@ -115,3 +115,56 @@ def test_empty_valid_reports_without_inventory_explain_their_scope(tmp_path: Pat
     assert "No application contract checks ran" in body
     assert "inventory was not supplied" in body
     assert "Evidence unavailable" not in body
+
+
+@pytest.mark.parametrize(
+    "module,decorator,configured",
+    [
+        ("due.django.conformance.suite", "effect_contract_suite", ()),
+        ("project.testing", "application_suite", ("project.testing.application_suite",)),
+    ],
+)
+def test_inventory_finds_due_and_explicit_application_wrappers_without_imports(
+    tmp_path: Path, module: str, decorator: str, configured: tuple[str, ...]
+) -> None:
+    (tmp_path / "test_orders.py").write_text(
+        "raise RuntimeError('inventory must never import application code')\n"
+        f"from {module} import {decorator} as suite\n"
+        "@suite(operation, examples=examples)\nclass TestOrders: pass\n"
+    )
+    inventory = discover(tmp_path, ["."], suite_decorators=configured)
+    assert list(inventory.applications) == ["test_orders.TestOrders"]
+    assert inventory.applications["test_orders.TestOrders"].nodeids is None
+    assert inventory.applications["test_orders.TestOrders"].source.path == "test_orders.py"
+    if configured:
+        assert not discover(tmp_path, ["."]).applications, "unconfigured wrappers must remain untrusted"
+
+
+def test_report_cli_inventories_a_configured_wrapper(tmp_path: Path) -> None:
+    (tmp_path / "test_orders.py").write_text(
+        "from project.testing import suite\n@suite(contract)\nclass TestOrders: pass\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-m",
+            "pytest_obligation.reporting",
+            "--input",
+            "absent-*.json",
+            "--output",
+            "report.md",
+            "--test-outcome",
+            "skipped",
+            "--application-path",
+            ".",
+            "--suite-decorator",
+            "project.testing.suite",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "TestOrders" in (tmp_path / "report.md").read_text()
+    assert "**1** applications not run" in (tmp_path / "report.md").read_text()
