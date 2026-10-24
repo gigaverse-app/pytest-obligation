@@ -9,14 +9,25 @@ conformance suite to individual tests.
 
 | Change | Validation |
 | --- | --- |
-| Root/package README or prose in `package/docs/` | Local documentation links, CI routing contracts, lint, wheel/sdist build, strict metadata/Markdown validation, installed-package compatibility checks |
+| Root/package README or prose in `package/docs/` | Local documentation links, lint, wheel/sdist build and metadata validation; runtime checks only for explicitly declared document inputs |
 | Python source or tests | Import-dependent complete lanes, explicit integration inputs, and type checking |
 | Demo recording tape/environment | Complete demo lane, including the executable GIF assertions |
 | Adoption evidence validator | Its direct workflow consumers and Python-dependent guard tests |
 | Published `check` action | Demo, Saleor, and example action lanes |
 | Published `test` action | Example action lane |
 | Lock files, project configuration, or GitHub workflow/configuration | All lanes |
-| Main push, manual dispatch, `test:full` label, or missing history/planning proof | All lanes |
+| Ordinary main push | Affected lanes, including zero runtime tests for unrelated prose |
+| Manual dispatch, rerun, `test:full` label, or missing history/planning proof | All lanes |
+
+The selector's shared `full: auto` policy owns event decisions. The workflow no
+longer copies an expression that can omit reruns or future safety fixes. Override
+with `full: 'true'` for a checkpoint or `full: 'false'` for a deliberate selective
+experiment; missing-history fallback still runs every lane. The default base is
+the PR base or push's previous commit. See the
+[staged adoption checklist](https://github.com/gigaverse-app/ci-esta/blob/main/docs/tutorials/adoption-checklist.md)
+for additional capabilities and their opt-in boundaries. Retained timing history
+stays off here: whole-lane conformance uses the existing matrix/xdist strategy,
+and a scheduling change needs measurements first.
 
 The build and lightweight documentation checks always run. The link checker
 validates inline local Markdown file destinations, excluding fenced examples and
@@ -32,7 +43,7 @@ local dependencies. Do not replace these boundaries with a blanket `docs/**`,
 
 ## Regression checks
 
-`ci-contracts` installs the exact immutable selector revision used by the
+`ci-contracts` installs the selector revision referenced by the
 workflow's action, resolved by `scripts/ci/selector_requirement.py`. It creates
 real Git snapshots of this repository and verifies README/guide changes, demo
 inputs, validator consumers, action consumers, Python changes, test deletion,
