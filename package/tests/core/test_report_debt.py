@@ -130,3 +130,42 @@ def test_supported_guarantee_keeps_family_exclusion_in_one_decision_section() ->
     body = render({"suite": suite})
     assert body.count(reason) == 1
     assert "1 supported guarantees" in body
+
+
+@pytest.mark.parametrize(
+    "kind,outcomes,category,known",
+    [
+        ("known-defect", {"call": ["xfail"]}, "failed", 1),
+        ("known-defect", {"call": ["failed"]}, "failed", 0),
+        ("known-defect", {"setup": ["xfail"]}, "blocked", 0),
+        ("known-defect", {}, "blocked", 0),
+        ("known-defect", {"call": ["xpass"]}, "blocked", 0),
+        ("binding-debt", {"call": ["xfail"]}, "blocked", 0),
+        (None, {"call": ["xfail"]}, "blocked", 0),
+    ],
+)
+def test_only_executed_known_failures_join_the_failure_total(kind, outcomes, category, known) -> None:
+    suite = specimen()
+    case = suite.profiles["E"].cases["late"]
+    case.outcomes = outcomes
+    case.debt = None if kind is None else DebtEntry(case="late", kind=kind, reason="Reviewed finding.")
+    assert counts(suite)[category] == 1
+    assert counts(suite)["blocked" if category == "failed" else "failed"] == 0
+    body = render({"membership": suite}, graphics=True, test_outcome="success")
+    assert f'alt="{int(category == "failed")} failures"' in body
+    if known:
+        # The explanation is visible without opening any disclosure; CI success is separate.
+        assert "**Failures: 0 unexpected + 1 known expected.**" in body.split("<details>")[0]
+        assert "Known failure reproduced (expected)" in body
+        assert "**Test step succeeded with known expected failures.**" in body
+
+
+def test_binding_rejections_and_environment_errors_override_a_known_xfail() -> None:
+    from pytest_obligation.profiles.failures import FailureEvidence
+
+    suite = specimen()
+    case = suite.profiles["E"].cases["late"]
+    for kind, category in (("binding", "rejected"), ("test environment", "blocked")):
+        case.failures = [FailureEvidence(kind=kind, phase="call", message="broken test binding")]
+        assert counts(suite)[category] == 1
+        assert counts(suite)["failed"] == 0

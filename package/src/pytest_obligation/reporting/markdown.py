@@ -127,7 +127,7 @@ def counts(suite: SuiteCoverage) -> dict[str, int]:
             else "rejected"
             if status == "Test binding rejected"
             else "failed"
-            if status == "Check failed"
+            if status in ("Check failed", "Known failure reproduced (expected)")
             else "blocked"
         )
         result[category] += 1
@@ -248,11 +248,12 @@ def _suite(
         ]
     cases = all_cases(suite)
     for title, states in (
-        ("Failures", {"Check failed"}),
+        ("Unexpected failures", {"Check failed"}),
         ("Rejected bindings", {"Test binding rejected"}),
         (
             "Blocked checks",
-            {case_status(c) for c in cases.values()} - {"Passed", "Check failed", "Test binding rejected"},
+            {case_status(c) for c in cases.values()}
+            - {"Passed", "Check failed", "Known failure reproduced (expected)", "Test binding rejected"},
         ),
     ):
         affected = [
@@ -392,6 +393,20 @@ def render(
         ),
         "",
     ]
+    known_failures = sum(
+        case_status(case) == "Known failure reproduced (expected)"
+        for suite in reports.values()
+        for case in all_cases(suite).values()
+    )
+    if known_failures:
+        head += [
+            f"**Failures: {totals['failed'] - known_failures} unexpected + {known_failures} known expected.** "
+            "Expected failures reproduce application-declared findings and do not fail CI. "
+            "Review their reasons and evidence below; counts are checks, not distinct product bugs.",
+            "",
+        ]
+        if test_outcome == "success":
+            head += ["**Test step succeeded with known expected failures.**", ""]
     if test_outcome == "failure":
         head += [
             f"**🔴 Test step failed. {totals['failed'] + totals['rejected']} failed contract checks recorded; inspect the run log for other failures.**",
@@ -416,9 +431,9 @@ def render(
         "<details>",
         "<summary><strong>What do these numbers mean?</strong></summary>",
         "",
-        "- **Failures:** an executed assertion failed. Inspect the behavior and test assumptions.",
+        "- **Failures:** an executed assertion failed unexpectedly or reproduced an application-declared known failure. Expected failures still permit successful CI; the visible breakdown distinguishes them.",
         "- **Rejected bindings:** repair the connection to production code; these checks provide no supporting evidence.",
-        "- **Blocked checks:** expected checks did not complete successfully, including setup/cleanup errors and expected failures.",
+        "- **Blocked checks:** checks could not establish a result, including missing execution, setup/cleanup errors, binding-debt or unclassified expected failures, and unexpected passes requiring declaration review.",
         "- **Coverage gaps:** guarantees not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once. Deliberate exclusions are shown separately.",
         "",
         "Pass/fail/blocked/rejected counts partition unique checks. Gaps count guarantees, not extra tests. "

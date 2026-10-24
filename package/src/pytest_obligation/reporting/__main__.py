@@ -75,17 +75,26 @@ def main() -> None:
             incoming = TypeAdapter(dict[str, SuiteCoverage]).validate_json(path.read_bytes())
             if inventory is not None:
                 # Older pytest import modes use only the file's module basename.
-                # Resolve only an unambiguous module/class suffix with the same
-                # declared application name; never merge merely similar names.
+                # Resolve an unambiguous module/class suffix at the same suite
+                # source. Static names may be unresolved; decorator/class line
+                # numbers differ. Older reports without suite locations retain
+                # the declared-name fallback.
                 for key in list(incoming):
                     if key not in inventory.applications:
+                        location = incoming[key].source
                         matches = [
                             identity
                             for identity, app in inventory.applications.items()
-                            if identity.endswith("." + key) and app.name == incoming[key].name
+                            if identity.endswith("." + key)
+                            and (
+                                app.source.path == location.path
+                                if location is not None and location.kind == "suite"
+                                else app.name == incoming[key].name
+                            )
                         ]
                         if len(matches) == 1:
-                            incoming[matches[0]] = incoming.pop(key)
+                            suite = incoming.pop(key)
+                            merge_reports(incoming, {matches[0]: suite})
             # Reuse the plugin's declaration checks and evidence merge. Missing or
             # incompatible shards must never turn a partial run into an all-green report.
             merge_reports(reports, incoming)

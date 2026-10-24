@@ -43,12 +43,20 @@ and artifact without posting a comment.
 Passing, failed, blocked and rejected counts partition unique expected checks.
 Related guarantees referencing the same check do not multiply its count. A setup
 or cleanup failure is blocked execution; a harness binding rejection takes
-precedence over that classification. Expected failures and unexpected passes
-remain blocked evidence with their explicit outcome in the details.
+precedence over that classification. An executed known-defect assertion that
+xfails counts as a failure, alongside unexpected assertion failures. The headline
+breaks these down as unexpected and known expected, and explicitly says when CI
+succeeded with expected failures. These are failed checks, not distinct product
+bugs; inspect the application reasons and test assumptions before deciding on a fix.
+
+An unexecuted known-defect declaration does not count as a reproduced failure.
+Binding-debt and unclassified expected failures, setup-phase xfails, and unexpected
+passes remain blocked evidence with their explicit outcome in the details.
 
 Coverage gaps count guarantees, not tests. Each guarantee with a missing
 assessment, missing scenario family, no expected checks or declared gap counts
-once. A failed or filtered check alone does not also add a coverage gap.
+once. A declared known defect also leaves its guarantee incomplete. A failed or
+filtered check alone, without such a declaration, does not add a coverage gap.
 Declined and not-applicable guarantees are deliberate exclusions, listed
 separately with their application reasons; they do not establish passing coverage.
 
