@@ -151,3 +151,73 @@ def test_rejected_task_is_cancelled_before_the_runner_is_resumed():
         with pytest.raises(ObligationContractDesignError, match="deferred work"):
             prefect_flow_call(application, runner)()
         assert effects == []
+
+
+def test_flow_body_receives_the_current_fault_scope_and_host():
+    from pytest_obligation.poison import PoisonSwitch, stop_requests
+
+    class HostStop(Exception):
+        pass
+
+    seam = PoisonSwitch()
+
+    @flow
+    async def application():
+        seam.check("owed")
+
+    # Runner creation predates the individual history's fault scope, as it does
+    # when one application fixture supplies the loop for several histories.
+    with asyncio.Runner() as runner:
+        with hosted(Host(stop_exception=HostStop)), seam.poisoned("owed"), stop_requests():
+            with pytest.raises(HostStop):
+                prefect_flow_call(application, runner)()
+
+
+@pytest.mark.parametrize("swallow", [False, True])
+def test_native_prefect_cancellation_is_the_host_stop_signal(swallow):
+    from prefect._internal.concurrency.cancellation import cancel_async_after
+
+    from pytest_obligation.host import current_host
+    from pytest_obligation.integrations.prefect import prefect_host
+    from pytest_obligation.poison import PoisonSwitch, StopRequestSwallowed, assert_a_stop_request_ends_the_tick
+
+    seam = PoisonSwitch()
+    base = Host(production_packages=frozenset({"tests_support.prefect_app"}), extras={"database": "retained"})
+    host = prefect_host(base)
+    assert host.production_packages == base.production_packages and host.extras == base.extras
+    assert base.stop_exception is None
+
+    @flow
+    async def native_cancel():
+        with cancel_async_after(0):
+            await asyncio.sleep(0)
+
+    @flow
+    async def application():
+        try:
+            seam.check("owed")
+        except BaseException:
+            if not swallow:
+                raise
+
+    with asyncio.Runner() as runner, hosted(host):
+        # Exercise Prefect's cancellation scope, not a locally invented exception.
+        stop_kind = current_host().stop_exception
+        assert stop_kind is not None
+        with pytest.raises(stop_kind):
+            prefect_flow_call(native_cancel, runner)()
+
+        def prove():
+            return assert_a_stop_request_ends_the_tick(
+                name="Prefect flow",
+                poison=seam.poisoned("owed"),
+                run_tick=prefect_flow_call(application, runner),
+                progressed=lambda: False,
+                still_owed=lambda: True,
+            )
+
+        if swallow:
+            with pytest.raises(StopRequestSwallowed):
+                prove()
+        else:
+            assert isinstance(prove(), stop_kind)

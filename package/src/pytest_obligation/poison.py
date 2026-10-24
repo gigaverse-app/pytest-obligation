@@ -301,7 +301,9 @@ def assert_a_stop_request_ends_the_tick(
     with stop_requests(), poison as fired:
         try:
             run_tick()
-        except Exception as error:  # noqa: BLE001 - the stop request under test, judged below
+        except BaseException as error:  # noqa: BLE001 - inspect the configured stop, including cancellation
+            if not isinstance(error, Exception) and not _carries(error, current_host().stop_exception or StopRequested):
+                raise
             escaped = error
     # POSITIVE CONTROL: a seam the tick never reached proves nothing.
     assert fired() >= 1, (
