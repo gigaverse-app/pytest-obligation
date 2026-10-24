@@ -595,6 +595,33 @@ jobs:
       - name: Replay and sensitivity controls
         working-directory: examples/adopter
         run: uv run --no-sync pytest tests/test_catalog_failures.py
+      - name: Collect application inventory with a cold cache
+        id: cold-inventory
+        uses: ./collect
+        with:
+          application-paths: examples/adopter/tests
+          cache-inputs: examples/adopter
+          cache-context: action-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          pytest-command: uv run --project examples/adopter --no-sync pytest --rootdir .
+      - name: Remove local inventory to require a real cache restore
+        run: rm application-inventory.json
+      - name: Restore inventory without invoking pytest
+        id: warm-inventory
+        uses: ./collect
+        with:
+          application-paths: examples/adopter/tests
+          cache-inputs: examples/adopter
+          cache-context: action-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          pytest-command: must-not-launch-pytest
+      - name: Require complete inventory and measured cache reuse
+        env:
+          COLD_REUSED: ${{ steps.cold-inventory.outputs.reused }}
+          WARM_REUSED: ${{ steps.warm-inventory.outputs.reused }}
+          REQUIRED: ${{ steps.warm-inventory.outputs.required }}
+        run: |
+          test "$COLD_REUSED" = false
+          test "$WARM_REUSED" = true
+          test "$REQUIRED" = false
       - name: Smoke-test the evidence report action
         if: always()
         uses: ./report
