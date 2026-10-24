@@ -79,5 +79,9 @@ Re-run that commit's failed CI first. An empty tag is allowed only for a TestPyP
 development rehearsal. A successful upload is immutable; do not reuse a version
 for different source.
 
-Successful releases also maintain the existing floating `v0` action tag so
-`gigaverse-app/pytest-obligation/check@v0` follows the latest compatible release.
+Successful releases maintain floating action tags. Use
+`gigaverse-app/pytest-obligation/collect@v1` and `report@v1` to follow stable
+action updates. While the Python package is below 1.0, compatible releases advance
+both `v0` and `v1`; package v1 releases continue advancing `v1`. A future v2
+release leaves `v1` unchanged. Retrying an older release cannot rewind these tags,
+and a concurrent tag update is protected by a Git lease.
