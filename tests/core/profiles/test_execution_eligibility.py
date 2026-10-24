@@ -13,7 +13,7 @@ conforming scheduler passes and a broken one also passes would certify nothing.
 
 import threading
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pydantic
@@ -30,6 +30,39 @@ from pytest_obligation.profiles.gated_execution import (
     assert_periodic_inspection_is_bounded,
 )
 from pytest_obligation.references.eligibility import Fault, GateReference
+
+
+@pytest.mark.parametrize("shift", [0, 5, -5], ids=["unchanged", "later", "earlier"])
+def test_readiness_can_preserve_or_delay_the_schedule_but_cannot_advance_it(shift: int) -> None:
+    reference = GateReference(recheck_after=None)
+    deadline = [datetime(2020, 1, 1, tzinfo=UTC)]
+
+    def release():
+        reference.make_eligible()
+        deadline[0] += timedelta(seconds=shift)
+
+    gate = ExecutionGate(
+        **(reference.binding().model_dump() | {"make_eligible": release, "not_before": lambda: deadline[0]})
+    )
+    if shift < 0:
+        with pytest.raises(AssertionError, match="readiness moved not-before earlier"):
+            assert_eligible_gate_recovers_lost_notification(gate)
+    else:
+        assert_eligible_gate_recovers_lost_notification(gate)
+
+
+def test_blocked_routes_cannot_rewrite_a_separately_observed_schedule() -> None:
+    reference = GateReference(recheck_after=None)
+    deadline = [datetime(2020, 1, 1, tzinfo=UTC)]
+
+    def rewrite():
+        deadline[0] += timedelta(seconds=5)
+
+    gate = ExecutionGate(
+        **(reference.binding().model_dump() | {"routes": {"rogue": rewrite}, "not_before": lambda: deadline[0]})
+    )
+    with pytest.raises(AssertionError, match="blocked work changed not-before"):
+        assert_blocked_gate_preserves_intent(gate)
 
 
 @pytest.mark.parametrize("proof", ELIGIBILITY_PROOFS, ids=lambda proof: proof.__name__)
