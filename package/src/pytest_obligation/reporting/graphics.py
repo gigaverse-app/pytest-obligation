@@ -2,9 +2,8 @@
 
 from collections.abc import Mapping
 from html import escape
-from unicodedata import combining, east_asian_width
 
-from .evidence import cell, inert
+from .evidence import cell
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = (
@@ -88,30 +87,17 @@ def summary_html(values: Mapping[str, int | None], base: str, *, neutral: bool =
     return "<p>" + "".join(parts) + "<br>" + _picture(base, captions, 640, 34, " · ".join(labels)) + "</p>"
 
 
-def application_name(name: str) -> tuple[str, bool]:
-    # Keep names in native selectable text, with a fixed monospace column.
-    clean = " ".join(name.split())
-
-    def columns(text: str) -> int:
-        return sum(0 if combining(c) else 2 if east_asian_width(c) in ("W", "F") else 1 for c in text)
-
-    display = clean
-    shortened = columns(display) > 20
-    if shortened:
-        # Bound the prefix before trimming wide characters, keeping long names linear-time.
-        display = display[:20]
-        while columns(display) > 19:
-            display = display[:-1]
-        display += "…"
-    title = f' title="{escape(inert(clean[:700]), quote=True)}"' if shortened else ""
-    return f"<samp{title}><strong>{cell(display)}</strong>" + "&nbsp;" * (20 - columns(display)) + "</samp>", shortened
+def application_name(name: str) -> str:
+    # Native text can wrap without changing image URLs or squeezing the count columns.
+    clean = " ".join(name.split())[:700]
+    return "&#8203;".join(cell(clean[start : start + 24]) for start in range(0, len(clean), 24))
 
 
 def application_html(name: str, values: dict[str, int], base: str) -> str:
-    native_name, _ = application_name(name)
+    native_name = f"<strong>{application_name(name)}</strong>"
     label_widths = (37, 33, 44, 27, 48)
     columns = (82, 81, 88, 74, 90)
-    parts = [native_name]
+    parts = []
     for i, key in enumerate(METRICS):
         value = values[key]
         width = min(8, (columns[i] - label_widths[i]) // len(str(value)))
@@ -124,4 +110,4 @@ def application_html(name: str, values: dict[str, int], base: str) -> str:
         ]
         if i == 0:
             parts += [_picture(base, "divider", 1, 22), _space(base, 12, 18)]
-    return "".join(parts)
+    return native_name + '<div align="right">' + "".join(parts) + "</div>"

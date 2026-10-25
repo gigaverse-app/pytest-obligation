@@ -13,6 +13,8 @@ Read the workflow status first. A failed workflow starts with a red heading and 
 warning above the report, even if the uploaded evidence claims success. That status
 comes from GitHub for the exact run attempt. A report published inside the test job
 uses the test-step outcome supplied to the action instead.
+The workflow link sits at the bottom: `run` for the first attempt, then `run 2`,
+`run 3`, and so on. Successful workflows need no extra status heading.
 
 The graphics count **obligation contract checks**. Other pytest tests and workflow
 steps are outside these counts. Green means a contract check passed or an issue
@@ -24,9 +26,8 @@ pytest test failed. Missing evidence is marked unavailable and never gets green 
 
 The header counts applications and passing contract checks on the left, with contract
 failures, blocked checks, coverage gaps and rejected bindings after a divider.
-Each application has an aligned row with its counts visible while closed.
-Names wider than 20 monospace columns are abbreviated in the row; their full value
-remains in the tooltip and expanded application details.
+Application names use the full available width and wrap when needed. Their colored
+counts align to the right underneath, and stay visible while the details are closed.
 One to three applications appear directly; larger reports use an outer disclosure.
 Applications sort by failed assertions, rejected bindings, blocked execution, then
 coverage gaps, with the largest count in the first applicable category first.

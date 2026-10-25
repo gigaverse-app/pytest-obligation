@@ -58,7 +58,25 @@ def test_names_stay_native_and_cannot_change_image_urls() -> None:
     body = application_html(name, values, BASE)
     assert "<script>" not in body and "&lt;script&gt;" in body
     assert image_names(body) == image_names(application_html("orders", values, BASE))
-    assert "title=" in body
+    assert unescape(body).replace("\u200b", "").count(name) == 1
+
+
+def test_application_names_remain_complete_with_the_counts_aligned_right() -> None:
+    name = "Noticeboard.publish_notification_after_recovering_pending_delivery"
+    body = application_html(name, dict(passed=42, failed=2, blocked=0, gaps=0, rejected=0), BASE)
+    assert name in unescape(body).replace("\u200b", "")
+    assert "…" not in body
+    assert '<div align="right">' in body
+    assert body.index("Noticeboard") < body.index('<div align="right">')
+    assert "good-4-" in body and "bad-2-" in body
+
+
+@pytest.mark.parametrize("attempt,label", [(1, "run"), (2, "run 2"), (3, "run 3")])
+def test_run_link_is_a_short_footer_label(attempt: int, label: str) -> None:
+    url = f"https://github.com/owner/project/actions/runs/7/attempts/{attempt}"
+    body = render({}, run_url=url)
+    assert f"[{label}]({url})" in body.split("</details>")[-1]
+    assert "Workflow run" not in body
 
 
 def test_wide_counts_remain_exact_and_never_produce_negative_spacing() -> None:

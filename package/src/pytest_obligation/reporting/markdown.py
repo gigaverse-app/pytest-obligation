@@ -227,7 +227,7 @@ def _suite(
     description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
     if compact:
-        summary = f"<strong>{cell(suite.name, 100)}</strong> · evidence and decisions"
+        summary = f"<strong>{application_name(suite.name)}</strong> · evidence and decisions"
     elif glyph_base:
         summary = application_html(suite.name, values, glyph_base)
     lines = [
@@ -239,8 +239,6 @@ def _suite(
         f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>",
         "",
     ]
-    if not compact and glyph_base and application_name(suite.name)[1]:
-        lines += [f"Application: {code(suite.name)}", ""]
     if "selection" in suite.profiles:
         lines += [
             "Scope: **Scheduled selection and loop**. Covers the declared query and loop checks; does not establish full automatic recovery (profile A).",
@@ -341,11 +339,7 @@ def _overview(reports: dict[str, SuiteCoverage]) -> list[str]:
             ]
             folded = True
         values = counts(suite)
-        name = " ".join(suite.name.split())
-        name = name if len(name) <= 70 else name[:70] + "…"
-        # Long identifiers must wrap before squeezing the final metric offscreen.
-        # Escape each chunk before adding trusted zero-width break opportunities.
-        cells = ["&#8203;".join(cell(name[start : start + 24]) for start in range(0, len(name), 24))]
+        cells = [application_name(suite.name)]
         for metric in METRICS:
             value = values[metric]
             # Color is supplementary: the column name and exact count carry
@@ -445,6 +439,8 @@ def render(
     compact = len(reports) > 3
     if compact:
         head += _overview(reports)
+    attempt = re.search(r"/attempts/([1-9][0-9]*)/?$", urlparse(run_url).path)
+    run_label = f"run {attempt[1]}" if attempt and attempt[1] != "1" else "run"
     footer = [
         "",
         "<details>",
@@ -469,7 +465,7 @@ def render(
         "",
         "</details>",
         "",
-        (f"[Workflow run]({run_url}) · " if run_url else "")
+        (f"[{run_label}]({run_url}) · " if run_url else "")
         + f"[Report guide]({PROJECT}/blob/{ref}/package/docs/github-action-report.md)",
     ]
     sections = []

@@ -4,13 +4,12 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {parseArgs} = require('node:util');
-const {downloadArchive, renderSandbox, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, workflowStatus} = require('../publish/publish.cjs');
+const {downloadArchive, renderSandbox, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, publishedBody} = require('../publish/publish.cjs');
 
 const API = 'https://api.github.com';
 const ACTION_PATH = path.resolve(__dirname, '../publish');
 const ASSET_REF = '6fb0cf0eb800db8078aeaa47e6706cdddcf00d36';
 const TRAILER = /\n<!-- pytest-obligation-preview-snapshot:(.*?) -->\n(<!-- pytest-obligation-preview:[0-9a-f]{24} -->)\s*$/;
-const BUDGET = 55000;
 class PreviewError extends Error {}
 function requireThat(condition, message) { if (!condition) throw new PreviewError(message); }
 function positive(value) { return Number.isSafeInteger(Number(value)) && Number(value) > 0; }
@@ -105,11 +104,11 @@ async function resolve(api, input) {
 
 function bodyFor(markdown, input, resolved) {
   const source = `https://github.com/${input.sourceRepository}`;
-  const prefix = workflowStatus(resolved, source, 'Fork workflow') + '**Preview from the PR contributor**\n\n'
+  const intro = '**Preview from the PR contributor**\n\n'
     + 'No installation, repository access or credentials were requested from the target project. '
     + 'This is a report from the contributor\'s fork; viewing it runs no project code.\n\n'
     + `Commit: [\`${resolved.headSha}\`](${source}/commit/${resolved.headSha}). Results below are contributor-reported evidence, not the target project's CI or approval.\n\n`;
-  return prefix + (prefix.length + markdown.length <= BUDGET ? markdown : UNAVAILABLE);
+  return publishedBody(markdown, resolved, source, {label:'Fork workflow', intro});
 }
 
 async function preview(options, {token, fetcher = fetch, render = renderSandbox}) {
