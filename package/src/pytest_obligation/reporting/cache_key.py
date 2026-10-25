@@ -12,7 +12,8 @@ from pathlib import Path
 def fingerprint(root: Path, inputs: list[str], context: str) -> str:
     for value in inputs:
         path = Path(value)
-        if path.is_absolute() or ".." in path.parts or any(char in value for char in "*?[]:"):
+        # anchor, not is_absolute(): on Windows a rooted path without a drive is not absolute.
+        if path.anchor or ".." in path.parts or any(char in value for char in "*?[]:"):
             raise ValueError("Cache inputs must be literal repository-relative paths")
     files = subprocess.check_output(["git", "ls-files", "-z", "--", *inputs], cwd=root).decode().split("\0")
     names = sorted(set(filter(None, files)))
