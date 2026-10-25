@@ -67,11 +67,14 @@ the task does that you cannot fix yet as `known=` with `because=`.
 When the application recovers what Celery loses itself, with a sweep its beat schedule runs or a work
 table of its own, pass the sweep as `recovery=` and name it with `recovered_by=`. Nothing is then
 declared, and every history must converge: that is the claim the sweep makes. A task whose result is not
-kept is observed by its effect alone, and a run whose task was lost settles once the worker is idle
-(`worker_idle()`), not when a result arrives. For a worker that reads a database the test writes, pass
-`transactional=True`, and give the worker what only the running test knows with `env=` as a callable,
-such as the test database's name. Due ships this for its work tables as
-`due.django.testing.celery_worker_contract()`.
+kept is observed by its effect alone. A run ends once the task's first execution has finished (the worker
+marks it) and the worker has then stayed idle for a second (`worker_idle()`): nothing queued, reserved,
+scheduled or running. So a lost task settles too, with no result to wait for. For a worker that reads a
+database the test writes, pass `transactional=True`, and give the worker what only the running test knows
+with `env=` as a callable, such as the test database's name. Test doubles installed in the test process
+never reach the worker: pass `worker_setup="module:function"`, which the worker calls once it has loaded
+its tasks and before it forks its pool child, to install a fake provider or a filesystem storage there.
+Due ships all of this for its work tables as `due.django.conformance.celery_worker_contract()`.
 
 Two opt-in Celery faults replace an injection with the real failure: `SIGKILL_DEATH_POINTS` has the
 kernel kill the pool child at the same three stages (billiard's signal path, not an exit status), and
