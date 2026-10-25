@@ -163,6 +163,16 @@ def test_an_advance_by_that_manufactures_an_execution_is_caught() -> None:
         assert_failure_takes_its_declared_class(reference_throttled_failure_binding(_ExecutesWhileWaiting()))
 
 
+def test_a_stale_delivery_cannot_bypass_the_provider_wait() -> None:
+    class _RunsEarly(InMemoryThrottledLifecycle):
+        def run_once(self, operation_id: int) -> None:
+            self.rows[operation_id].due_at = self.clock
+            super().run_once(operation_id)
+
+    with pytest.raises(AssertionError, match="stale runner.*provider's window"):
+        assert_failure_takes_its_declared_class(reference_throttled_failure_binding(_RunsEarly()))
+
+
 @pytest.mark.parametrize(
     "update,message",
     [

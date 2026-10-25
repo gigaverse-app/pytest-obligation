@@ -440,6 +440,17 @@ def _assert_waits_out_the_provider(failure: ClassifiedFailure, operation: Any, *
         f"{failure.provider_wait} wait. The retry lands inside the provider's window, is refused again "
         f"and spends another execution: honor the provider's wait as a floor on the retry delay"
     )
+    # Selection alone cannot enforce a provider window: a stale queued delivery
+    # must pass the same eligibility check before it reaches the provider.
+    before = failure.observe(operation)
+    failure.run_once(operation)
+    assert failure.failure_attempt_count(operation) == attempts, (
+        f"{failure.name}: a stale runner reached the dependency inside the provider's window"
+    )
+    assert failure.observe(operation) == before, (
+        f"{failure.name}: a stale runner changed the waiting operation inside the provider's window"
+    )
+    _assert_product_outcome(failure, operation, after="after a stale runner inside the provider's window")
 
 
 CLASSIFIED_FAILURE_PROOFS: tuple[Callable[[ClassifiedFailure], None], ...] = (
