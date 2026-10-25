@@ -8,8 +8,8 @@
       "examples/adopter",
       "examples/checkout_tutorial",
       "examples/checkout_tutorial/tests",
-      "examples/task_queue_tutorial",
-      "examples/task_queue_tutorial/tests",
+      "examples/rq_tutorial",
+      "examples/rq_tutorial/tests",
       "."
     ],
     "test_roots": [
@@ -17,7 +17,7 @@
       "integration_tests",
       "examples/adopter",
       "examples/checkout_tutorial",
-      "examples/task_queue_tutorial",
+      "examples/rq_tutorial",
       "demos"
     ],
     "pytest_policy": {
@@ -27,7 +27,6 @@
       "demos/wagtail_tasks/pyproject.toml": "f6372835919285e1e863a46f0ca60c63ef45b205e4fa8f1f34851f03eef7901a",
       "examples/adopter/pyproject.toml": "eb4f1244c75e948b593d2122599ad6c7db4326c2b56ba4902f22bd258ddcdb91",
       "examples/checkout_tutorial/pytest.ini": "0488200532746fa2df6f5bd569d6717d2b3fd94913b911daa2531d8a92055ca5",
-      "examples/task_queue_tutorial/pytest.ini": "0488200532746fa2df6f5bd569d6717d2b3fd94913b911daa2531d8a92055ca5",
       "package/pyproject.toml": "197e7f7507e5e55187d99781b4c7a4532cd222fc4ebdda624bb6d62cd3ad60a3",
       "pyproject.toml": "e22f1beebaa72b78345891da5d89dc21a513f9fd40c0f6e4367c844d8f505a92"
     },
@@ -53,8 +52,7 @@
         "package/tests/core",
         "integration_tests/core",
         "examples/adopter/tests",
-        "examples/checkout_tutorial/tests",
-        "examples/task_queue_tutorial/tests"
+        "examples/checkout_tutorial/tests"
       ],
       "inputs": [
         "package/src/**",
@@ -101,7 +99,8 @@
         "package/tests/rq",
         "package/tests/celery_worker",
         "integration_tests/rq",
-        "integration_tests/celery_worker"
+        "integration_tests/celery_worker",
+        "examples/rq_tutorial/tests"
       ],
       "inputs": [
         "package/src/**",
