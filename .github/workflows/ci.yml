@@ -57,7 +57,7 @@ jobs:
         run: python scripts/ci/check_docs.py
       - name: Test sticky publication controls
         if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).contracts }}
-        run: node --test report/publish.test.cjs publish/publish.test.cjs
+        run: node --test report/publish.test.cjs publish/publish.test.cjs preview/preview.test.cjs
 
   lint:
     runs-on: ubuntu-latest

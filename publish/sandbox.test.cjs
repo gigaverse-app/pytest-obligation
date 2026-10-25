@@ -7,6 +7,8 @@ const path = require('node:path');
 const {execFile} = require('node:child_process');
 const {promisify} = require('node:util');
 const {buildImage, containerArgs, renderSandbox} = require('./publish.cjs');
+const {preview} = require('../preview/preview.cjs');
+const {githubFixture} = require('../preview/test-support.cjs');
 const execute = promisify(execFile);
 let image, directory, archive;
 
@@ -42,6 +44,20 @@ after(async () => { if (directory) await fs.rm(directory, {recursive:true, force
 test('real producer archive renders in the sandbox without importing or posting planted files', async () => {
   const body = await renderSandbox(__dirname, archive, {headSha:'a'.repeat(40), runId:7, runAttempt:1}, 'https://github.com/example/project', 'main');
   assert.match(body, /1 checks passed/);
+  assert.match(body, /Test step \(reported\): \*\*success\*\*/);
+  assert.doesNotMatch(body, /FORGED MARKDOWN|evil.invalid|UNTRUSTED IMPORT|Evidence unavailable/);
+});
+
+test('preview downloads real producer evidence, renders in Docker and updates one comment', async () => {
+  const f = githubFixture(await fs.readFile(archive));
+  const first = await preview(f.options, f);
+  f.state.run.conclusion = 'failure';
+  const second = await preview(f.options, f);
+  assert.equal(second.url, first.url);
+  assert.equal(f.state.comments.length, 1);
+  const body = f.state.comments[0].body;
+  assert.match(body, /1 checks passed/);
+  assert.match(body, /Fork workflow: failure/);
   assert.match(body, /Test step \(reported\): \*\*success\*\*/);
   assert.doesNotMatch(body, /FORGED MARKDOWN|evil.invalid|UNTRUSTED IMPORT|Evidence unavailable/);
 });
