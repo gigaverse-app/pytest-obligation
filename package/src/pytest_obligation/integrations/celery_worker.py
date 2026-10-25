@@ -47,7 +47,10 @@ And one real refusal, opt-in because it needs a Redis server of its own:
 
 :func:`worker_history` builds the process history; its observation is the
 adopter's, typically the task's result state with what its links and errbacks
-did. Helpers import Celery only in the child. POSIX only (see :func:`running_worker`).
+did. Each run with a fault is also observed the moment the fault happens: a
+worker whose task is requeued when its pool child is lost (``task_acks_late``
+with ``task_reject_on_worker_lost``) runs it again before the run ends, and
+that recovery inside the run is what the verdict then sees. Helpers import Celery only in the child. POSIX only (see :func:`running_worker`).
 """
 
 import importlib
@@ -189,17 +192,33 @@ def worker_history(
             f"broker the test process can restore, on a server shared with nothing else; got {broker_url!r}"
         )
 
-    def run(fault: str | None) -> tuple[HandleT, int]:
+    def run(fault: str | None) -> tuple[HandleT, int] | tuple[HandleT, int, ObservationT]:
+        at_fault: ObservationT | None = None
         with tempfile.TemporaryDirectory() as scratch:
             marker = Path(scratch) / "fault"
             with running_worker(app, fault=fault, task=task, marker=marker, env=env, log=log):
                 # The broker is restored before the worker stops, whether the run settles or not.
                 with broker_restored(broker_url) if fault == BROKER_FULL and broker_url else nullcontext():
                     handle = send()
+                    if fault is not None:
+                        # OBSERVE the work as the fault left it, before the worker's main process can replace a
+                        # lost pool child and run a requeued task again: that is recovery too, inside the run.
+                        wait_until(
+                            lambda: fault_happened(marker) or settled(handle),
+                            timeout=timeout,
+                            what=f"{name}: the task did not settle",
+                            poll=0.01,
+                        )
+                        at_fault = observe(handle) if fault_happened(marker) else None
                     wait_until(lambda: settled(handle), timeout=timeout, what=f"{name}: the task did not settle")
                     time.sleep(quiet)
             happened = fault_happened(marker)
-        return handle, 0 if fault is None else int(happened)
+        if fault is None:
+            return handle, 0
+        if at_fault is None:
+            # The fault never happened: the run reports status 0 and is caught as never interrupted.
+            return handle, int(happened)
+        return handle, int(happened), at_fault
 
     def recover(handle: HandleT) -> None:
         # REAL PRODUCTION: the worker starting again, then running until the work is settled.
