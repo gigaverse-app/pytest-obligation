@@ -34,10 +34,15 @@ so an application can declare its whole outcome matrix. A terminal
 classification must end the operation after one execution and never reach
 the dependency again. A retryable one must leave it owed and due again after
 its wait. Either can also declare the product-visible outcome the failure
-must leave behind.
+must leave behind. A retryable outcome that carries the provider's own wait,
+such as an HTTP ``Retry-After``, declares it as ``provider_wait``: the
+operation must not be due again until that wait has elapsed, however short its
+ordinary retry delay, because a retry inside the provider's window is refused
+again and spends another execution.
 """
 
 from collections.abc import Callable, Iterable
+from datetime import timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -296,6 +301,10 @@ def assert_persistent_retry_contract(retry: PersistentRetry) -> None:
         proof(retry)
 
 
+#: How far short of ``provider_wait`` the proof checks that the operation is still waiting.
+PROVIDER_WAIT_MARGIN = timedelta(seconds=1)
+
+
 class FailureClass(StrEnum):
     """How production must classify one definite failure."""
 
@@ -322,12 +331,36 @@ class ClassifiedFailure(RetryLifecycle):
     #: arranged operation, never read back from the run.
     expected_product_outcome: Callable[[Any], Any] | None = None
 
+    #: The wait the provider declared with this retryable outcome (an HTTP
+    #: ``Retry-After``, a quota reset). The operation must not be due again
+    #: before it elapses. Bind it with ``advance_by``, or neither.
+    provider_wait: timedelta | None = None
+
+    #: FAULT INJECTION: let ``delta`` of the operation's retry wait elapse (age
+    #: its due time by ``delta``, or move the test clock forward), and nothing
+    #: else. Unlike ``advance_to_due`` it is partial, so the proof can stop
+    #: just short of ``provider_wait``.
+    advance_by: Callable[[Any, timedelta], Any] | None = None
+
     def model_post_init(self, _context: Any) -> None:
         if (self.product_outcome is None) != (self.expected_product_outcome is None):
             raise ValueError(
                 "ClassifiedFailure binds product_outcome and expected_product_outcome together: "
                 "an observation without its expected value proves nothing, and the reverse cannot run"
             )
+        if (self.provider_wait is None) != (self.advance_by is None):
+            raise ValueError(
+                "ClassifiedFailure binds provider_wait and advance_by together: a declared wait needs a clock "
+                "to stop short of it, and a clock with no declared wait has nothing to prove"
+            )
+        if self.provider_wait is not None:
+            if self.classification is not FailureClass.RETRYABLE:
+                raise ValueError("provider_wait describes a retry; a terminal outcome never runs again")
+            if self.provider_wait <= PROVIDER_WAIT_MARGIN:
+                raise ValueError(
+                    f"provider_wait must exceed {PROVIDER_WAIT_MARGIN}: the proof checks the operation "
+                    f"is still waiting that far short of it"
+                )
 
 
 def _assert_product_outcome(failure: ClassifiedFailure, operation: Any, *, after: str) -> None:
@@ -358,6 +391,8 @@ def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
                 f"{failure.name}: the retryable failure left the operation due again immediately. "
                 f"It would be retried in a hot loop instead of after its retry delay"
             )
+        if failure.provider_wait is not None and failure.advance_by is not None:
+            _assert_waits_out_the_provider(failure, operation, attempts=attempts)
         _advance_after_failure(failure, operation, attempts=attempts, execution=1)
         return
 
@@ -388,6 +423,34 @@ def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
         f"{failure.name}: invoking the runner again changed the terminally failed operation"
     )
     _assert_product_outcome(failure, operation, after="after a stale runner invocation")
+
+
+def _assert_waits_out_the_provider(failure: ClassifiedFailure, operation: Any, *, attempts: int) -> None:
+    assert failure.provider_wait is not None and failure.advance_by is not None
+    short = failure.provider_wait - PROVIDER_WAIT_MARGIN
+    failure.advance_by(operation, short)
+    after_advance = failure.failure_attempt_count(operation)
+    assert after_advance == attempts, (
+        f"{failure.name}: advance_by changed the failure-attempt count ({attempts} -> {after_advance}). "
+        f"Fault injection may advance only the wait condition; it cannot manufacture an execution"
+    )
+    assert not failure.is_terminal(operation), f"{failure.name}: the waiting operation became terminal as time passed"
+    assert not _is_due(failure, operation), (
+        f"{failure.name}: the operation was due again {short} after a refusal whose provider declared a "
+        f"{failure.provider_wait} wait. The retry lands inside the provider's window, is refused again "
+        f"and spends another execution: honor the provider's wait as a floor on the retry delay"
+    )
+    # Selection alone cannot enforce a provider window: a stale queued delivery
+    # must pass the same eligibility check before it reaches the provider.
+    before = failure.observe(operation)
+    failure.run_once(operation)
+    assert failure.failure_attempt_count(operation) == attempts, (
+        f"{failure.name}: a stale runner reached the dependency inside the provider's window"
+    )
+    assert failure.observe(operation) == before, (
+        f"{failure.name}: a stale runner changed the waiting operation inside the provider's window"
+    )
+    _assert_product_outcome(failure, operation, after="after a stale runner inside the provider's window")
 
 
 CLASSIFIED_FAILURE_PROOFS: tuple[Callable[[ClassifiedFailure], None], ...] = (

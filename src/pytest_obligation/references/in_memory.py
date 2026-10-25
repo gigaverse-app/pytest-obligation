@@ -28,6 +28,7 @@ refuse.
 import itertools
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -262,6 +263,81 @@ def reference_classified_failure_binding(
         waits=waits,
         product_outcome=lifecycle.product_outcome if with_product else None,
         expected_product_outcome=(lambda operation_id: expected) if with_product else None,
+    )
+
+
+#: The reference provider's declared wait and the lifecycle's own, much shorter, retry delay.
+REFERENCE_PROVIDER_WAIT = timedelta(seconds=60)
+REFERENCE_RETRY_DELAY = timedelta(seconds=2)
+
+
+class ThrottledRow(MutableHarnessModel):
+    terminal: bool = False
+    executions: int = 0
+    due_at: timedelta = timedelta(0)
+
+
+class InMemoryThrottledLifecycle:
+    """A conforming lifecycle whose provider refuses with a declared wait, which the retry honors as a floor."""
+
+    def __init__(self, provider_wait: timedelta = REFERENCE_PROVIDER_WAIT) -> None:
+        self.provider_wait = provider_wait
+        self.clock = timedelta(0)
+        self.rows: dict[int, ThrottledRow] = {}
+        self._ids = itertools.count(1)
+
+    def make_failing(self) -> int:
+        operation_id = next(self._ids)
+        self.rows[operation_id] = ThrottledRow(due_at=self.clock)
+        return operation_id
+
+    def retry_delay(self) -> timedelta:
+        return max(REFERENCE_RETRY_DELAY, self.provider_wait)
+
+    def run_once(self, operation_id: int) -> None:
+        row = self.rows[operation_id]
+        if row.due_at > self.clock:
+            return
+        row.executions += 1
+        row.due_at = self.clock + self.retry_delay()
+
+    def due_work(self) -> list[int]:
+        return [operation_id for operation_id, row in self.rows.items() if row.due_at <= self.clock]
+
+    def advance_by(self, operation_id: int, delta: timedelta) -> None:
+        self.clock += delta
+
+    def advance_to_due(self, operation_id: int) -> None:
+        self.clock = max(self.clock, self.rows[operation_id].due_at)
+
+    def is_terminal(self, operation_id: int) -> bool:
+        return self.rows[operation_id].terminal
+
+    def failure_attempt_count(self, operation_id: int) -> int:
+        return self.rows[operation_id].executions
+
+    def observe(self, operation_id: int) -> tuple[bool, int, timedelta]:
+        row = self.rows[operation_id]
+        return (row.terminal, row.executions, row.due_at)
+
+
+def reference_throttled_failure_binding(
+    lifecycle: InMemoryThrottledLifecycle | None = None, *, provider_wait: timedelta = REFERENCE_PROVIDER_WAIT
+) -> ClassifiedFailure:
+    """A retryable classified failure carrying the provider's wait, over the conforming reference or one mutant."""
+    lifecycle = lifecycle if lifecycle is not None else InMemoryThrottledLifecycle(provider_wait)
+    return ClassifiedFailure(
+        name="in-memory rate-limited outcome",
+        classification=FailureClass.RETRYABLE,
+        make_failing=lifecycle.make_failing,
+        due_work=lifecycle.due_work,
+        run_once=lifecycle.run_once,
+        advance_to_due=lifecycle.advance_to_due,
+        is_terminal=lifecycle.is_terminal,
+        failure_attempt_count=lifecycle.failure_attempt_count,
+        observe=lifecycle.observe,
+        provider_wait=provider_wait,
+        advance_by=lifecycle.advance_by,
     )
 
 
