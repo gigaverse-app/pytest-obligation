@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from pytest_obligation.reporting.artifact import INVENTORY_UNAVAILABLE, RenderManifest, stage
-from pytest_obligation.reporting.compose import render_evidence, safe_run_url, write_report
+from pytest_obligation.reporting import badge, readme
+from pytest_obligation.reporting.compose import merge_evidence, render_merged, safe_run_url, write_report
 from pytest_obligation.reporting.inventory import ApplicationInventory, discover
 
 
@@ -43,6 +44,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Additional fully-qualified application wrapper to inventory without imports; repeat for multiple wrappers",
     )
     parser.add_argument(
+        "--readme",
+        type=Path,
+        help="Markdown document whose text between the pytest-obligation start and end markers becomes the report",
+    )
+    parser.add_argument(
+        "--readme-source",
+        default="",
+        help="Source line for the document's copy, which leaves out run-specific times and links",
+    )
+    parser.add_argument("--badge", type=Path, help="shields.io endpoint JSON to write with the report's headline")
+    parser.add_argument(
         "--stage-artifact",
         type=Path,
         help="Empty directory receiving the evidence this render used, under fixed names, for a trusted re-render",
@@ -66,21 +78,42 @@ def main(argv: Sequence[str] | None = None) -> None:
             inventory_unavailable = True
     paths = [Path(path) for path in sorted(glob.glob(args.input, recursive=True))]
     junit = [Path(path) for path in sorted(glob.glob(args.junit_input, recursive=True))] if args.junit_input else None
-    body = render_evidence(
+    evidence = merge_evidence(
         paths,
         expected_reports=args.expected_reports,
         test_outcome=args.test_outcome,
         inventory=inventory,
         problems=[INVENTORY_UNAVAILABLE] if inventory_unavailable else [],
         junit=junit,
-        run_url=args.run_url,
-        source=args.source,
-        asset_ref=args.asset_ref,
-        repository_url=args.repository_url,
-        revision=args.revision,
-        graphics=args.graphics,
     )
+
+    def rendered(*, run_url: str, source: str, revision: str, timing: bool = True) -> str:
+        return render_merged(
+            evidence,
+            test_outcome=args.test_outcome,
+            inventory=inventory,
+            run_url=run_url,
+            source=source,
+            asset_ref=args.asset_ref,
+            repository_url=args.repository_url,
+            revision=revision,
+            graphics=args.graphics,
+            timing=timing,
+        )
+
+    body = rendered(run_url=args.run_url, source=args.source, revision=args.revision)
     write_report(args.output, body, inventory)
+    if args.readme:
+        try:
+            # No run-specific times, run link or commit-pinned source links: the document changes only when
+            # the evidence does.
+            readme.update(args.readme, rendered(run_url="", source=args.readme_source, revision="", timing=False))
+        except (OSError, ValueError) as error:
+            parser.error(f"--readme {args.readme}: {error}")
+    if args.badge:
+        badge.write(
+            args.badge, badge.badge(evidence.reports, unavailable=evidence.unavailable, test_outcome=args.test_outcome)
+        )
     if args.stage_artifact:
         manifest = RenderManifest(
             expected_reports=args.expected_reports,

@@ -40,6 +40,21 @@ inputs:
   graphics:
     description: Compose fixed SVG digits and labels in the comment. No image uploads or contents write permission. Set false for plain text.
     default: 'true'
+  readme-path:
+    description: >-
+      Markdown document to keep the report in, between the lines <!-- pytest-obligation:start --> and
+      <!-- pytest-obligation:end -->, which it must already contain. The copy leaves out run-specific times,
+      the run link and commit-pinned source links, so it changes only when the evidence does. Committing it is
+      the caller's step.
+    default: ''
+  readme-source:
+    description: The source line shown in the document's copy, for example "daily run against upstream main".
+    default: ''
+  badge-path:
+    description: >-
+      File to write the report's headline to as a shields.io endpoint badge
+      (https://img.shields.io/endpoint?url=<raw URL of the committed file>).
+    default: ''
 outputs:
   markdown-path:
     description: Rendered Markdown, also included in the job summary and uploaded artifact.
@@ -73,6 +88,9 @@ runs:
         APPLICATION_PATHS: ${{ inputs.application-paths }}
         INVENTORY_PATH: ${{ inputs.inventory-path }}
         JUNIT_PATH: ${{ inputs.junit-path }}
+        README_PATH: ${{ inputs.readme-path }}
+        README_SOURCE: ${{ inputs.readme-source }}
+        BADGE_PATH: ${{ inputs.badge-path }}
       run: |
         workspace="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")"
         output="$workspace/report.md"
@@ -89,12 +107,17 @@ runs:
           inventory_args+=(--inventory "$INVENTORY_PATH" --collection-revision "$(git rev-parse HEAD)")
         fi
         if [[ -n "$JUNIT_PATH" ]]; then inventory_args+=(--junit-input "$JUNIT_PATH"); fi
+        document_args=()
+        if [[ -n "$README_PATH" ]]; then
+          document_args+=(--readme "$GITHUB_WORKSPACE/$README_PATH" --readme-source "$README_SOURCE")
+        fi
+        if [[ -n "$BADGE_PATH" ]]; then document_args+=(--badge "$GITHUB_WORKSPACE/$BADGE_PATH"); fi
         uvx --python "$INVENTORY_PYTHON" --from "$REPORTER_PACKAGE[report]" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
           --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}" "${inventory_args[@]}" \
-          --stage-artifact "$workspace/artifact"
+          "${document_args[@]}" --stage-artifact "$workspace/artifact"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
         echo "artifact-path=$workspace/artifact" >> "$GITHUB_OUTPUT"
     # Fixed names (manifest.json, report.md, inventory.json, reports/, junit/) let the publish action

@@ -135,6 +135,23 @@ def counts(suite: SuiteCoverage) -> dict[str, int]:
     return result
 
 
+def report_totals(reports: dict[str, SuiteCoverage]) -> Counter[str]:
+    """Each category's checks summed over every reported application: the headline counts."""
+    totals: Counter[str] = Counter(dict.fromkeys(METRICS, 0))
+    for suite in reports.values():
+        totals.update(counts(suite))
+    return totals
+
+
+def known_expected_failures(reports: dict[str, SuiteCoverage]) -> int:
+    """Failed checks the application declared as known defects; the rest of ``failed`` is unexpected."""
+    return sum(
+        case_status(case) == "Known expected failure"
+        for suite in reports.values()
+        for case in all_cases(suite).values()
+    )
+
+
 def _priority(item: tuple[str, SuiteCoverage]) -> tuple[int, int, str]:
     values = counts(item[1])
     for rank, category in enumerate(("failed", "rejected", "blocked", "gaps")):
@@ -215,7 +232,14 @@ def _hypothesis(suite: SuiteCoverage) -> list[str]:
 
 
 def _suite(
-    key: str, suite: SuiteCoverage, repository_url: str, revision: str, glyph_base: str, *, compact: bool = False
+    key: str,
+    suite: SuiteCoverage,
+    repository_url: str,
+    revision: str,
+    glyph_base: str,
+    *,
+    compact: bool = False,
+    timing: bool = True,
 ) -> str:
     values = counts(suite)
     description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
@@ -230,9 +254,9 @@ def _suite(
         "",
         _source_link(suite, repository_url, revision),
         "",
-        f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>",
-        "",
     ]
+    if timing:
+        lines += [f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>", ""]
     if not compact and glyph_base and application_name(suite.name)[1]:
         lines += [f"Application: {code(suite.name)}", ""]
     if "selection" in suite.profiles:
@@ -370,13 +394,16 @@ def render(
     graphics: bool = False,
     inventory: ApplicationInventory | None = None,
     collected_skips: int | None = None,
+    timing: bool = True,
 ) -> str:
+    """
+    The report's Markdown. ``timing=False`` leaves out elapsed and summed check times, so a copy kept
+    in a document (see :mod:`pytest_obligation.reporting.readme`) changes only when the evidence does.
+    """
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
     glyph_base = f"{banner_assets}/report-glyphs/" if graphics else ""
-    totals: Counter[str] = Counter(dict.fromkeys(METRICS, 0))
-    for suite in reports.values():
-        totals.update(counts(suite))
+    totals = report_totals(reports)
     # Discovery widens the application denominator, never the passing evidence.
     totals["applications"] = len(set(reports) | (set(inventory.applications) if inventory else set()))
     head = [
@@ -393,11 +420,7 @@ def render(
         ),
         "",
     ]
-    known_failures = sum(
-        case_status(case) == "Known expected failure"
-        for suite in reports.values()
-        for case in all_cases(suite).values()
-    )
+    known_failures = known_expected_failures(reports)
     if known_failures:
         head += [
             f"**Failures: {totals['failed'] - known_failures} unexpected + {known_failures} known expected.** "
@@ -416,12 +439,12 @@ def render(
         head += ["**🟠 Test step did not complete.**", ""]
     if unavailable:
         head += ["**🟠 Evidence unavailable.**", unavailable, ""]
-    elif reports:
+    elif reports and timing:
         elapsed = next(iter(reports.values())).session_seconds
-        timing = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
+        times = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
             _time(list(reports.values()), compact=True)
         ]
-        head += ["<sub>" + " · ".join(timing) + "</sub>", ""]
+        head += ["<sub>" + " · ".join(times) + "</sub>", ""]
     head += _execution_summary(reports, inventory, unavailable, collected_skips)
     compact = len(reports) > 3
     if compact:
@@ -455,7 +478,7 @@ def render(
     ]
     sections = []
     for key, suite in sorted(reports.items(), key=_priority):
-        section = _suite(key, suite, repository_url, revision, glyph_base, compact=compact)
+        section = _suite(key, suite, repository_url, revision, glyph_base, compact=compact, timing=timing)
         # Include disclosure separators and the overflow notice in the budget.
         if len("\n\n".join([*head, *sections, section, *footer])) > MAX_BODY - 300:
             sections.append(

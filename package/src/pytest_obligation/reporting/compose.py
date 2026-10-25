@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -19,7 +20,16 @@ def safe_run_url(url: str) -> bool:
     return urlparse(url).scheme == "https" and not any(c in url for c in "()\r\n<>")
 
 
-def render_evidence(
+@dataclass(frozen=True)
+class Evidence:
+    """One run's merged evidence: the reports, why any of it is unavailable, and JUnit-classified skips."""
+
+    reports: dict[str, SuiteCoverage]
+    unavailable: str
+    collected_skips: int | None
+
+
+def merge_evidence(
     paths: Sequence[Path],
     *,
     expected_reports: int,
@@ -27,13 +37,7 @@ def render_evidence(
     inventory: ApplicationInventory | None,
     problems: Sequence[str],
     junit: Sequence[Path] | None,
-    run_url: str,
-    source: str,
-    asset_ref: str,
-    repository_url: str,
-    revision: str,
-    graphics: bool,
-) -> str:
+) -> Evidence:
     """Recompute verdicts from evidence files. ``junit`` is ``None`` when no JUnit input was requested."""
     reports: dict[str, SuiteCoverage] = {}
     problems = list(problems)
@@ -94,18 +98,72 @@ def render_evidence(
                 unavailable = "JUnit evidence could not be read; skipped-test count is unknown."
     if unavailable:
         unavailable += " Check the JSON artifacts and pytest logs; available evidence is shown below."
+    return Evidence(reports=reports, unavailable=unavailable, collected_skips=collected_skips)
+
+
+def render_merged(
+    evidence: Evidence,
+    *,
+    test_outcome: TestOutcome,
+    inventory: ApplicationInventory | None,
+    run_url: str,
+    source: str,
+    asset_ref: str,
+    repository_url: str,
+    revision: str,
+    graphics: bool,
+    timing: bool = True,
+) -> str:
     return render(
-        reports,
+        evidence.reports,
         run_url=run_url,
         source=source,
-        unavailable=unavailable,
+        unavailable=evidence.unavailable,
         test_outcome=test_outcome,
         asset_ref=asset_ref,
         repository_url=repository_url,
         revision=revision,
         graphics=graphics,
         inventory=inventory,
-        collected_skips=collected_skips,
+        collected_skips=evidence.collected_skips,
+        timing=timing,
+    )
+
+
+def render_evidence(
+    paths: Sequence[Path],
+    *,
+    expected_reports: int,
+    test_outcome: TestOutcome,
+    inventory: ApplicationInventory | None,
+    problems: Sequence[str],
+    junit: Sequence[Path] | None,
+    run_url: str,
+    source: str,
+    asset_ref: str,
+    repository_url: str,
+    revision: str,
+    graphics: bool,
+) -> str:
+    """Merge evidence files and render them: the trusted re-render's one call."""
+    evidence = merge_evidence(
+        paths,
+        expected_reports=expected_reports,
+        test_outcome=test_outcome,
+        inventory=inventory,
+        problems=problems,
+        junit=junit,
+    )
+    return render_merged(
+        evidence,
+        test_outcome=test_outcome,
+        inventory=inventory,
+        run_url=run_url,
+        source=source,
+        asset_ref=asset_ref,
+        repository_url=repository_url,
+        revision=revision,
+        graphics=graphics,
     )
 
 
