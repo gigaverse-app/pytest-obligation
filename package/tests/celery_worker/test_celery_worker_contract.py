@@ -17,8 +17,8 @@ import celery
 import pytest
 import redis
 from celery.app.task import Task
-from packaging.version import Version
 from celery.result import AsyncResult
+from packaging.version import Version
 
 from pytest_obligation import Claim, Findings, Profile, ReplaySafeEffect, due_work_contract_suite
 from pytest_obligation.host import Host, hosted
