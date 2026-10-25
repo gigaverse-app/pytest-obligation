@@ -8,10 +8,10 @@ suite red until the table is updated.
 """
 
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import celery
 import pytest
@@ -26,10 +26,12 @@ from pytest_obligation.host import Host, hosted
 from pytest_obligation.integrations.celery_worker import (
     BROKER_FULL,
     DEATH_POINTS,
+    FAILURE_POINTS,
     SIGKILL_DEATH_POINTS,
     worker_contract,
     worker_history,
 )
+from pytest_obligation.process_histories import ProcessHistory
 from tests.celery_worker import app as reference
 
 pytestmark = pytest.mark.skipif(
@@ -89,7 +91,45 @@ def what_happened(task_id: str) -> tuple[str, int, tuple[str, ...]]:
 #: Celery #10752 and #10759 stopped a task whose SUCCESS was stored from running its error callback. Both
 #: merged after 5.7.0rc1, so a released Celery has them from the next release on. (A build of Celery's main
 #: between those merges and that release still reports 5.7.0rc1; this suite runs the locked release.)
+#: Retire this gate and the rows passed to before_the_10724_fixes once uv.lock's Celery is newer than 5.7.0rc1.
 SUCCESS_STORED_STAYS_SUCCESS = Version(celery.__version__) > Version("5.7.0rc1")
+
+
+def before_the_10724_fixes(rows: dict[str, Any]) -> dict[str, Any]:
+    """Rows that diverge only on a Celery without #10752 and #10759 (https://github.com/celery/celery/issues/10724)."""
+    return {} if SUCCESS_STORED_STAYS_SUCCESS else rows
+
+
+def reference_history(
+    name: str,
+    send: Callable[[], str],
+    findings: Findings,
+    *,
+    death_points: Sequence[str] = DEATH_POINTS,
+    failure_points: Sequence[str] = FAILURE_POINTS,
+    broker_url: str | None = None,
+) -> ProcessHistory[str, Any]:
+    """Work the reference worker runs, observed the same way: the result's state, messages sent, announcements."""
+    env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+    if broker_url is not None:
+        # Celery takes CELERY_BROKER_URL from the environment over the application's own broker setting.
+        env["CELERY_BROKER_URL"] = broker_url
+    return worker_history(
+        name=name,
+        app="tests.celery_worker.app:app",
+        task=reference.send_message.name,
+        send=send,
+        observe=what_happened,
+        initial=("PENDING", 0, ()),
+        expected=findings.delivered,
+        settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
+        death_points=death_points,
+        failure_points=failure_points,
+        findings=findings,
+        env=env,
+        broker_url=broker_url,
+    )
+
 
 # What each failure leaves after the worker starts again; every history not listed reaches normal operation.
 FINDINGS = Findings(
@@ -104,30 +144,13 @@ FINDINGS = Findings(
         # https://github.com/celery/celery/issues/10725
         "the broker refused the task's link": ("FAILURE", 1, ("failed: OperationalError",)),
     }
-    | (
-        {}
-        if SUCCESS_STORED_STAYS_SUCCESS
-        else {
-            # https://github.com/celery/celery/issues/10724, fixed by #10752 and #10759.
+    | before_the_10724_fixes(
+        {
             "died at task_postrun": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
             "died at task_postrun (SIGKILL)": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
             "the task's on_success hook raised": ("SUCCESS", 1, ("failed: ReceiverFailed", SENT)),
         }
     ),
-)
-
-SEND_MESSAGE = worker_history(
-    name="the reference worker runs send_message",
-    app="tests.celery_worker.app:app",
-    task=reference.send_message.name,
-    send=send,
-    observe=what_happened,
-    initial=("PENDING", 0, ()),
-    expected=FINDINGS.delivered,
-    settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
-    death_points=DEATH_POINTS + SIGKILL_DEATH_POINTS,
-    findings=FINDINGS,
-    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
 )
 
 # Redis itself refuses the link's publish, and kombu raises the OperationalError the injected refusal does.
@@ -137,23 +160,6 @@ FULL_BROKER_FINDINGS = Findings(
         # https://github.com/celery/celery/issues/10725
         BROKER_FULL: ("FAILURE", 1, ("failed: OperationalError",)),
     },
-)
-
-FULL_BROKER = worker_history(
-    name="the reference worker runs send_message on a broker of its own",
-    app="tests.celery_worker.app:app",
-    task=reference.send_message.name,
-    send=send_on_own_broker,
-    observe=what_happened,
-    initial=("PENDING", 0, ()),
-    expected=FULL_BROKER_FINDINGS.delivered,
-    settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
-    death_points=(),
-    failure_points=(BROKER_FULL,),
-    findings=FULL_BROKER_FINDINGS,
-    broker_url=reference.OWN_BROKER,
-    # Celery takes CELERY_BROKER_URL from the environment over the application's own broker setting.
-    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2]), "CELERY_BROKER_URL": reference.OWN_BROKER},
 )
 
 # The chord's state is its body's; its faults hit the first execution of a header task, and the refused
@@ -167,29 +173,27 @@ CHORD_FINDINGS = Findings(
         # https://github.com/celery/celery/issues/10725#issuecomment-6318108091
         "the broker refused the task's link": ("FAILURE", 2, ("failed: ChordError",)),
     }
-    | (
-        {}
-        if SUCCESS_STORED_STAYS_SUCCESS
-        else {
-            # https://github.com/celery/celery/issues/10724: the header is counted twice, once as a failure.
+    # Before the fixes, a header lost after its stored SUCCESS is counted twice, once as a failure.
+    | before_the_10724_fixes(
+        {
             "died at task_postrun": ("FAILURE", 2, ("failed: ChordError",)),
             "the task's on_success hook raised": ("FAILURE", 2, ("failed: ChordError",)),
         }
     ),
 )
 
-CHORD = worker_history(
-    name="the reference worker runs a chord of two send_message tasks",
-    app="tests.celery_worker.app:app",
-    task=reference.send_message.name,
-    send=send_chord,
-    observe=what_happened,
-    initial=("PENDING", 0, ()),
-    expected=CHORD_FINDINGS.delivered,
-    settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
-    findings=CHORD_FINDINGS,
-    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+SEND_MESSAGE = reference_history(
+    "the reference worker runs send_message", send, FINDINGS, death_points=DEATH_POINTS + SIGKILL_DEATH_POINTS
 )
+FULL_BROKER = reference_history(
+    "the reference worker runs send_message on a broker of its own",
+    send_on_own_broker,
+    FULL_BROKER_FINDINGS,
+    death_points=(),
+    failure_points=(BROKER_FULL,),
+    broker_url=reference.OWN_BROKER,
+)
+CHORD = reference_history("the reference worker runs a chord of two send_message tasks", send_chord, CHORD_FINDINGS)
 
 
 @contextmanager
@@ -212,7 +216,7 @@ def message_replay() -> Iterator[ReplaySafeEffect]:
 
 CONTRACT = worker_contract(
     name="celery reference worker",
-    histories=(SEND_MESSAGE, FULL_BROKER, CHORD),
+    process_handoffs=(SEND_MESSAGE, FULL_BROKER, CHORD),
     handoff_gaps={
         SEND_MESSAGE.name: "a failure after the link is published, or a refused link, still runs the failure path",
         FULL_BROKER.name: "a broker that refuses the link's publish records FAILURE and acknowledges the message",
