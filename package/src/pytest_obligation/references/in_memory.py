@@ -27,6 +27,7 @@ refuse.
 
 import itertools
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -460,7 +461,7 @@ class InMemoryAcknowledgingTeardown:
         if self.tasks.status(task_id) is TaskStatus.COMPLETED:
             del self.owed[operation_id]
 
-    def hold_acknowledgements(self, operation_id: int) -> AsyncTasks:
+    def hold_acknowledgements(self, operation_id: int) -> AbstractContextManager[AsyncTasks]:
         return self.tasks.held()
 
     def acknowledgement_count(self, operation_id: int) -> int:

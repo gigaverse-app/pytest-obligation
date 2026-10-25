@@ -122,3 +122,26 @@ def test_complete_pending_finishes_every_held_task_in_order() -> None:
 
     assert applied == [0, 1, 2]
     assert tasks.pending == []
+
+
+class _Response:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+
+def test_a_refusal_that_is_not_an_exception_is_returned_as_the_reply() -> None:
+    # An HTTP client reports a rate limit in its response rather than by raising.
+    boundary = ProviderBoundary(
+        request_limits={"purge": 2},
+        limit_error=lambda operation, size, limit: _Response(400),
+    )
+    boundary.fail_next("purge", lambda: _Response(429))
+
+    throttled = boundary.call("purge", ["a"])
+    oversized = boundary.call("purge", ["a", "b", "c"])
+    accepted = boundary.call("purge", ["a"])
+
+    assert isinstance(throttled, _Response) and throttled.status == 429
+    assert isinstance(oversized, _Response) and oversized.status == 400
+    assert accepted is None
+    assert [call.refused is not None for call in boundary.calls] == [True, True, False]

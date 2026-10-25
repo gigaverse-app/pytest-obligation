@@ -11,9 +11,11 @@ provider would fail.
 Each block models one of those facts and knows nothing about any provider:
 
 * :class:`ProviderBoundary` records every request, refuses one larger than the
-  provider's per-request limit, and raises failures a test scripts (a rate
-  limit is one script). The fake author supplies each error in the provider
-  SDK's own exception type, so the application's real error handling runs.
+  provider's per-request limit, and delivers failures a test scripts (a rate
+  limit is one script). The fake author supplies each refusal in the provider's
+  own shape, so the application's real error handling runs: an exception the
+  SDK raises, or a reply object for an API that reports failure in its
+  response (an HTTP client returning a 429 response instead of raising).
 * :class:`AsyncTasks` models an operation the provider acknowledges now and
   applies later: the reply is a task id, not the effect. By default a task
   applies on acceptance, so ordinary tests keep working; :meth:`AsyncTasks.held`
@@ -48,8 +50,9 @@ from enum import StrEnum
 from pytest_obligation.interleavings.engine.provider import AcceptedProviderRequest
 from pytest_obligation.models import HarnessModel
 
-#: Builds the provider's refusal of an oversized request: (operation, request size, limit) -> error.
-LimitError = Callable[[str, int, int], BaseException]
+#: Builds the provider's refusal of an oversized request: (operation, request size, limit) -> refusal.
+#: A refusal that is an exception is raised; anything else is returned by :meth:`ProviderBoundary.call`.
+LimitError = Callable[[str, int, int], object]
 
 
 class ProviderCall(HarnessModel):
@@ -58,7 +61,7 @@ class ProviderCall(HarnessModel):
     operation: str
     #: Number of items in the request, when the operation takes a collection.
     size: int | None = None
-    #: The error the boundary raised instead of letting the request through, if any.
+    #: The refusal the boundary raised or returned instead of letting the request through, if any.
     refused: str | None = None
 
 
@@ -74,34 +77,52 @@ class ProviderBoundary:
         self.request_limits = dict(request_limits or {})
         if self.request_limits and limit_error is None:
             raise ValueError(
-                "request_limits need limit_error: the provider's refusal must be raised in the SDK's own "
-                "exception type, or the application's real error handling never runs"
+                "request_limits need limit_error: the provider's refusal must take the provider's own shape, "
+                "or the application's real error handling never runs"
             )
         if any(limit < 1 for limit in self.request_limits.values()):
             raise ValueError("a request limit allows at least one item")
         self._limit_error = limit_error
-        self._scripted: defaultdict[str, deque[Callable[[], BaseException]]] = defaultdict(deque)
+        self._scripted: defaultdict[str, deque[Callable[[], object]]] = defaultdict(deque)
         self.calls: list[ProviderCall] = []
 
-    def fail_next(self, operation: str, error: Callable[[], BaseException], *, times: int = 1) -> None:
-        """Make the next ``times`` requests to ``operation`` raise a fresh ``error()``, then succeed."""
+    def fail_next(self, operation: str, error: Callable[[], object], *, times: int = 1) -> None:
+        """
+        Make the next ``times`` requests to ``operation`` fail with a fresh ``error()``, then succeed.
+
+        An exception is raised from :meth:`call`; any other value (an error
+        response) is returned from it for the fake to return as its reply.
+        """
         if times < 1:
             raise ValueError("fail_next scripts at least one failure")
         self._scripted[operation].extend([error] * times)
 
-    def call(self, operation: str, items: Sized | None = None) -> None:
-        """Record one request to ``operation`` and raise the provider's refusal, if it refuses it."""
+    def call(self, operation: str, items: Sized | None = None) -> object | None:
+        """
+        Record one request to ``operation`` and deliver the provider's refusal, if it refuses it.
+
+        Returns ``None`` when the request goes through. A refusal that is an
+        exception is raised; any other refusal is returned, and the fake returns
+        it as its reply without applying the request::
+
+            refused = self.boundary.call("purge", urls)
+            if refused is not None:
+                return refused
+        """
         size = None if items is None else len(items)
         limit = self.request_limits.get(operation)
-        error: BaseException | None = None
+        refusal: object | None = None
         if limit is not None and size is not None and size > limit:
             assert self._limit_error is not None, "checked in __init__"
-            error = self._limit_error(operation, size, limit)
+            refusal = self._limit_error(operation, size, limit)
         elif self._scripted[operation]:
-            error = self._scripted[operation].popleft()()
-        self.calls.append(ProviderCall(operation=operation, size=size, refused=None if error is None else repr(error)))
-        if error is not None:
-            raise error
+            refusal = self._scripted[operation].popleft()()
+        self.calls.append(
+            ProviderCall(operation=operation, size=size, refused=None if refusal is None else repr(refusal))
+        )
+        if isinstance(refusal, BaseException):
+            raise refusal
+        return refusal
 
     def calls_to(self, operation: str) -> list[ProviderCall]:
         """Requests to ``operation`` in arrival order, refused ones included."""

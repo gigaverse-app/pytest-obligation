@@ -11,8 +11,11 @@ would fail. The application can then:
 
 `pytest_obligation.fakes` gives a fake author three provider-neutral building
 blocks, one per fact above. They know nothing about any provider. The author
-supplies each error in the provider SDK's own exception type, so the
-application's real error handling runs.
+supplies each refusal in the provider's own shape, so the application's real
+error handling runs: the exception its SDK raises, or, for an API that reports
+failure in the response, the reply object itself (an HTTP 429 response from
+`requests`). `ProviderBoundary.call` raises a refusal that is an exception and
+returns any other refusal, which the fake returns as its reply.
 
 | Block | Models | Test controls | Observations |
 | --- | --- | --- | --- |
@@ -56,6 +59,37 @@ chat.boundary.fail_next("upsert_users", lambda: ChatAPIError(429, "Too many requ
 service.sync_profiles(users)
 chat.boundary.assert_scripts_consumed()
 ```
+
+## A worked example on code we did not write
+
+The [Wagtail demo](https://github.com/gigaverse-app/pytest-obligation/tree/main/demos/wagtail_tasks)
+runs Wagtail's own `CloudflareBackend` over a Cloudflare purge API fake built
+from these blocks (`demos/wagtail_tasks/cloudflare.py`). Only `requests.post` is
+replaced. The fake keeps Cloudflare's documented 100-URL request limit and its
+rate-limit refusal (`success: false`, error 1134), both delivered as HTTP replies
+rather than exceptions. Against Wagtail it shows:
+
+- Wagtail's 30-URL chunking stays within the limit, and the fake refuses a
+  request without it: a mutation test proves the check can fail.
+- A throttled purge is logged and dropped. django-tasks-db records the task
+  SUCCESSFUL, so the CDN keeps serving the old page with nothing to retry it.
+  The publishing contract declares this as a gap on a profile J classified
+  failure, and a second contract with a one-class fix passes as the positive control.
+- Cloudflare offers no purge status to read back, so the acknowledged-effect
+  binding does not apply: there is nothing a correct implementation could check.
+
+## Where these blocks apply
+
+Prefer a maintained emulator when the system has one, and build on these blocks
+for the provider APIs that have none.
+
+| System | Use | Why |
+| --- | --- | --- |
+| SaaS HTTP APIs: chat, CDN purge, email, billing, push | **Yes** | No maintained emulator exists, and their contracts are exactly request limits, throttling replies and acknowledged-not-applied operations |
+| Kafka producer | Partly | `send()` returns before the broker acknowledges; a producer fake can model delivery with `AsyncTasks`, and its size limit is bytes per record, which `ProviderBoundary` counts when given the payload. Consumer-side faults belong to the [aiokafka integration](aiokafka.md) |
+| Celery and other brokers | Rarely | Publishing acknowledges an enqueue, not the execution. Lost and unexecuted work is profile A's subject, proven against the real broker by the Celery integration |
+| MongoDB | No | An acknowledged write under its write concern is the effect, so use `mongomock` or a real server; only `w=0` writes are unacknowledged |
+| Redis | No | A reply means the command applied; use `fakeredis` or a real server |
 
 ## Defaults keep ordinary tests honest without rewriting them
 
