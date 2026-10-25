@@ -130,11 +130,18 @@ const resolve = (f, input = {}) => resolveTriggeringRun({github:f.github, contex
 
 test('a fork PR is found by its head owner and branch, and must point at the run head', async t => {
   const f = fixture(t); forkRun(f);
-  assert.deepEqual(await resolve(f), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2, artifact:'obligation-python-2', ...artifactIdentity});
+  assert.deepEqual(await resolve(f), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2, artifact:'obligation-python-2', ...artifactIdentity, sameRepository:false});
   const [, query] = f.requests.find(([kind]) => kind === 'pulls');
   assert.deepEqual(query, {owner:'owner', repo:'app', state:'open', head:'fork:feature', per_page:100});
   const [, artifacts] = f.requests.find(([kind]) => kind === 'artifacts');
   assert.deepEqual(artifacts, {owner:'owner', repo:'app', run_id:200, name:'obligation-python-2', per_page:100});
+});
+
+test('a PR from a branch of this repository is marked as the repository's own, from the API alone', async t => {
+  const f = fixture(t);
+  forkRun(f, {head_repository:{full_name:'owner/app', owner:{login:'owner'}}});
+  f.state.pulls[0].head.repo.full_name = 'owner/app';
+  assert.equal((await resolve(f)).sameRepository, true);
 });
 
 for (const [name, mutate] of [

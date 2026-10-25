@@ -1,6 +1,9 @@
 """A compact PR sticky: conclusions first, application vocabulary explicitly attributed."""
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from html import escape
 
 from pytest_obligation.profiles.coverage import Assessment, CaseEvidence, ProfileCoverage, SuiteCoverage
@@ -41,6 +44,32 @@ def inert(text: str) -> str:
     return _AUTOLINK_WWW.sub(r"\1" + _INERT + r"\2", text)
 
 
+#: Whether the text being rendered comes from the repository's own code; see :func:`rendering_own_text`.
+_OWN_TEXT: ContextVar[bool] = ContextVar("own_text", default=False)
+
+
+@contextmanager
+def rendering_own_text() -> Iterator[None]:
+    """
+    Render application text as written, with live mentions, issue references and links.
+
+    Only for a report whose contracts are the repository's own code: a push, a schedule, a manual
+    run, or a pull request from a branch of the same repository, all written or merged by someone
+    with write access. A pull request from another repository's fork is a stranger's text, posted
+    by this repository's bot, so outside this block it stays :func:`inert`.
+    """
+    token = _OWN_TEXT.set(True)
+    try:
+        yield
+    finally:
+        _OWN_TEXT.reset(token)
+
+
+def application_text(text: str) -> str:
+    """``text`` as written inside :func:`rendering_own_text`, otherwise :func:`inert`."""
+    return text if _OWN_TEXT.get() else inert(text)
+
+
 def link_text(value: str) -> str:
     """Escape text for a Markdown link's label: entities neutralize table delimiters, emphasis and links."""
     return (
@@ -51,7 +80,7 @@ def link_text(value: str) -> str:
 
 
 def cell(value: str, limit: int = 700) -> str:
-    return link_text(inert(value if len(value) <= limit else value[:limit] + "…"))
+    return link_text(application_text(value if len(value) <= limit else value[:limit] + "…"))
 
 
 def code(value: str) -> str:

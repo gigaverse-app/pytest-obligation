@@ -113,6 +113,7 @@ def render_merged(
     revision: str,
     graphics: bool,
     timing: bool = True,
+    own_text: bool = False,
 ) -> str:
     return render(
         evidence.reports,
@@ -127,6 +128,7 @@ def render_merged(
         inventory=inventory,
         collected_skips=evidence.collected_skips,
         timing=timing,
+        own_text=own_text,
     )
 
 
@@ -144,6 +146,7 @@ def render_evidence(
     repository_url: str,
     revision: str,
     graphics: bool,
+    own_text: bool = False,
 ) -> str:
     """Merge evidence files and render them: the trusted re-render's one call."""
     evidence = merge_evidence(
@@ -164,6 +167,7 @@ def render_evidence(
         repository_url=repository_url,
         revision=revision,
         graphics=graphics,
+        own_text=own_text,
     )
 
 

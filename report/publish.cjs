@@ -129,7 +129,9 @@ async function resolveTriggeringRun({github, context, core}, {runId, runAttempt,
   const artifact = matchingArtifacts[0];
   return {pullRequest: matches[0].number, headSha: run.head_sha, runId: id, runAttempt: attempt, artifact: name,
     artifactId:positive(artifact.id, 'artifact ID'), artifactBytes:artifact.size_in_bytes, artifactDigest:artifact.digest,
-    conclusion:sourceRun.conclusion || sourceRun.status};
+    conclusion:sourceRun.conclusion || sourceRun.status,
+    // From the API: a PR from a branch of this repository was written by someone with write access.
+    sameRepository:head.full_name === repository};
 }
 
 module.exports = publish;

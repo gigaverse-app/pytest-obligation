@@ -2,6 +2,7 @@
 
 import re
 from collections import Counter
+from contextlib import nullcontext
 from pathlib import PurePosixPath
 from urllib.parse import quote, urlparse
 
@@ -16,6 +17,7 @@ from .evidence import (
     case_status,
     cell,
     code,
+    rendering_own_text,
 )
 from .evidence import (
     MAX_BODY as MAX_BODY,
@@ -395,11 +397,46 @@ def render(
     inventory: ApplicationInventory | None = None,
     collected_skips: int | None = None,
     timing: bool = True,
+    own_text: bool = False,
 ) -> str:
     """
     The report's Markdown. ``timing=False`` leaves out elapsed and summed check times, so a copy kept
     in a document (see :mod:`pytest_obligation.reporting.readme`) changes only when the evidence does.
+    ``own_text=True`` keeps the application's mentions, issue references and links live: only for
+    contracts that are the repository's own code (see :func:`~.evidence.rendering_own_text`).
     """
+    with rendering_own_text() if own_text else nullcontext():
+        return _render(
+            reports,
+            run_url=run_url,
+            source=source,
+            unavailable=unavailable,
+            test_outcome=test_outcome,
+            asset_ref=asset_ref,
+            repository_url=repository_url,
+            revision=revision,
+            graphics=graphics,
+            inventory=inventory,
+            collected_skips=collected_skips,
+            timing=timing,
+        )
+
+
+def _render(
+    reports: dict[str, SuiteCoverage],
+    *,
+    run_url: str,
+    source: str,
+    unavailable: str,
+    test_outcome: str,
+    asset_ref: str,
+    repository_url: str,
+    revision: str,
+    graphics: bool,
+    inventory: ApplicationInventory | None,
+    collected_skips: int | None,
+    timing: bool,
+) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
     glyph_base = f"{banner_assets}/report-glyphs/" if graphics else ""

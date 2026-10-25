@@ -55,6 +55,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--badge", type=Path, help="shields.io endpoint JSON to write with the report's headline")
     parser.add_argument(
+        "--own-text",
+        action="store_true",
+        help="The contracts are this repository's own code (not a pull request from another repository's fork): "
+        "keep their mentions, issue references and links live",
+    )
+    parser.add_argument(
         "--stage-artifact",
         type=Path,
         help="Empty directory receiving the evidence this render used, under fixed names, for a trusted re-render",
@@ -99,6 +105,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             revision=revision,
             graphics=args.graphics,
             timing=timing,
+            own_text=args.own_text,
         )
 
     body = rendered(run_url=args.run_url, source=args.source, revision=args.revision)
