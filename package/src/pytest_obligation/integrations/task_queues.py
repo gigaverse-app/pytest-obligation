@@ -20,11 +20,14 @@ It imports no framework: the integrations for django-tasks-db and RQ bind it.
 import signal
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 from pytest_obligation.contract import Decline, NotApplicable
 from pytest_obligation.crash_histories import ExternalCall, Findings, HandoffHistory
 from pytest_obligation.models import HarnessModel
+
+#: A queue's task identity: RQ's job ids are strings, a database queue's are often integers.
+TaskId = TypeVar("TaskId")
 
 #: The shutdown signals task-queue workers install their own handlers for.
 WORKER_SIGNALS = tuple(getattr(signal, name) for name in ("SIGINT", "SIGTERM", "SIGQUIT") if hasattr(signal, name))
@@ -84,15 +87,15 @@ class TaskOutcome(HarnessModel):
 
 def worker_history(
     *,
-    enqueue: Callable[[], str],
-    effect: Callable[[str], Any],
-    expected: TaskOutcome | Callable[[str], TaskOutcome],
-    status_of: Callable[[str], str],
+    enqueue: Callable[[], TaskId],
+    effect: Callable[[TaskId], Any],
+    expected: TaskOutcome | Callable[[TaskId], TaskOutcome],
+    status_of: Callable[[TaskId], str],
     run_worker: Callable[..., object],
     external_calls: Sequence[ExternalCall] = (),
     name: str = "the worker runs a task",
     findings: Findings | None = None,
-) -> HandoffHistory[str, TaskOutcome]:
+) -> HandoffHistory[TaskId, TaskOutcome]:
     """
     The worker itself as the transition: ``run_worker`` runs the task ``enqueue`` enqueued.
 
@@ -101,7 +104,7 @@ def worker_history(
     sent); ``status_of`` reads the status the queue recorded for it.
     """
 
-    def observe(task_id: str) -> TaskOutcome:
+    def observe(task_id: TaskId) -> TaskOutcome:
         return TaskOutcome(status=status_of(task_id), effect=effect(task_id))
 
     return HandoffHistory(

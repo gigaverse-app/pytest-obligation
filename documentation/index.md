@@ -11,8 +11,15 @@ Bind an `ObligationContract` to your application's real commands, recovery and
 observable outcomes. pytest-obligation generates pytest cases that inject faults
 and check those outcomes. It works with existing application code; Due is optional.
 
-[Run the SQLite example](../package/docs/adopting.md#try-a-complete-example-first){ .md-button .md-button--primary }
+[Start a tutorial](../package/docs/tutorials.md){ .md-button .md-button--primary }
+[Run the SQLite example](../package/docs/adopting.md#try-a-complete-example-first){ .md-button }
 [Understand the guarantees](../package/docs/how-it-works.md){ .md-button }
+
+New here? The [tutorials](../package/docs/tutorials.md) walk through a checkout
+that spans a database, a payment provider, a queue, a cache and email, and a
+small task queue that ships generated tests to its users. The
+[vocabulary](../package/docs/vocabulary.md) defines each term from the failure it
+prevents.
 
 ## Install in your test environment
 
