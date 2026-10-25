@@ -1,5 +1,6 @@
 """The reference Celery application the worker self-tests run: a task that sends a message, its link, its errback."""
 
+import os
 from typing import Any
 
 import redis
@@ -7,6 +8,8 @@ from celery import Celery
 
 from tests.redis_databases import redis_url
 
+#: A Redis server of its own for the broker-full history: that fault refuses writes on the whole server.
+OWN_BROKER = os.environ.get("CELERY_OWN_BROKER_URL", "redis://localhost:6380/0")
 BROKER = redis_url("celery broker")
 BACKEND = redis_url("celery backend")
 #: What the tasks did, readable from the test process and every worker process.
