@@ -21,7 +21,8 @@ Each block models one of those facts and knows nothing about any provider:
   applies on acceptance, so ordinary tests keep working; :meth:`AsyncTasks.held`
   keeps acceptances pending until the test completes or fails them.
 
-A fake method calls the boundary first, then applies or accepts::
+A fake method calls the boundary first and returns any refusal it hands back,
+then applies or accepts::
 
     class FakeUsers:
         def __init__(self) -> None:
@@ -32,8 +33,10 @@ A fake method calls the boundary first, then applies or accepts::
             self.tasks = AsyncTasks()
             self.existing: set[str] = set()
 
-        def delete_users(self, user_ids: list[str]) -> dict[str, str]:
-            self.boundary.call("delete_users", user_ids)
+        def delete_users(self, user_ids: list[str]) -> object:
+            # An exception refusal is raised; a reply-shaped one comes back here.
+            if (refused := self.boundary.call("delete_users", user_ids)) is not None:
+                return refused
             task_id = self.tasks.accept("delete_users", lambda: self.existing.difference_update(user_ids))
             return {"task_id": task_id}
 
