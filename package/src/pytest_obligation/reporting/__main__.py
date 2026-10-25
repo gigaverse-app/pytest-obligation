@@ -6,8 +6,8 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from pytest_obligation.reporting.artifact import INVENTORY_UNAVAILABLE, RenderManifest, stage
 from pytest_obligation.reporting import badge, readme
+from pytest_obligation.reporting.artifact import INVENTORY_UNAVAILABLE, RenderManifest, stage
 from pytest_obligation.reporting.compose import merge_evidence, render_merged, safe_run_url, write_report
 from pytest_obligation.reporting.inventory import ApplicationInventory, discover
 

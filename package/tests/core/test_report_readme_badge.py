@@ -86,9 +86,7 @@ def test_update_reports_whether_the_document_changed(tmp_path: Path) -> None:
     ],
     ids=["all-passed", "known-defect", "fixed-upstream-fails-the-run", "unexpected-pass", "unexpected-failure"],
 )
-def test_the_badge_is_the_reports_headline(
-    cases: list[CaseEvidence], outcome: str, message: str, color: str
-) -> None:
+def test_the_badge_is_the_reports_headline(cases: list[CaseEvidence], outcome: str, message: str, color: str) -> None:
     value = badge({"worker": _suite(*cases)}, unavailable="", test_outcome=outcome)  # type: ignore[arg-type]
     assert (value.message, value.color) == (message, color)
 
