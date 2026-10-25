@@ -40,6 +40,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -202,19 +203,44 @@ RESULTS_ARE_NOT_OWED = "stored results are the record of settled work, not work 
 def worker_contract(
     *,
     name: str,
-    history: ProcessHistory[Any, Any],
+    process_handoffs: Sequence[ProcessHistory[Any, Any]] = (),
+    handoff_gaps: Mapping[str, str] | None = None,
+    history: ProcessHistory[Any, Any] | None = None,
     gap: str | None = None,
     fixtures: tuple[str, ...] = (),
 ) -> ObligationContract:
     """
-    Celery's contract with its worker: one task through the real worker, failing at each of Celery's stages.
+    Celery's contract with its worker: the adopter's work through the real worker, failing at each of Celery's stages.
 
-    ``history`` is :func:`worker_history` for one of the adopter's tasks, a
-    process handoff of the contract. What it finds is declared as ``gap``, a
-    strict xfail, and, when the history carries its ``findings``, pinned
-    history by history in the same run. The profiles Celery leaves to the
-    broker or to the task are declined with the reason.
+    ``process_handoffs`` are :func:`worker_history` histories for the
+    adopter's work (a task, a chain, a chord), and ``handoff_gaps`` declares
+    what each one finds by history name, a strict xfail: the same fields, with
+    the same meaning, as :class:`ObligationContract`'s. When a history carries
+    its ``findings``, they are pinned history by history in the same run. The
+    profiles Celery leaves to the broker or to the task are declined with the
+    reason.
+
+    ``history=`` and ``gap=`` are the deprecated one-history form; they still
+    work, and warn. Pass ``process_handoffs=(history,)`` and
+    ``handoff_gaps={history.name: gap}`` instead.
     """
+    if history is not None:
+        warnings.warn(
+            "worker_contract(history=..., gap=...) is deprecated; pass process_handoffs=(history,) and "
+            "handoff_gaps={history.name: gap}",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        assert not process_handoffs and handoff_gaps is None, (
+            f"{name}: bind histories with process_handoffs= and handoff_gaps=, or one with the deprecated "
+            "history= and gap=, not both"
+        )
+        process_handoffs = (history,)
+        handoff_gaps = {history.name: gap} if gap is not None else {}
+    else:
+        assert gap is None, f"{name}: gap= belongs to the deprecated history=; declare gaps in handoff_gaps="
+    assert process_handoffs, f"{name}: a Celery worker contract binds at least one history"
+    # Unique history names and gaps that name a bound history are ObligationContract's own design checks.
     return ObligationContract(
         name=name,
         adoption=Adoption.LEGACY,
@@ -235,8 +261,8 @@ def worker_contract(
             Profile.G: application_gate("Celery"),
             Profile.I: application_admission("Celery"),
         },
-        process_handoffs=(history,),
-        handoff_gaps={history.name: gap} if gap is not None else {},
+        process_handoffs=tuple(process_handoffs),
+        handoff_gaps=dict(handoff_gaps or {}),
         fixtures=fixtures,
     )
 

@@ -25,6 +25,20 @@ configure(django_host(production_packages={"myapp"}))
 | `[prefect]` | Real flow-body execution and declared recurrence checks. [Scope](prefect.md) |
 | `[aiokafka]` | `AIOKafkaConsumer` acknowledgement and offset-commit faults with broker replay. [Scope](aiokafka.md) |
 
+`celery_worker.worker_contract()` binds the adopter's `worker_history()` histories (a task, a chain, a
+chord) the way `ObligationContract` does, with `process_handoffs=` and `handoff_gaps=` keyed by
+history name:
+
+```python
+CONTRACT = worker_contract(
+    name="orders worker",
+    process_handoffs=(SEND_MESSAGE, CHORD),
+    handoff_gaps={CHORD.name: "a refused body publish fails the chord for good"},
+)
+```
+
+The one-history form, `history=` with `gap=`, is deprecated: it still works and warns.
+
 The harness can test a Shopify integration or any other external API through
 the application's real Python call and observed effects. The optional-import,
 dependency-free [Shopify billing simulator](shopify.md) models accepted keys,
