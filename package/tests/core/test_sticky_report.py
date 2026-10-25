@@ -1,5 +1,6 @@
 """Exercise report conclusions through real generated tests, then the public renderer."""
 
+import html
 import json
 import os
 import subprocess
@@ -204,6 +205,41 @@ def test_stored_verdicts_and_application_text_cannot_forge_a_green_report() -> N
     assert "✅ All claims" not in body
     assert "<img src=x>" not in body and "@everyone" not in body and "[click](bad)" not in body
     assert "Owed work is discovered from stored facts" in body
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "@everyone",
+        "@gigaverse-app/engineering",
+        "celery/celery#10725",
+        "#10725",
+        "https://evil.example/x.png",
+        "www.evil.example",
+        "https://github.com/celery/celery/issues/10949",
+        # GitHub cross-references owner/repo/issues/N and /pull/N wherever they appear, with or without a host.
+        "celery/celery/issues/10949",
+        "github.com/celery/celery/pull/10950",
+    ],
+)
+@pytest.mark.parametrize("graphics", [False, True])
+def test_application_text_cannot_mention_link_or_cross_reference(text: str, graphics: bool) -> None:
+    # GitHub decodes HTML entities before it finds mentions, issue references and bare URLs, so the
+    # check reads the body as GitHub does: an entity-encoded "&#64;everyone" still pings everyone.
+    # Measured with GitHub's Markdown API (POST /markdown); a zero-width space breaks each of them.
+    suite = SuiteCoverage(
+        name=f"orders {text}",
+        profiles={
+            "F": ProfileCoverage(
+                title="discovery",
+                assessment=Assessment(state="not applicable", because=f"see {text}"),
+                cases={},
+            )
+        },
+    )
+    body = html.unescape(render({"test_app.Orders": suite}, graphics=graphics))
+    assert "orders" in body and "see" in body, "the application text must still be shown"
+    assert text not in body, f"{text!r} reaches GitHub intact, where it mentions, links or cross-references"
 
 
 @pytest.mark.parametrize("content", [None, "{broken", '{"unknown": {}}'])

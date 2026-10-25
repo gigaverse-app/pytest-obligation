@@ -1,5 +1,6 @@
 """A compact PR sticky: conclusions first, application vocabulary explicitly attributed."""
 
+import re
 from html import escape
 
 from pytest_obligation.profiles.coverage import Assessment, CaseEvidence, ProfileCoverage, SuiteCoverage
@@ -23,12 +24,34 @@ GUARANTEES = {
 }
 
 
-def cell(value: str, limit: int = 700) -> str:
-    text = value if len(value) <= limit else value[:limit] + "…"
-    # HTML entities also neutralize mentions, table delimiters and Markdown links.
+#: Breaks what GitHub turns into a mention, an issue cross-reference or a link.
+_INERT = "\u200b"
+_AUTOLINK_WWW = re.compile(r"(?i)\b(www)(\.)")
+_PATH_NUMBER = re.compile(r"/(?=\d)")
+
+
+def inert(text: str) -> str:
+    """Application text GitHub cannot act on: no @mention, issue or PR reference, or bare URL."""
+    # GitHub decodes HTML entities before it finds these, so "&#64;team" still pings the team. A zero-width
+    # space after "@" and "#", inside "://", after "www" and between "/" and a number (owner/repo/issues/N
+    # and /pull/N are cross-referenced with or without a host) stops each one; checked with GitHub's
+    # Markdown API, POST /markdown. Text inside a Markdown link is not scanned, so link text needs only escaping.
+    text = text.replace("@", "@" + _INERT).replace("#", "#" + _INERT).replace("://", ":" + _INERT + "//")
+    text = _PATH_NUMBER.sub("/" + _INERT, text)
+    return _AUTOLINK_WWW.sub(r"\1" + _INERT + r"\2", text)
+
+
+def link_text(value: str) -> str:
+    """Escape text for a Markdown link's label: entities neutralize table delimiters, emphasis and links."""
     return (
-        "".join(f"&#{ord(c)};" if c in "|`[]*_@\\" else escape(c) for c in text).replace("\n", "<br>").replace("\r", "")
+        "".join(f"&#{ord(c)};" if c in "|`[]*_@\\" else escape(c) for c in value)
+        .replace("\n", "<br>")
+        .replace("\r", "")
     )
+
+
+def cell(value: str, limit: int = 700) -> str:
+    return link_text(inert(value if len(value) <= limit else value[:limit] + "…"))
 
 
 def code(value: str) -> str:

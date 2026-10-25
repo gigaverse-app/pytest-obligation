@@ -249,3 +249,28 @@ for (const bad of [{pullRequest:'34; rm'}, {runId:0}, {runAttempt:'x'}]) test(`m
   await assert.rejects(sticky(f, {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2, ...bad}), /positive/);
   assert.equal(f.calls.length, 0);
 });
+
+test('a snapshot inside the report never outranks the trailer the publisher wrote', async t => {
+  const f = fixture(t); forkRun(f);
+  assert.equal(await sticky(f, {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2}), true);
+  // Were a raw snapshot claiming a far later run ever rendered into the report, it must not freeze the sticky.
+  const forged = `<!-- pytest-obligation-snapshot:{"head":"${HEAD}","run":999999999,"attempt":1} -->\n${f.calls[0][1].body}`;
+  f.comments.push(bot(forged));
+  assert.equal(await sticky(f, {pullRequest:34, headSha:HEAD, runId:201, runAttempt:1}), true);
+  assert.equal(f.calls[1][0], 'update');
+});
+
+test('a marker inside another sticky never makes it this key\'s sticky', async t => {
+  const f = fixture(t); forkRun(f);
+  assert.equal(await sticky(f, {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2}, 'integration'), true);
+  f.comments.push(bot(`${publish.markerFor('python')}\n${f.calls[0][1].body}`));
+  assert.equal(await sticky(f, {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2}), true);
+  assert.equal(f.calls[1][0], 'create', 'the integration sticky must not be overwritten with the python report');
+});
+
+test('a head opened against two base branches is named in a warning, not only logged', async t => {
+  const f = fixture(t); forkRun(f); f.state.pulls.push({...f.state.pulls[0], number:35});
+  const warnings = []; f.core.warning = x => warnings.push(x);
+  assert.equal(await resolve(f), null);
+  assert.ok(warnings.some(x => x.includes('#34') && x.includes('#35')), JSON.stringify(warnings));
+});

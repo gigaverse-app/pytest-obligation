@@ -3,7 +3,9 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 
 const BUDGET = 55000;
-const SNAPSHOT = /<!-- pytest-obligation-snapshot:(.*?) -->/;
+// The publisher always ends a sticky with its snapshot and marker; only that trailer is read, so text
+// rendered inside the report can never stand in for either.
+const TRAILER = /\r?\n<!-- pytest-obligation-snapshot:(.*?) -->\r?\n(<!-- pytest-obligation:[0-9a-f]{24} -->)\s*$/;
 
 function positive(value, what) {
   const number = Number(value);
@@ -32,9 +34,10 @@ async function publishSticky({github, context, core}, {pullRequest, headSha, run
       return false;
     }
     const comments = await github.paginate(github.rest.issues.listComments, {...context.repo, issue_number: number, per_page: 100});
-    const existing = comments.find(c => c.user?.login === 'github-actions[bot]' && c.user?.type === 'Bot' && (c.body || '').includes(marker));
+    const trailer = c => (c.body || '').match(TRAILER);
+    const existing = comments.find(c => c.user?.login === 'github-actions[bot]' && c.user?.type === 'Bot' && trailer(c)?.[2] === marker);
     if (existing) {
-      const match = existing.body.match(SNAPSHOT);
+      const match = trailer(existing);
       if (match) {
         let previous;
         try { previous = JSON.parse(match[1]); } catch { /* Repair malformed bot-owned metadata. */ }
@@ -110,9 +113,13 @@ async function resolveTriggeringRun({github, context, core}, {runId, runAttempt,
   });
   const matches = candidates.filter(pr => pr.head?.sha === run.head_sha
     && pr.head?.repo?.full_name === head.full_name && pr.base?.repo?.full_name === repository);
-  if (matches.length !== 1) {
-    return skip(`${matches.length ? 'Several' : 'No'} open pull requests in ${repository} have head ${run.head_sha} from ${head.full_name}.`);
+  if (matches.length > 1) {
+    // One run serves every PR from this head, and nothing in it says which base it was tested against.
+    core.warning(`Open pull requests ${matches.map(pr => `#${pr.number}`).join(', ')} in ${repository} share head `
+      + `${run.head_sha} from ${head.full_name}, and the run cannot be attributed to one of them. Nothing to publish.`);
+    return null;
   }
+  if (!matches.length) return skip(`No open pull request in ${repository} has head ${run.head_sha} from ${head.full_name}.`);
   const name = `obligation-${stickyKey || 'obligation'}-${attempt}`;
   const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id: id, name, per_page: 100});
   const matchingArtifacts = artifacts.filter(artifact => artifact.name === name && !artifact.expired);
