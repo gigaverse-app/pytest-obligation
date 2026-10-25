@@ -16,10 +16,11 @@ ambiguous state, only three facts about one owed operation:
    acknowledgements, one production run reaches the provider (a counted
    positive control) and the effect stays unapplied, yet the operation must
    still be owed according to production's own owed-work selection.
-2. **An applied acknowledgement does discharge.** Once the provider applies
-   what it acknowledged, a bounded number of further production runs must
-   discharge the operation. Without this, an implementation that never
-   discharges anything would pass the first proof.
+2. **An applied acknowledgement does discharge.** The operation is still owed
+   after the held run, and once the provider applies what it acknowledged, a
+   bounded number of further production runs must discharge it. Without this,
+   an implementation that never discharges anything would pass the first proof;
+   without the owed check, one that discharges on the reply would pass this one.
 
 Bind the provider half with :class:`pytest_obligation.fakes.AsyncTasks`, or any
 fake whose acknowledgements can be held and later applied. Declare it only for
@@ -146,6 +147,10 @@ def assert_an_applied_acknowledgement_discharges(effect: AcknowledgedEffect) -> 
     """INVARIANT 2: once the provider applies, production discharges within a bounded number of runs."""
     operation = _fresh(effect)
     _run_holding(effect, operation)
+    assert _is_owed(effect, operation), (
+        f"{effect.name}: production discharged the operation before the provider applied it, so this history "
+        f"cannot show that applying is what discharges it. assert_an_acknowledgement_does_not_discharge names the defect"
+    )
     effect.apply_acknowledged(operation)
     assert effect.applied(operation), (
         f"{effect.name}: apply_acknowledged did not apply the held acknowledgement, so discharge cannot be measured"
