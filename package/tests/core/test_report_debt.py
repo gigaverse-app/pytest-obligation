@@ -152,7 +152,7 @@ def test_only_executed_known_failures_join_the_failure_total(kind, outcomes, cat
     assert counts(suite)[category] == 1
     assert counts(suite)["blocked" if category == "failed" else "failed"] == 0
     body = render({"membership": suite}, graphics=True, test_outcome="success")
-    assert f'alt="{int(category == "failed")} failures"' in body
+    assert f'alt="{int(category == "failed")} contract failures"' in body
     if known:
         # The explanation is visible without opening any disclosure; CI success is separate.
         assert "**Failures: 0 unexpected + 1 known expected.**" in body.split("<details>")[0]

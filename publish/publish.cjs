@@ -94,9 +94,21 @@ async function renderSandbox(actionPath, archive, resolved, repositoryUrl, asset
   }
 }
 
-function publishedBody(markdown, resolved, repositoryUrl) {
+function workflowStatus(resolved, repositoryUrl, label = 'GitHub workflow') {
   const conclusion = CONCLUSIONS.has(resolved.conclusion) ? resolved.conclusion : 'unknown';
-  const prefix = `**GitHub workflow: ${conclusion}** · [run ${resolved.runId}, attempt ${resolved.runAttempt}](${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt})\n\n`
+  const link = `[run ${resolved.runId}, attempt ${resolved.runAttempt}](${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt})`;
+  if (conclusion === 'success') return `**${label}: success** · ${link}\n\n`;
+  const failed = ['failure', 'timed_out', 'startup_failure'].includes(conclusion);
+  // API status is always the first visual verdict. Contributor evidence cannot replace this warning.
+  return `## ${failed ? '🔴' : '🟠'} ${label} ${failed ? 'failed' : 'did not succeed'}\n\n`
+    + `> [!${failed ? 'CAUTION' : 'WARNING'}]\n`
+    + `> **GitHub reports: ${conclusion}.** ${link}\n>\n`
+    + '> Contract counts below cover only obligation checks. Other tests or workflow steps can fail even with zero contract failures. '
+    + 'Contributor-reported success does not override this workflow status.\n\n';
+}
+
+function publishedBody(markdown, resolved, repositoryUrl) {
+  const prefix = workflowStatus(resolved, repositoryUrl)
     + 'Results below were supplied by the pull request. Publishing them does not approve the code or change required checks.\n\n';
   const body = prefix + markdown;
   return body.length <= 55_000 ? body : prefix + UNAVAILABLE;
@@ -134,4 +146,4 @@ async function run({github, context, core}, env = process.env) {
 }
 
 module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, renderSandbox,
-  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS};
+  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, workflowStatus};

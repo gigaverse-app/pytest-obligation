@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory() as root:
     case = CaseEvidence(family='derive', collected=True, selected=True, outcomes={phase:['passed'] for phase in ('setup', 'call', 'teardown')})
     suite = SuiteCoverage(name='Orders', profiles={'F':ProfileCoverage(title='Discovery', assessment=Assessment(state='claimed'), cases={'derive':case})})
     (root/'report.json').write_text(json.dumps({'example.TestOrders':suite.model_dump(mode='json')}))
-    main(['--input', str(root/'report.json'), '--output', str(root/'original.md'), '--stage-artifact', str(root/'artifact'), '--test-outcome', 'success'])
+    main(['--input', str(root/'report.json'), '--output', str(root/'original.md'), '--stage-artifact', str(root/'artifact'), '--test-outcome', 'success', '--graphics'])
     (root/'artifact/report.md').write_text('FORGED MARKDOWN https://evil.invalid')
     (root/'artifact/sitecustomize.py').write_text('raise RuntimeError("UNTRUSTED IMPORT")')
     with zipfile.ZipFile(root/'archive.zip', 'w') as output:
@@ -42,8 +42,9 @@ with tempfile.TemporaryDirectory() as root:
 after(async () => { if (directory) await fs.rm(directory, {recursive:true, force:true}); });
 
 test('real producer archive renders in the sandbox without importing or posting planted files', async () => {
-  const body = await renderSandbox(__dirname, archive, {headSha:'a'.repeat(40), runId:7, runAttempt:1}, 'https://github.com/example/project', 'main');
-  assert.match(body, /1 checks passed/);
+  const body = await renderSandbox(__dirname, archive, {headSha:'a'.repeat(40), runId:7, runAttempt:1, conclusion:'success'}, 'https://github.com/example/project', 'main');
+  assert.match(body, /1 contract checks passed/);
+  assert.match(body, /\/good-/);
   assert.match(body, /Test step \(reported\): \*\*success\*\*/);
   assert.doesNotMatch(body, /FORGED MARKDOWN|evil.invalid|UNTRUSTED IMPORT|Evidence unavailable/);
 });
@@ -56,8 +57,11 @@ test('preview downloads real producer evidence, renders in Docker and updates on
   assert.equal(second.url, first.url);
   assert.equal(f.state.comments.length, 1);
   const body = f.state.comments[0].body;
-  assert.match(body, /1 checks passed/);
-  assert.match(body, /Fork workflow: failure/);
+  assert.match(body, /1 contract checks passed/);
+  assert.match(body, /^## 🔴 Fork workflow failed/);
+  assert.match(body, /\[!CAUTION\]/);
+  assert.match(body, /\/good-1-/);
+  assert.match(body, /### Obligation contract checks/);
   assert.match(body, /Test step \(reported\): \*\*success\*\*/);
   assert.doesNotMatch(body, /FORGED MARKDOWN|evil.invalid|UNTRUSTED IMPORT|Evidence unavailable/);
 });

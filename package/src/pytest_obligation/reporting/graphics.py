@@ -7,7 +7,14 @@ from unicodedata import combining, east_asian_width
 from .evidence import cell, inert
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
-LABELS = ("applications", "checks passed", "failures", "blocked checks", "coverage gaps", "rejected bindings")
+LABELS = (
+    "applications",
+    "contract checks passed",
+    "contract failures",
+    "blocked checks",
+    "coverage gaps",
+    "rejected bindings",
+)
 
 
 def _picture(base: str, name: str, width: int, height: int, alt: str = "") -> str:
@@ -55,7 +62,7 @@ def summary_html(values: Mapping[str, int | None], base: str, *, neutral: bool =
         value = values[key]
         if value is None:
             parts += [
-                _picture(base, "neutral-unknown", 18, 36, f"{label}: unknown"),
+                _picture(base, "warning-unknown", 18, 36, f"{label}: unknown"),
                 _space(base, positions[i + 1] - positions[i] - 18),
             ]
             continue
@@ -78,7 +85,7 @@ def summary_html(values: Mapping[str, int | None], base: str, *, neutral: bool =
             parts += [_space(base, positions[2] - 13 - end), _picture(base, "divider", 1, 36), _space(base, 12)]
         else:
             parts.append(_space(base, positions[i + 1] - end))
-    return "<p>" + "".join(parts) + "<br>" + _picture(base, captions, 640, 22, " · ".join(labels)) + "</p>"
+    return "<p>" + "".join(parts) + "<br>" + _picture(base, captions, 640, 34, " · ".join(labels)) + "</p>"
 
 
 def application_name(name: str) -> tuple[str, bool]:

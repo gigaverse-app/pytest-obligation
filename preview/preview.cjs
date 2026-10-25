@@ -4,11 +4,11 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {parseArgs} = require('node:util');
-const {downloadArchive, renderSandbox, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS} = require('../publish/publish.cjs');
+const {downloadArchive, renderSandbox, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, workflowStatus} = require('../publish/publish.cjs');
 
 const API = 'https://api.github.com';
 const ACTION_PATH = path.resolve(__dirname, '../publish');
-const ASSET_REF = '6936ca68ce5252e4387e8f14de8bdb076b6b4777';
+const ASSET_REF = '6fb0cf0eb800db8078aeaa47e6706cdddcf00d36';
 const TRAILER = /\n<!-- pytest-obligation-preview-snapshot:(.*?) -->\n(<!-- pytest-obligation-preview:[0-9a-f]{24} -->)\s*$/;
 const BUDGET = 55000;
 class PreviewError extends Error {}
@@ -105,10 +105,9 @@ async function resolve(api, input) {
 
 function bodyFor(markdown, input, resolved) {
   const source = `https://github.com/${input.sourceRepository}`;
-  const prefix = '**Preview from the PR contributor**\n\n'
+  const prefix = workflowStatus(resolved, source, 'Fork workflow') + '**Preview from the PR contributor**\n\n'
     + 'No installation, repository access or credentials were requested from the target project. '
     + 'This is a report from the contributor\'s fork; viewing it runs no project code.\n\n'
-    + `**Fork workflow: ${resolved.conclusion}** · [run ${resolved.runId}, attempt ${resolved.runAttempt}](${source}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt})\n\n`
     + `Commit: [\`${resolved.headSha}\`](${source}/commit/${resolved.headSha}). Results below are contributor-reported evidence, not the target project's CI or approval.\n\n`;
   return prefix + (prefix.length + markdown.length <= BUDGET ? markdown : UNAVAILABLE);
 }

@@ -50,7 +50,9 @@ test('a changed archive is discarded', async t => {
 
 test('workflow failure from the API stays visible above producer success claims', () => {
   const body = publishedBody('Test step (reported): **success**', {conclusion: 'failure', runId: 7, runAttempt: 2}, 'https://github.com/owner/project');
-  assert.match(body, /^\*\*GitHub workflow: failure\*\*/);
+  assert.match(body, /^## 🔴 GitHub workflow failed/);
+  assert.match(body, /> \[!CAUTION\]/);
+  assert.match(body, /Other tests or workflow steps can fail/);
   assert.match(body, /Results below were supplied by the pull request/);
   assert.match(body, /attempts\/2/);
 });
@@ -61,3 +63,12 @@ test('oversized renderer output recovers to an unavailable report with API statu
   assert.match(body, /Evidence unavailable/);
   assert.match(body, /GitHub workflow: success/);
 });
+
+for (const conclusion of ['timed_out', 'startup_failure', 'cancelled', 'neutral', 'skipped', 'unknown']) {
+  test(`${conclusion} cannot be presented as a successful workflow`, () => {
+    const body = publishedBody('Test step (reported): **success**', {conclusion, runId:7, runAttempt:1}, 'https://github.com/owner/project');
+    const failed = ['timed_out', 'startup_failure'].includes(conclusion);
+    assert.ok(body.startsWith(failed ? '## 🔴 GitHub workflow failed' : '## 🟠 GitHub workflow did not succeed'));
+    assert.match(body, new RegExp(`GitHub reports: ${conclusion}`));
+  });
+}

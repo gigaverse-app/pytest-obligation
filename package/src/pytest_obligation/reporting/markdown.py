@@ -96,8 +96,8 @@ def _execution_summary(
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = {
     "applications": "Applications",
-    "passed": "Checks passed",
-    "failed": "Failures",
+    "passed": "Contract checks passed",
+    "failed": "Contract failures",
     "blocked": "Blocked checks",
     "gaps": "Coverage gaps",
     "rejected": "Rejected bindings",
@@ -215,7 +215,13 @@ def _hypothesis(suite: SuiteCoverage) -> list[str]:
 
 
 def _suite(
-    key: str, suite: SuiteCoverage, repository_url: str, revision: str, glyph_base: str, *, compact: bool = False
+    key: str,
+    suite: SuiteCoverage,
+    repository_url: str,
+    revision: str,
+    glyph_base: str,
+    *,
+    compact: bool = False,
 ) -> str:
     values = counts(suite)
     description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
@@ -384,10 +390,23 @@ def render(
         f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
         "",
     ]
+    if test_outcome == "failure":
+        head = [
+            "## 🔴 Test step failed",
+            "",
+            "> [!CAUTION]",
+            "> The reported test step failed. Contract counts cover only obligation checks; inspect the run for other failures.",
+            "",
+            *head,
+        ]
     skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
     if collected_skips is not None:
         skipped, incomplete = collected_skips, False
     head += [
+        "### Obligation contract checks",
+        "",
+        "Other pytest tests and workflow steps are not included in these counts.",
+        "",
         _totals(
             dict(totals), glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped
         ),
@@ -437,7 +456,7 @@ def render(
         "- **Coverage gaps:** guarantees not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once. Deliberate exclusions are shown separately.",
         "",
         "Pass/fail/blocked/rejected counts partition unique checks. Gaps count guarantees, not extra tests. "
-        "Declined and not-applicable declarations remain separate and do not establish passing coverage. Graphics show zero issues in green; missing reports never show green zeroes.",
+        "Declined and not-applicable declarations remain separate and do not establish passing coverage. Graphics color contract results: passing checks and zero issues are green, failures and rejected bindings are red, blocked checks and gaps are amber. Missing reports never show green zeroes. The workflow status above is separate from these contract counts.",
         "",
         "Elapsed time covers the pytest session. Summed check time includes setup, execution and cleanup; parallel work overlaps.",
         "Application totals include discovered declarations and reported suites. Skipped checks count known deselections and explicit pytest skips; incomplete selected checks are not skips. Uncollected applications have unknown check counts. Zero recorded outcomes do not certify passing coverage.",

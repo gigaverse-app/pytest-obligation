@@ -44,8 +44,8 @@ def test_changed_counts_only_select_existing_glyphs_and_preserve_status_colors()
     values = dict(applications=3, passed=251, failed=2, blocked=0, gaps=2, rejected=1)
     before = summary_html(values, BASE)
     after = summary_html(dict(values, passed=1251, failed=0), BASE)
-    assert 'alt="251 checks passed"' in before
-    assert 'alt="1251 checks passed"' in after
+    assert 'alt="251 contract checks passed"' in before
+    assert 'alt="1251 contract checks passed"' in after
     assert "bad-2-dark.svg" in before and "good-0-dark.svg" in after
     assert "warning-2-dark.svg" in before
     for body in (before, after):
@@ -122,7 +122,7 @@ def test_cli_writes_one_markdown_report_without_a_graphics_bundle(tmp_path: Path
     )
     assert result.returncode == 0, result.stderr
     body = output.read_text(encoding="utf-8")
-    assert "order receipts" in body and 'alt="1 failures"' in body
+    assert "order receipts" in body and 'alt="1 contract failures"' in body
     assert "/report-glyphs/" in body
     assert not output.with_suffix(".graphics.json").exists()
     assert {p.name for p in tmp_path.iterdir()} == {"evidence.json", "report.md"}
@@ -162,6 +162,32 @@ def test_application_disclosures_have_markdown_block_boundaries() -> None:
     suites = {str(i): SuiteCoverage(name=f"application {i}", profiles={}) for i in range(3)}
     body = render(suites, graphics=True)
     assert "</details>\n---" not in body
+
+
+def test_failed_test_step_precedes_branding_and_preserves_colored_contract_counts() -> None:
+    case = CaseEvidence(
+        family="replay",
+        collected=True,
+        selected=True,
+        outcomes={phase: ["passed"] for phase in ("setup", "call", "teardown")},
+    )
+    failed = case.model_copy(update={"outcomes": {"setup": ["passed"], "call": ["failed"], "teardown": ["passed"]}})
+    suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": case, "broken": failed})
+    body = render({"tests.Orders": suite}, graphics=True, test_outcome="failure")
+    assert body.startswith("## 🔴 Test step failed")
+    assert 'alt="1 contract failures"' in body
+    assert 'alt="1 contract checks passed"' in body
+    assert "/good-1-" in body and "/bad-1-" in body
+    assert "### Obligation contract checks" in body
+    assert "Other pytest tests and workflow steps are not included" in body
+
+
+def test_incomplete_evidence_uses_an_amber_question_mark_for_unknown_counts() -> None:
+    body = render({}, graphics=True, test_outcome="failure", unavailable="Expected report is missing.")
+    assert 'alt="skipped tests: unknown"' in body
+    assert "warning-unknown-light.svg" in body and "warning-unknown-dark.svg" in body
+    assert "/good-0-" not in body
+    assert "Evidence unavailable" in body
 
 
 def test_large_overview_folds_clean_apps_and_safely_wraps_long_names() -> None:
