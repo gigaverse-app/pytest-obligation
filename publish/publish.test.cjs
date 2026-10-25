@@ -53,7 +53,6 @@ test('workflow failure from the API stays visible above producer success claims'
   assert.match(body, /^## 🔴 GitHub workflow failed/);
   assert.match(body, /> \[!CAUTION\]/);
   assert.match(body, /Other tests or workflow steps can fail/);
-  assert.match(body, /Results below were supplied by the pull request/);
   assert.match(body, /attempts\/2/);
 });
 

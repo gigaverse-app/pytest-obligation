@@ -108,8 +108,7 @@ function workflowStatus(resolved, repositoryUrl, label = 'GitHub workflow') {
 }
 
 function publishedBody(markdown, resolved, repositoryUrl) {
-  const prefix = workflowStatus(resolved, repositoryUrl)
-    + 'Results below were supplied by the pull request. Publishing them does not approve the code or change required checks.\n\n';
+  const prefix = workflowStatus(resolved, repositoryUrl);
   const body = prefix + markdown;
   return body.length <= 55_000 ? body : prefix + UNAVAILABLE;
 }
