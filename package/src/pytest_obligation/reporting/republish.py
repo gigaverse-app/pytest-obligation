@@ -8,9 +8,11 @@ read, so every escaping decision belongs to this revision of the reporter.
 
 import argparse
 import re
+import zipfile
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from pytest_obligation.reporting.artifact import load
+from pytest_obligation.reporting.artifact import ARCHIVE_UNAVAILABLE, StagedEvidence, extract_archive, load
 from pytest_obligation.reporting.compose import render_evidence, safe_run_url, write_report
 
 
@@ -39,9 +41,22 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.run_url and not safe_run_url(args.run_url):
         parser.error("run URL must be an HTTPS URL without Markdown delimiters")
-    evidence = load(args.artifact)
+    # Keep extracted paths alive until rendering completes; no artifact path becomes an import.
+    with TemporaryDirectory(prefix="obligation-evidence-") as temporary:
+        if args.artifact.is_file():
+            try:
+                directory = Path(temporary)
+                extract_archive(args.artifact, directory)
+                evidence = load(directory)
+            except (OSError, ValueError, zipfile.BadZipFile, RuntimeError, NotImplementedError):
+                evidence = StagedEvidence(manifest=None, problems=[ARCHIVE_UNAVAILABLE])
+        else:
+            evidence = load(args.artifact)
+        _render(args, evidence)
+
+
+def _render(args: argparse.Namespace, evidence: StagedEvidence) -> None:
     manifest = evidence.manifest
-    commit = f" · workflow commit {manifest.revision}" if manifest and manifest.revision else ""
     body = render_evidence(
         evidence.reports,
         expected_reports=manifest.expected_reports if manifest else 0,
@@ -50,10 +65,11 @@ def main(argv: list[str] | None = None) -> None:
         problems=evidence.problems,
         junit=evidence.junit if manifest and manifest.junit else None,
         run_url=args.run_url,
-        source=f"PR head {args.head_sha}{commit} · run {args.run_id} · attempt {args.run_attempt}",
+        source=f"PR head {args.head_sha} · run {args.run_id} · attempt {args.run_attempt}",
         asset_ref=args.asset_ref,
         repository_url=args.repository_url,
-        revision=manifest.revision if manifest else "",
+        # The source link is anchored to the API-verified PR head. A producer's revision is only a claim.
+        revision=args.head_sha,
         graphics=manifest.graphics if manifest else False,
     )
     write_report(args.output, body, evidence.inventory)

@@ -25,6 +25,7 @@ function fixture(t) {
     },
     actions:{
       getWorkflowRun:async params => { requests.push(['run', params]); return {data:state.run}; },
+      getWorkflowRunAttempt:async params => ({data:{...state.run, conclusion:state.attemptConclusion || 'failure', run_attempt:params.attempt_number}}),
       listWorkflowRunArtifacts:params => { requests.push(['artifacts', params]); return state.artifacts; },
     },
   }};
@@ -112,6 +113,8 @@ test('fixed graphics publish with comment permission and never touch Git storage
 // The workflow_run publisher: a fork's run, looked up through the API only.
 
 const HEAD = 'f'.repeat(40);
+const artifact = name => ({name, id:123, expired:false, size_in_bytes:1024, digest:`sha256:${'a'.repeat(64)}`});
+const artifactIdentity = {artifactId:123, artifactBytes:1024, artifactDigest:`sha256:${'a'.repeat(64)}`, conclusion:'failure'};
 
 function forkRun(f, overrides = {}) {
   f.context.eventName = 'workflow_run';
@@ -120,14 +123,14 @@ function forkRun(f, overrides = {}) {
   f.state.run = {id:200, run_attempt:3, event:'pull_request', head_sha:HEAD, head_branch:'feature',
     head_repository:{full_name:'fork/app', owner:{login:'fork'}}, conclusion:'failure', pull_requests:[], ...overrides};
   f.state.pulls = [{number:34, head:{sha:HEAD, repo:{full_name:'fork/app'}}, base:{repo:{full_name:'owner/app'}}}];
-  f.state.artifacts = [{name:'obligation-python-2', expired:false}];
+  f.state.artifacts = [artifact('obligation-python-2')];
 }
 
 const resolve = (f, input = {}) => resolveTriggeringRun({github:f.github, context:f.context, core:f.core}, {stickyKey:'python', ...input});
 
 test('a fork PR is found by its head owner and branch, and must point at the run head', async t => {
   const f = fixture(t); forkRun(f);
-  assert.deepEqual(await resolve(f), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2, artifact:'obligation-python-2'});
+  assert.deepEqual(await resolve(f), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:2, artifact:'obligation-python-2', ...artifactIdentity});
   const [, query] = f.requests.find(([kind]) => kind === 'pulls');
   assert.deepEqual(query, {owner:'owner', repo:'app', state:'open', head:'fork:feature', per_page:100});
   const [, artifacts] = f.requests.find(([kind]) => kind === 'artifacts');
@@ -169,11 +172,23 @@ for (const artifacts of [[], [{name:'obligation-python-2', expired:true}], [{nam
 test('the attempt comes from the event, an explicit input, or the run, in that order of authority', async t => {
   const f = fixture(t); forkRun(f);
   assert.equal((await resolve(f)).runAttempt, 2);
-  f.state.artifacts = [{name:'obligation-python-1', expired:false}];
+  f.state.artifacts = [artifact('obligation-python-1')];
   assert.equal((await resolve(f, {runAttempt:'1'})).runAttempt, 1);
   f.context.payload = {};
-  f.state.artifacts = [{name:'obligation-python-3', expired:false}];
-  assert.deepEqual(await resolve(f, {runId:'200'}), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:3, artifact:'obligation-python-3'});
+  f.state.artifacts = [artifact('obligation-python-3')];
+  assert.deepEqual(await resolve(f, {runId:'200'}), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:3, artifact:'obligation-python-3', ...artifactIdentity});
+});
+
+test('the conclusion belongs to the requested attempt, not a newer retry', async t => {
+  const f = fixture(t); forkRun(f, {conclusion:'success'});
+  f.state.attemptConclusion = 'cancelled';
+  assert.equal((await resolve(f)).conclusion, 'cancelled');
+});
+
+test('ambiguous artifact names never choose an arbitrary upload', async t => {
+  const f = fixture(t); forkRun(f);
+  f.state.artifacts.push({...artifact('obligation-python-2'), id:456});
+  assert.equal(await resolve(f), null);
 });
 
 test('without a workflow_run event or run-id there is nothing to resolve', async t => {

@@ -6,9 +6,11 @@ Markdown the fork rendered is never read back.
 """
 
 import shutil
+import stat
+import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from pydantic import Field, ValidationError
@@ -24,7 +26,13 @@ REPORTS = "reports"
 JUNIT = "junit"
 _MAX_MANIFEST = 64_000
 _MAX_INVENTORY = 50_000_000
+MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
+MAX_EXPANDED_BYTES = 64 * 1024 * 1024
+MAX_MEMBERS = 256
+MAX_REPORT_BYTES = 10_000_000
+MAX_JUNIT_BYTES = 10_000_000
 INVENTORY_UNAVAILABLE = "Collected test inventory is missing, invalid, or from a different revision."
+ARCHIVE_UNAVAILABLE = "The evidence archive is invalid or exceeds the publisher's safety limits."
 
 TestOutcome = Literal["success", "failure", "cancelled", "skipped", "unknown"]
 
@@ -88,6 +96,66 @@ def _members(directory: Path, suffix: str) -> list[Path]:
     if directory.is_symlink() or not directory.is_dir():
         return []
     return sorted(path for path in directory.iterdir() if path.suffix == suffix and _regular(path))
+
+
+def extract_archive(archive: Path, destination: Path) -> None:
+    """Validate the entire ZIP before writing; copy only the evidence layout into an empty directory.
+
+    This runs inside the publisher's credential-free container. Metadata budgets are checked before
+    decompression, and actual bytes are bounded too. Never use extractall on contributor input.
+    """
+    if not _regular(archive) or archive.stat().st_size > MAX_ARCHIVE_BYTES:
+        raise ValueError(ARCHIVE_UNAVAILABLE)
+    with zipfile.ZipFile(archive) as source:
+        members = source.infolist()
+        if len(members) > MAX_MEMBERS or sum(member.file_size for member in members) > MAX_EXPANDED_BYTES:
+            raise ValueError(ARCHIVE_UNAVAILABLE)
+        names: set[str] = set()
+        selected: list[zipfile.ZipInfo] = []
+        for member in members:
+            name = member.filename
+            path = PurePosixPath(name)
+            mode = member.external_attr >> 16
+            if (
+                name in names
+                or path.is_absolute()
+                or ".." in path.parts
+                or "\\" in name
+                or ":" in name
+                or "\x00" in member.orig_filename
+                or name.rstrip("/") != path.as_posix()
+                or stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)
+                or member.flag_bits & 1
+            ):
+                raise ValueError(ARCHIVE_UNAVAILABLE)
+            names.add(name)
+            if member.is_dir():
+                continue
+            limit = None
+            if name == MANIFEST:
+                limit = _MAX_MANIFEST
+            elif name == INVENTORY:
+                limit = _MAX_INVENTORY
+            elif len(path.parts) == 2 and path.parts[0] == REPORTS and path.suffix == ".json":
+                limit = MAX_REPORT_BYTES
+            elif len(path.parts) == 2 and path.parts[0] == JUNIT and path.suffix == ".xml":
+                limit = MAX_JUNIT_BYTES
+            if limit is not None:
+                if member.file_size > limit:
+                    raise ValueError(ARCHIVE_UNAVAILABLE)
+                selected.append(member)
+        destination.mkdir(parents=True, exist_ok=True)
+        if any(destination.iterdir()):
+            raise ValueError("archive destination must be empty")
+        for member in selected:
+            target = destination / member.filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # read(n) also bounds an entry whose declared size differs from its stream.
+            with source.open(member) as stream:
+                data = stream.read(member.file_size + 1)
+            if len(data) != member.file_size:
+                raise ValueError(ARCHIVE_UNAVAILABLE)
+            target.write_bytes(data)
 
 
 def load(directory: Path) -> StagedEvidence:

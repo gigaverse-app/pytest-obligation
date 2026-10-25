@@ -2,7 +2,8 @@ name: Obligation sticky
 
 # A fork PR's CI token cannot comment, so CI's report step only uploads its evidence artifact.
 # GitHub runs this workflow_run file from the default branch with a write token; the publish action
-# re-renders that artifact as data and posts the sticky. It never checks out or runs the PR's code.
+# re-renders data in an offline container with no credentials and posts the sticky.
+# It never checks out or runs the PR's code. Only reviewed changes to our main branch update this pin.
 on:
   workflow_run:
     workflows: [CI]
@@ -14,6 +15,7 @@ jobs:
   publish:
     if: ${{ github.event.workflow_run.event == 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       actions: read # Read the triggering run and download its artifact.
       pull-requests: write # Create or update the sticky comment.

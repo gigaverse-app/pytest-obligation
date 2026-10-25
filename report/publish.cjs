@@ -98,6 +98,11 @@ async function resolveTriggeringRun({github, context, core}, {runId, runAttempt,
   const attempt = positive(runAttempt || (event?.id === id ? event.run_attempt : run.run_attempt), 'triggering run attempt');
   const skip = reason => { core.info(`${reason} Nothing to publish.`); return null; };
   if (run.event !== 'pull_request') return skip(`Run ${id} was triggered by ${run.event}, not pull_request.`);
+  if (attempt > run.run_attempt) return skip(`Run ${id} has no attempt ${attempt}.`);
+  // A re-run can finish while this publisher waits. Its conclusion cannot describe the older artifact.
+  const sourceRun = attempt === run.run_attempt ? run : (await github.rest.actions.getWorkflowRunAttempt({
+    ...context.repo, run_id:id, attempt_number:attempt,
+  })).data;
   const head = run.head_repository;
   if (!head?.owner?.login || !run.head_branch) return skip(`Run ${id} has no head repository or branch.`);
   const candidates = await github.paginate(github.rest.pulls.list, {
@@ -110,10 +115,14 @@ async function resolveTriggeringRun({github, context, core}, {runId, runAttempt,
   }
   const name = `obligation-${stickyKey || 'obligation'}-${attempt}`;
   const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id: id, name, per_page: 100});
-  if (!artifacts.some(artifact => artifact.name === name && !artifact.expired)) {
+  const matchingArtifacts = artifacts.filter(artifact => artifact.name === name && !artifact.expired);
+  if (matchingArtifacts.length !== 1) {
     return skip(`Run ${id} attempt ${attempt} has no unexpired ${name} artifact.`);
   }
-  return {pullRequest: matches[0].number, headSha: run.head_sha, runId: id, runAttempt: attempt, artifact: name};
+  const artifact = matchingArtifacts[0];
+  return {pullRequest: matches[0].number, headSha: run.head_sha, runId: id, runAttempt: attempt, artifact: name,
+    artifactId:positive(artifact.id, 'artifact ID'), artifactBytes:artifact.size_in_bytes, artifactDigest:artifact.digest,
+    conclusion:sourceRun.conclusion || sourceRun.status};
 }
 
 module.exports = publish;

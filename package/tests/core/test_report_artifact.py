@@ -1,7 +1,9 @@
 """A trusted publisher re-renders the staged artifact from data alone, and reaches the same report."""
 
 import json
+import stat
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -150,7 +152,9 @@ def test_republished_report_is_the_report_the_run_rendered(
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     _evidence(tmp_path)
     original = _report(tmp_path, *(value.format(root=tmp_path) for value in SCENARIOS[scenario]))
-    assert _republish(tmp_path / "artifact", tmp_path / "republished.md") == original
+    # Evidence stays identical; only identity changes to facts the publisher can verify itself.
+    expected = original.replace(f" · workflow commit {MERGE}", "").replace(f"/blob/{MERGE}/", f"/blob/{HEAD}/")
+    assert _republish(tmp_path / "artifact", tmp_path / "republished.md") == expected
     if scenario == "collected and joined to JUnit":
         assert 'alt="2 skipped tests"' in original
 
@@ -160,7 +164,7 @@ def test_republish_never_reads_the_markdown_the_pull_request_uploaded(tmp_path: 
     original = _report(tmp_path, "--expected-reports", "2")
     (tmp_path / "artifact" / MARKDOWN).write_text("[approve](https://evil.example) @everyone <img src=x>")
     body = _republish(tmp_path / "artifact", tmp_path / "republished.md")
-    assert body == original
+    assert body == original.replace(f" · workflow commit {MERGE}", "").replace(f"/blob/{MERGE}/", f"/blob/{HEAD}/")
     assert "evil.example" not in body
 
 
@@ -228,3 +232,74 @@ def test_publisher_identity_arguments_are_strict(tmp_path: Path, option: str, va
             ["--artifact", str(tmp_path), "--output", str(tmp_path / "out.md")]
             + [item for pair in arguments.items() for item in pair]
         )
+
+
+def _archive(root: Path, extra: tuple[str | zipfile.ZipInfo, bytes] | None = None) -> Path:
+    """Use the real producer before changing one part of its transport envelope."""
+    _evidence(root)
+    _report(root, "--expected-reports", "2", "--test-outcome", "failure")
+    archive = root / "evidence.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+        for path in (root / "artifact").rglob("*"):
+            if path.is_file():
+                output.write(path, path.relative_to(root / "artifact").as_posix())
+        if extra:
+            output.writestr(*extra)
+    return archive
+
+
+def test_archive_preserves_the_producers_evidence(tmp_path: Path) -> None:
+    archive = _archive(tmp_path)
+    assert _republish(archive, tmp_path / "from-zip.md") == _republish(
+        tmp_path / "artifact", tmp_path / "from-directory.md"
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["../outside.json", "/outside.json", "reports/../outside.json", "reports\\outside.json"]
+)
+def test_unsafe_archive_paths_produce_an_unavailable_report(tmp_path: Path, name: str) -> None:
+    archive = _archive(tmp_path, (name, b"{}"))
+    body = _republish(archive, tmp_path / "out.md")
+    assert "Evidence unavailable" in body
+    assert not (tmp_path / "outside.json").exists()
+
+
+def test_archive_symlinks_are_rejected(tmp_path: Path) -> None:
+    link = zipfile.ZipInfo("reports/link.json")
+    link.create_system = 3
+    link.external_attr = (stat.S_IFLNK | 0o777) << 16
+    body = _republish(_archive(tmp_path, (link, b"/etc/passwd")), tmp_path / "out.md")
+    assert "Evidence unavailable" in body
+
+
+def test_duplicate_archive_entries_are_rejected(tmp_path: Path) -> None:
+    with pytest.warns(UserWarning, match="Duplicate name"):
+        archive = _archive(tmp_path, (MANIFEST, b"{}"))
+    assert "Evidence unavailable" in _republish(archive, tmp_path / "out.md")
+
+
+@pytest.mark.parametrize("budget", ["MAX_MEMBERS", "MAX_EXPANDED_BYTES", "MAX_REPORT_BYTES", "MAX_JUNIT_BYTES"])
+def test_archive_budgets_are_enforced_before_rendering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, budget: str
+) -> None:
+    from pytest_obligation.reporting import artifact
+
+    archive = _archive(tmp_path, ("junit/0001.xml", b"<testsuites/>"))
+    monkeypatch.setattr(artifact, budget, 1)
+    assert "Evidence unavailable" in _republish(archive, tmp_path / "out.md")
+
+
+def test_a_producer_cannot_claim_github_identity(tmp_path: Path) -> None:
+    _evidence(tmp_path)
+    _report(tmp_path, "--expected-reports", "2", "--test-outcome", "success")
+    manifest = tmp_path / "artifact" / MANIFEST
+    settings = json.loads(manifest.read_text())
+    settings["revision"] = "d" * 40
+    manifest.write_text(json.dumps(settings))
+    body = _republish(tmp_path / "artifact", tmp_path / "out.md")
+    assert "Test step (GitHub)" not in body
+    assert "Test step (reported): **success**" in body
+    assert "workflow commit " + "d" * 40 not in body
+    assert "/blob/" + "d" * 40 not in body
+    assert "/blob/" + HEAD in body

@@ -1,0 +1,9 @@
+**
+!publish/
+!publish/Dockerfile
+!publish/requirements.txt
+!publish/render.py
+!package/
+!package/src/
+!package/src/**
+**/__pycache__/**
