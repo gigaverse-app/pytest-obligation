@@ -183,7 +183,7 @@ test('the attempt comes from the event, an explicit input, or the run, in that o
   assert.equal((await resolve(f, {runAttempt:'1'})).runAttempt, 1);
   f.context.payload = {};
   f.state.artifacts = [artifact('obligation-python-3')];
-  assert.deepEqual(await resolve(f, {runId:'200'}), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:3, artifact:'obligation-python-3', ...artifactIdentity});
+  assert.deepEqual(await resolve(f, {runId:'200'}), {pullRequest:34, headSha:HEAD, runId:200, runAttempt:3, artifact:'obligation-python-3', ...artifactIdentity, sameRepository:false});
 });
 
 test('the conclusion belongs to the requested attempt, not a newer retry', async t => {
