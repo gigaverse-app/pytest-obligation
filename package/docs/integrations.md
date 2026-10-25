@@ -97,6 +97,8 @@ the provider payload and runs the generated contract case. Equal wrong results
 must fail. The Procrastinate, Wagtail, DBOS and Saleor demos similarly declare
 indexed books, deleted objects, sent events, or completed orders and money.
 `celery_worker.worker_history()` requires and forwards `expected=` as well.
+`celery_worker.worker_contract()` binds one history with `history=` and `gap=`, or several
+(a task, a chain, a chord) with `histories=` and `handoff_gaps=` keyed by history name, as RQ's does.
 RQ and django-tasks worker contracts accept `expected=TaskOutcome(...)` and
 forward it through their shared task-queue binding, including two-queue histories.
 
