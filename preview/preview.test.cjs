@@ -37,6 +37,9 @@ test('explicit fork evidence creates then updates one author-owned preview with 
 
 for (const [name, change] of [
   ['closed PR', f => { f.state.pr.state = 'closed'; }],
+  ['another author', f => { f.state.pr.user = {id:999}; }],
+  ['bot authentication', f => { f.state.viewer.type = 'Bot'; }],
+  ['deleted fork', f => { f.state.pr.head.repo = null; }],
   ['private target', f => { f.state.pr.base.repo.private = true; }],
   ['private fork', f => { f.state.pr.head.repo.private = true; }],
   ['different fork', f => { f.state.run.repository.id = 99; }],
@@ -51,6 +54,27 @@ for (const [name, change] of [
   const f = fixture(); change(f);
   await assert.rejects(f.publish());
   assert.equal(f.state.writes.length, 0);
+});
+
+test('an explicitly selected older attempt keeps its own GitHub conclusion', async () => {
+  const f = fixture();
+  f.state.attempts[1] = {...f.state.run, conclusion:'failure'};
+  f.state.run.run_attempt = 2;
+  f.options.run += '/attempts/1';
+  await f.publish();
+  assert.match(f.state.comments[0].body, /Fork workflow: failure/);
+  assert.match(f.state.comments[0].body, /"attempt":1/);
+});
+
+test('a deleted preview is recreated and malformed author-owned metadata is repaired', async () => {
+  const f = fixture(); await f.publish();
+  f.state.comments[0].body = f.state.comments[0].body.replace(/preview-snapshot:.*? -->/, 'preview-snapshot:broken -->');
+  await f.publish();
+  assert.equal(f.state.writes.at(-1).method, 'PATCH');
+  assert.match(f.state.comments[0].body, /"attempt":1/);
+  f.state.comments.length = 0;
+  await f.publish();
+  assert.equal(f.state.writes.at(-1).method, 'POST');
 });
 
 test('PR movement during rendering preserves the previous comment', async () => {

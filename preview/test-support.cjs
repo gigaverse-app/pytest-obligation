@@ -14,7 +14,7 @@ function githubFixture(bytes = Buffer.from('evidence archive')) {
       head_branch:'adopt', head_repository:{...fork}, repository:{...fork}},
     artifacts:[{id:40, name:'obligation-obligation-1', expired:false, size_in_bytes:bytes.length,
       digest:`sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`}],
-    comments:[], calls:[], writes:[], reads:0, beforePrRead:() => {},
+    comments:[], calls:[], writes:[], reads:0, attempts:{}, beforePrRead:() => {},
   };
   const fetcher = async (url, init = {}) => {
     const method = init.method || 'GET';
@@ -26,7 +26,7 @@ function githubFixture(bytes = Buffer.from('evidence archive')) {
     if (parsed.origin !== 'https://api.github.com') throw new Error(`Unexpected API origin: ${url}`);
     if (route === '/user') result = state.viewer;
     else if (route === '/repos/target/app/pulls/12') { state.beforePrRead(++state.reads); result = state.pr; }
-    else if (route.match(/^\/repos\/author\/app\/actions\/runs\/100(?:\/attempts\/\d+)?$/)) result = state.run;
+    else if (route.match(/^\/repos\/author\/app\/actions\/runs\/100(?:\/attempts\/\d+)?$/)) result = state.attempts[route.split('/attempts/')[1]] || state.run;
     else if (route === '/repos/author/app/actions/runs/100/artifacts') result = {artifacts:state.artifacts};
     else if (route === '/repos/author/app/actions/artifacts/40/zip') return new Response(null, {status:302, headers:{location:'https://storage.example/archive'}});
     else if (route === '/repos/target/app/issues/12/comments' && method === 'GET') result = state.comments;

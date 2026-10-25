@@ -511,6 +511,12 @@ account that opened the PR. Run the command from a reviewed pytest-obligation ch
 kept separate from the adopter's checkout. Do not run a copy supplied by the adopter.
 There is no npm installation or adopter package installation in this step.
 
+The tested preview implementation is commit
+[`69585150a5550f2ccdb18a9f5fedfaaf189a446d`](https://github.com/gigaverse-app/pytest-obligation/tree/69585150a5550f2ccdb18a9f5fedfaaf189a446d).
+For a new installation, clone pytest-obligation into a separate directory, review
+that commit, and check it out with `git checkout --detach 69585150a5550f2ccdb18a9f5fedfaaf189a446d`.
+To update later, review and select a newer commit; the command does not update itself.
+
 ```bash
 # In your reviewed pytest-obligation checkout, outside the adopter's repository:
 gh auth login --hostname github.com  # only if you have not already signed in
@@ -570,6 +576,23 @@ repository's evidence into a public comment.
 
 After adoption, the project's default-branch publisher can maintain its own Actions
 sticky. The preview remains clearly attributed to its contributor.
+
+#### Verified without target setup
+
+The [first-adoption rehearsal](https://github.com/gigaverse-app/pytest-obligation-preview-rehearsal/pull/1)
+ran on October 25, 2026. The target default branch stayed at
+`57946fd7632297d427599dbb79f7d7ac43938418`, containing only a README and **zero workflows**.
+The source fork had no repository secrets or environments; its test job received only
+Contents read and Metadata read permissions.
+
+- A [successful fork run](https://github.com/aviadr1/pytest-obligation-preview-rehearsal/actions/runs/40183439411)
+  created [one contributor preview](https://github.com/gigaverse-app/pytest-obligation-preview-rehearsal/pull/1#issuecomment-6396323316).
+- After advancing the PR, attempting to publish the old run was rejected without
+  changing the comment.
+- A [deliberately failed fork run](https://github.com/aviadr1/pytest-obligation-preview-rehearsal/actions/runs/40183633504)
+  planted Markdown, a Python file, a false success claim and a forged revision. The
+  command updated the same comment, retained the API's failure status, labelled the
+  reported claim and excluded the planted Markdown, Python and revision.
 
 ### Limits and maintenance
 
