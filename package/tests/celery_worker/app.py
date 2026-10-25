@@ -31,3 +31,9 @@ def announce(result: str) -> None:
 @app.task
 def report_failure(request: Any, exc: BaseException, traceback: Any) -> None:
     RECORDS.rpush("announced", f"failed: {type(exc).__name__}")
+
+
+@app.task
+def announce_all(results: list[str]) -> None:
+    """A chord's body: tell the customer every message in the header was sent."""
+    RECORDS.rpush("announced", f"sent {len(results)} messages")
