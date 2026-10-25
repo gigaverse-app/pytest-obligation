@@ -182,6 +182,7 @@ def task_contract(
     transactional: bool = False,
     env: Mapping[str, str] | Callable[[], Mapping[str, str]] | None = None,
     worker_args: Sequence[str] = (),
+    worker_setup: str | None = None,
     log: Path | None = None,
     quiet: float = 1.0,
     timeout: float = 60.0,
@@ -230,6 +231,10 @@ def task_contract(
         env: Added to the worker's environment; a callable is called each time
             a worker starts, for values only a running test knows.
         worker_args: Passed to ``celery worker``, such as ``-Q`` and its queues.
+        worker_setup: ``"module:function"`` the worker calls once it has loaded
+            its tasks, to install the test doubles the task needs there (a
+            fake provider, a filesystem storage): doubles installed in the test
+            process do not reach the worker.
 
     The remaining arguments go to
     :func:`~pytest_obligation.integrations.celery_worker.worker_history`.
@@ -273,6 +278,7 @@ def task_contract(
         findings=Findings(expected, declared) if declared else None,
         worker_args=worker_args,
         recovery=recovery,
+        worker_setup=worker_setup,
     )
     reasons = [*_reasons(rows), *([because] if because else [])]
     return worker_contract(

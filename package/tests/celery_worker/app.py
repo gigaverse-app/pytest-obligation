@@ -84,3 +84,17 @@ def sweep_owed() -> None:
     """REAL PRODUCTION: the application's recovery sweep sends again whatever it still owes."""
     for message in RECORDS.smembers("owed"):
         deliver_owed.delay(message)
+
+
+#: Where send_to_outbox writes; the worker's setup moves it, as a test double would replace a provider.
+OUTBOX = ["production outbox"]
+
+
+@app.task
+def send_to_outbox(message: str) -> None:
+    RECORDS.rpush(OUTBOX[0], message)
+
+
+def use_test_outbox() -> None:
+    """ARRANGE, in the worker: send_to_outbox writes to the test outbox instead."""
+    OUTBOX[0] = "test outbox"

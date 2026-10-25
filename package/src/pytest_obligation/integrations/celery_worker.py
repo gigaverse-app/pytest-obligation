@@ -106,6 +106,8 @@ BROKER_FULL = "the Redis broker was full"
 
 #: Which task the child fails; the fault itself travels in process_histories' protocol.
 _TASK = "DUE_WORK_CELERY_TASK"
+#: ``module:function`` the worker calls once it has loaded its tasks, before it forks its pool.
+_SETUP = "DUE_WORK_CELERY_SETUP"
 
 
 @contextmanager
@@ -118,14 +120,18 @@ def running_worker(
     env: Mapping[str, str] | None = None,
     log: Path | None = None,
     worker_args: Sequence[str] = (),
+    worker_setup: str | None = None,
 ) -> Iterator[subprocess.Popen[bytes]]:
     """
     The application's worker, ``celery worker`` with one prefork child, running for the block.
 
     ``app`` is the Celery application as ``module:attribute``. When ``fault``
     names a death or failure point, the first execution of ``task`` fails there
-    and ``marker`` is created. On exit the worker gets a warm shutdown, as a
-    deploy would, and is killed if it does not stop.
+    and ``marker`` is created. ``worker_setup``, as ``module:function``, is
+    called in the worker once it has loaded its tasks and before it forks its
+    pool child, so test doubles it installs reach the task: a filesystem
+    storage in place of a cloud one, for example. On exit the worker gets a
+    warm shutdown, as a deploy would, and is killed if it does not stop.
 
     POSIX only: the fault is installed in the worker's main process and reaches
     its pool child through ``fork``, and the warm shutdown is ``SIGTERM``.
@@ -135,7 +141,13 @@ def running_worker(
         "spawns the pool child, which inherits neither the fault installed in the worker's main process nor "
         "usable pool semaphores, so the task never settles. Run these histories on Linux or macOS"
     )
-    environ = {**os.environ, **(env or {}), **fault_environment(fault, marker), _TASK: task or ""}
+    environ = {
+        **os.environ,
+        **(env or {}),
+        **fault_environment(fault, marker),
+        _TASK: task or "",
+        _SETUP: worker_setup or "",
+    }
     output = open(log, "ab") if log is not None else subprocess.DEVNULL  # noqa: SIM115 - closed below
     command = [sys.executable, "-m", "pytest_obligation.integrations.celery_worker", app, *worker_args]
     process = subprocess.Popen(command, env=environ, stdout=output, stderr=subprocess.STDOUT)
@@ -176,6 +188,7 @@ def worker_history(
     broker_url: str | None = None,
     worker_args: Sequence[str] = (),
     recovery: Callable[[HandleT], object] | None = None,
+    worker_setup: str | None = None,
 ) -> ProcessHistory[HandleT, ObservationT]:
     """
     One task through the application's real worker, failing at each of Celery's stages, recovered by a restart.
@@ -198,6 +211,8 @@ def worker_history(
     application's deployment runs besides the worker, such as the recovery
     sweep its beat schedule publishes: it is called with the handle once the
     worker has started again, and recovery then waits for the work to settle.
+    ``worker_setup`` goes to :func:`running_worker`: the test doubles the
+    worker needs, installed in the worker itself.
     """
     deaths, failures = DEATH_POINTS + SIGKILL_DEATH_POINTS, (*FAILURE_POINTS, BROKER_FULL)
     unknown = set(death_points) - set(deaths) | set(failure_points) - set(failures)
@@ -215,7 +230,14 @@ def worker_history(
     def worker(fault: str | None = None, marker: Path | None = None) -> AbstractContextManager[object]:
         environment = env() if callable(env) else env
         return running_worker(
-            app, fault=fault, task=task, marker=marker, env=environment, log=log, worker_args=arguments
+            app,
+            fault=fault,
+            task=task,
+            marker=marker,
+            env=environment,
+            log=log,
+            worker_args=arguments,
+            worker_setup=worker_setup,
         )
 
     def run(fault: str | None) -> tuple[HandleT, int] | tuple[HandleT, int, ObservationT]:
@@ -243,6 +265,10 @@ def worker_history(
                             poll=0.01,
                         )
                         at_fault = observe(handle) if fault_happened(marker) else None
+                    elif settled is None:
+                        # An idle worker proves nothing until the task has run: the broker can hand a message
+                        # to the worker before the worker's own state shows it.
+                        wait_until(lambda: _ran(marker).exists(), timeout=timeout, what=f"{name}: the task never ran")
                     wait_until(lambda: is_settled(handle), timeout=timeout, what=f"{name}: the task did not settle")
                     time.sleep(quiet)
             happened = fault_happened(marker)
@@ -300,18 +326,25 @@ def _queues(application: Any, worker_args: Sequence[str]) -> tuple[str, ...]:
     return (application.conf.task_default_queue,)
 
 
+#: How long the worker must stay idle before a history without its own ``settled`` counts it settled.
+IDLE_FOR = 1.0
+
+
 def _idle(app: str, node: str, worker_args: Sequence[str]) -> Callable[[Any], bool]:
-    """``settled`` for a history that names none: the worker idle twice in a row, a fifth of a second apart."""
+    """``settled`` for a history that names none: the worker idle at every reading for :data:`IDLE_FOR` seconds."""
     module, _, attribute = app.partition(":")
     application = getattr(importlib.import_module(module), attribute or "app")
     queues = _queues(application, worker_args)
 
     def settled(_handle: Any) -> bool:
-        if not worker_idle(application, node, queues):
-            return False
-        # A message moves from the queue to the worker's reservation in steps; one reading can fall between them.
-        time.sleep(0.2)
-        return worker_idle(application, node, queues)
+        # A message the broker has handed to the worker, but the worker has not read yet, shows nowhere: not in
+        # the queue and not in the worker's state. Staying idle for a while is what rules it out.
+        deadline = time.monotonic() + IDLE_FOR
+        while worker_idle(application, node, queues):
+            if time.monotonic() >= deadline:
+                return True
+            time.sleep(0.25)
+        return False
 
     return settled
 
@@ -478,16 +511,6 @@ def _install(app: Any, fault: str, task: str) -> None:
     def ours(name: str | None) -> bool:
         return name == task and fault_fires(fault)
 
-    marker = os.environ.get(FAULT_MARKER_VARIABLE)
-    if marker:
-
-        def record_ran(sender: Any = None, **_kwargs: Any) -> None:
-            # A fault the task never reaches would otherwise leave the parent waiting for the slower settled check.
-            if getattr(sender, "name", None) == task:
-                _ran(Path(marker)).touch()
-
-        signals.task_postrun.connect(record_ran, weak=False)
-
     stage = fault.removesuffix(_SIGKILL)
 
     def die() -> None:
@@ -578,6 +601,26 @@ def main(argv: Sequence[str]) -> None:
     fault = os.environ.get(FAULT_VARIABLE, "")
     if fault:
         _install(app, fault, os.environ[_TASK])
+    marker, task = os.environ.get(FAULT_MARKER_VARIABLE, ""), os.environ.get(_TASK, "")
+    if marker and task:
+        from celery import signals
+
+        def record_ran(sender: Any = None, **_kwargs: Any) -> None:
+            # The parent waits for this, or for the fault, before it trusts that the worker is idle.
+            if getattr(sender, "name", None) == task:
+                _ran(Path(marker)).touch()
+
+        signals.task_postrun.connect(record_ran, weak=False)
+    setup = os.environ.get(_SETUP, "")
+    if setup:
+        from celery import signals
+
+        def run_setup(**_kwargs: Any) -> None:
+            # ARRANGE: the adopter's test doubles, in the worker's main process, inherited by its pool child.
+            module_name, _, function = setup.partition(":")
+            getattr(importlib.import_module(module_name), function)()
+
+        signals.worker_init.connect(run_setup, weak=False)
     app.worker_main(
         [
             "worker",

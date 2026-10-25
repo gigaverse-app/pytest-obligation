@@ -9,6 +9,7 @@ Each suite is generated from one ``task_contract`` call, through a real ``celery
 * a task requeued and safe to repeat, which declares nothing and is recovered by the worker inside the run;
 * a task the application recovers with a sweep of what it still owes, which declares nothing: every failure must
   converge;
+* a task whose worker installs a test double with ``worker_setup``, which every run and recovery uses;
 * the same task without its sweep bound, whose lost message fails the history, so a missing recovery is caught.
 """
 
@@ -72,6 +73,17 @@ REQUEUED_ONCE = task_contract(
     env=ENV,
 )
 
+DOUBLED = task_contract(
+    APP,
+    reference.send_to_outbox,
+    send=lambda: reference.send_to_outbox.delay(a_message()),
+    effect=lambda _result: (reference.RECORDS.llen("test outbox"), reference.RECORDS.llen("production outbox")),
+    initial_effect=(0, 0),
+    expected_effect=(1, 0),
+    worker_setup="tests.celery_worker.app:use_test_outbox",
+    env=ENV,
+)
+
 OWED = task_contract(
     APP,
     reference.deliver_owed,
@@ -106,6 +118,11 @@ class TestRequeuedTaskSafeToRepeat:
     The run is observed the moment its fault happens, before the worker runs the requeued task again, so that
     recovery is what the verdict sees; the slower check that the worker is idle must not delay that observation.
     """
+
+
+@due_work_contract_suite(DOUBLED)
+class TestWorkerSetup:
+    """The worker installs the test double itself, in every worker the histories start, recovery included."""
 
 
 @due_work_contract_suite(OWED)
