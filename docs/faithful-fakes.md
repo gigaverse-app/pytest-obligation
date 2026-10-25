@@ -24,7 +24,10 @@ returns any other refusal, which the fake returns as its reply.
 
 ## Writing a fake
 
-Call the boundary first in every fake method, then apply or accept:
+Call the boundary first in every fake method and return any refusal it hands
+back, then apply or accept. Here every refusal is a `ChatAPIError`, which
+`call` raises, so the returned value is always `None`; a fake whose refusals
+are replies returns them, as the Cloudflare fake below does:
 
 ```python
 from pytest_obligation.fakes import AsyncTasks, ProviderBoundary

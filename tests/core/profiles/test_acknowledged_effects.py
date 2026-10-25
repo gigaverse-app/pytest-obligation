@@ -28,8 +28,13 @@ def test_a_teardown_that_trusts_the_reply_is_caught() -> None:
                 self.request_deletion(operation_id)
                 del self.owed[operation_id]
 
+    binding = reference_acknowledged_effect_binding(_TrustsTheReply())
     with pytest.raises(AssertionError, match="discharged the operation on the provider's acknowledgement alone"):
-        assert_an_acknowledgement_does_not_discharge(reference_acknowledged_effect_binding(_TrustsTheReply()))
+        assert_an_acknowledgement_does_not_discharge(binding)
+    # Discharging on the reply also ends up discharged once the provider applies,
+    # so the second proof must refuse the history rather than pass it.
+    with pytest.raises(AssertionError, match="discharged the operation before the provider applied it"):
+        assert_an_applied_acknowledgement_discharges(binding)
 
 
 def test_a_teardown_that_never_discharges_is_caught() -> None:
