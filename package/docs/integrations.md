@@ -16,7 +16,7 @@ configure(django_host(production_packages={"myapp"}))
 | Extra | Scope |
 | --- | --- |
 | `[django]` | `django_host()`: transaction and commit faults, PostgreSQL plan inspection, lifecycle-state proofs, and pytest-django marks |
-| `[celery]` | Beat-schedule evidence, held or refused publications, real worker death points, callback failures, and `worker_contract()` |
+| `[celery]` | Beat-schedule evidence, held or refused publications, real worker death points (exit or SIGKILL), callback failures, a really full Redis broker, and `worker_contract()` |
 | `[procrastinate]` | Worker recovery, stalled-job arrangement, and periodic-task evidence |
 | `[dbos]` | Application restart through its own startup for process-level crash histories |
 | `[redis]` | `redis_host()`: Redis write/pipeline commit counting and lost write replies |
@@ -24,20 +24,6 @@ configure(django_host(production_packages={"myapp"}))
 | `[mongodb]` | Acknowledged writes, transaction commits, worker death, and lost replies for PyMongo; Motor uses its delegate. [Boundaries](mongodb.md) |
 | `[prefect]` | Real flow-body execution and declared recurrence checks. [Scope](prefect.md) |
 | `[aiokafka]` | `AIOKafkaConsumer` acknowledgement and offset-commit faults with broker replay. [Scope](aiokafka.md) |
-
-`celery_worker.worker_contract()` binds the adopter's `worker_history()` histories (a task, a chain, a
-chord) the way `ObligationContract` does, with `process_handoffs=` and `handoff_gaps=` keyed by
-history name:
-
-```python
-CONTRACT = worker_contract(
-    name="orders worker",
-    process_handoffs=(SEND_MESSAGE, CHORD),
-    handoff_gaps={CHORD.name: "a refused body publish fails the chord for good"},
-)
-```
-
-The one-history form, `history=` with `gap=`, is deprecated: it still works and warns.
 
 The harness can test a Shopify integration or any other external API through
 the application's real Python call and observed effects. The optional-import,
@@ -111,6 +97,13 @@ the provider payload and runs the generated contract case. Equal wrong results
 must fail. The Procrastinate, Wagtail, DBOS and Saleor demos similarly declare
 indexed books, deleted objects, sent events, or completed orders and money.
 `celery_worker.worker_history()` requires and forwards `expected=` as well.
+`celery_worker.worker_contract()` binds one history with `history=` and `gap=`, or several
+(a task, a chain, a chord) with `histories=` and `handoff_gaps=` keyed by history name, as RQ's does.
+Two opt-in Celery faults replace an injection with the real failure: `SIGKILL_DEATH_POINTS` has the
+kernel kill the pool child at the same three stages (billiard's signal path, not an exit status), and
+`BROKER_FULL` makes the broker's own Redis server refuse writes once the task's body has run
+(`maxmemory 1`, `noeviction`). The broker-full fault needs `broker_url=` and a Redis server shared with
+nothing else, which the test process restores before recovery.
 RQ and django-tasks worker contracts accept `expected=TaskOutcome(...)` and
 forward it through their shared task-queue binding, including two-queue histories.
 
