@@ -448,14 +448,54 @@ def sign_up(email: str, *, task: Callable[[str], None] = send_welcome_email) -> 
         return queue.enqueue(task, email)
 ```
 
-Its whole test setup is one host in `conftest.py`:
+Its test setup is one `conftest.py`. The example shares it with tinyq's own
+suite (the `reference_jobs` lines, covered in step 8):
 
 ```python
+from collections.abc import Iterator
+
+import pytest
+import reference_jobs
+import welcome
+from email_provider import MAILER
+from tinyq.testing import ManualClock, empty, tinyq_host
+
+from pytest_obligation import configure
+
 # One host for the session: the application's packages, plus tinyq's own commit counting.
 configure(tinyq_host({"reference_jobs", "welcome"}))
+# Clocks the tests move by hand, so leases expire and retries come due without waiting.
+reference_jobs.queue.clock = ManualClock()
+reference_jobs.draft_queue.clock = ManualClock()
+welcome.queue.clock = ManualClock()
+# The welcome app talks to the test's email stand-in instead of a real provider.
+welcome.mailer = MAILER
+
+
+@pytest.fixture
+def fresh_reference_jobs() -> Iterator[None]:
+    """Every generated case for tinyq's own suite starts from an empty queue and an empty outbox."""
+    empty(reference_jobs.queue)
+    reference_jobs.outbox.__init__()
+    yield
+
+
+@pytest.fixture
+def fresh_welcome() -> Iterator[None]:
+    """Every generated case for the welcome app starts from an empty queue and an empty mailbox."""
+    empty(welcome.queue)
+    MAILER.__init__()
+    yield
 ```
 
-and one call to `task_contract`, from
+| Line | Comes from | Why the user needs it |
+| --- | --- | --- |
+| `configure(tinyq_host(...))` | tinyq | The host from step 1: the user names their packages and never writes a worker killer |
+| `welcome.queue.clock = ManualClock()` | tinyq | Leases and retry delays pass by moving this clock, so a generated case takes milliseconds instead of minutes. `task_contract` refuses to run without it and says so. |
+| `welcome.mailer = MAILER` | The user's app | Point the app at the test's email stand-in |
+| `fresh_welcome` | The user's test | Empties the queue and the mailbox before every generated case; the contract requests it by name through `fixtures=` |
+
+Then one call to `task_contract`, from
 [`tests/test_welcome_email.py`](../../examples/task_queue_tutorial/tests/test_welcome_email.py):
 
 ```python
