@@ -61,6 +61,16 @@ extra:
   - package/docs/tutorials.md
   - package/docs/tutorial-many-systems.md
   - package/docs/tutorial-framework-authors.md
+  - package/docs/many-systems-1-describe.md
+  - package/docs/many-systems-2-findings.md
+  - package/docs/many-systems-3-fix.md
+  - package/docs/many-systems-4-suite.md
+  - package/docs/many-systems-5-real-systems.md
+  - package/docs/framework-1-bind.md
+  - package/docs/framework-2-hard-problems.md
+  - package/docs/framework-3-growing.md
+  - package/docs/framework-4-due.md
+  - package/docs/framework-5-ship.md
   - package/docs/vocabulary.md
   - docs/adopter-capabilities.md
   - docs/ci-toolkit.md
@@ -93,8 +103,20 @@ nav:
 - Getting started:
   - Tutorials:
     - Choose a tutorial: package/docs/tutorials.md
-    - Workflows across many systems: package/docs/tutorial-many-systems.md
-    - For framework authors: package/docs/tutorial-framework-authors.md
+    - Workflows across many systems:
+      - Overview: package/docs/tutorial-many-systems.md
+      - 1. Describe the workflow once: package/docs/many-systems-1-describe.md
+      - 2. Find what breaks: package/docs/many-systems-2-findings.md
+      - 3. Fix it, and watch the tests grow: package/docs/many-systems-3-fix.md
+      - 4. Make it a generated suite: package/docs/many-systems-4-suite.md
+      - 5. Trust the result, use your real systems: package/docs/many-systems-5-real-systems.md
+    - For framework authors:
+      - Overview: package/docs/tutorial-framework-authors.md
+      - 1. Bind your library once: package/docs/framework-1-bind.md
+      - 2. Test your hardest problems: package/docs/framework-2-hard-problems.md
+      - 3. A suite that keeps finding more: package/docs/framework-3-growing.md
+      - "4. First-party tests for your users: Due": package/docs/framework-4-due.md
+      - 5. Ship the same for your library: package/docs/framework-5-ship.md
     - Vocabulary: package/docs/vocabulary.md
   - Quickstart: package/docs/adopting.md
   - How the proofs work: package/docs/how-it-works.md
