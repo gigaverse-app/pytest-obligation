@@ -1,0 +1,63 @@
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const {downloadArchive, publishedBody} = require('./publish.cjs');
+
+const bytes = Buffer.from('a bounded artifact');
+const digest = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+
+async function fixture(t, response) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'obligation-download-'));
+  t.after(() => fs.rm(directory, {recursive: true, force: true}));
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push({url, options});
+    return calls.length === 1
+      ? new Response(null, {status: 302, headers: {location: 'https://storage.example/archive'}})
+      : response;
+  };
+  const destination = path.join(directory, 'evidence.zip');
+  return {calls, destination, download: overrides => downloadArchive({
+    apiUrl: 'https://api.github.com', repository: 'owner/project', artifactId: 123,
+    token: 'test-token', digest, destination, fetcher, ...overrides,
+  })};
+}
+
+test('download checks the digest and never sends the GitHub token to artifact storage', async t => {
+  const f = await fixture(t, new Response(bytes));
+  await f.download();
+  assert.deepEqual(await fs.readFile(f.destination), bytes);
+  assert.equal(f.calls[0].options.headers.authorization, 'Bearer test-token');
+  assert.equal(f.calls[1].options.headers?.authorization, undefined);
+  assert.equal(f.calls[1].options.redirect, 'error');
+});
+
+for (const advertised of [undefined, '1', '1000']) test(`stream budget holds with Content-Length ${advertised}`, async t => {
+  const headers = advertised ? {'content-length': advertised} : {};
+  const f = await fixture(t, new Response(bytes, {headers}));
+  await assert.rejects(f.download({maxBytes: 4}), /limit/);
+  await assert.rejects(fs.stat(f.destination), {code: 'ENOENT'});
+});
+
+test('a changed archive is discarded', async t => {
+  const f = await fixture(t, new Response('changed'));
+  await assert.rejects(f.download(), /digest/);
+  await assert.rejects(fs.stat(f.destination), {code: 'ENOENT'});
+});
+
+test('workflow failure from the API stays visible above producer success claims', () => {
+  const body = publishedBody('Test step (reported): **success**', {conclusion: 'failure', runId: 7, runAttempt: 2}, 'https://github.com/owner/project');
+  assert.match(body, /^\*\*GitHub workflow: failure\*\*/);
+  assert.match(body, /Results below were supplied by the pull request/);
+  assert.match(body, /attempts\/2/);
+});
+
+test('oversized renderer output recovers to an unavailable report with API status', () => {
+  const body = publishedBody('x'.repeat(55001), {conclusion: 'success', runId: 7, runAttempt: 1}, 'https://github.com/owner/project');
+  assert.ok(body.length < 55000);
+  assert.match(body, /Evidence unavailable/);
+  assert.match(body, /GitHub workflow: success/);
+});

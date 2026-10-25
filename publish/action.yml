@@ -1,0 +1,46 @@
+name: pytest-obligation publish
+description: Publish a fork PR report using API-verified identity and a credential-free, offline renderer.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  sticky-key:
+    description: The report action's sticky-key in the triggering run.
+    default: obligation
+  github-token:
+    description: Repository-scoped token with actions read and pull-requests write. Use the default GITHUB_TOKEN.
+    default: ${{ github.token }}
+  run-id:
+    description: Triggering run. Defaults to github.event.workflow_run.id; also supports workflow_dispatch.
+    default: ''
+  run-attempt:
+    description: Attempt to publish. Defaults to the workflow_run event's attempt, otherwise the latest.
+    default: ''
+outputs:
+  pull-request:
+    description: Resolved PR number; empty when there was nothing to publish.
+    value: ${{ steps.publish.outputs.pull-request }}
+  published:
+    description: Whether the sticky was created or updated.
+    value: ${{ steps.publish.outputs.published || 'false' }}
+  markdown-path:
+    description: Rendered report, including API-verified workflow status.
+    value: ${{ steps.publish.outputs.markdown-path }}
+runs:
+  using: composite
+  steps:
+    - id: publish
+      # Immutable publisher dependency. Dependabot updates the SHA through a reviewed PR.
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        OBLIGATION_ACTION_PATH: ${{ github.action_path }}
+        OBLIGATION_RUN_ID: ${{ inputs.run-id }}
+        OBLIGATION_RUN_ATTEMPT: ${{ inputs.run-attempt }}
+        OBLIGATION_STICKY_KEY: ${{ inputs.sticky-key }}
+        OBLIGATION_TOKEN: ${{ inputs.github-token }}
+        OBLIGATION_ASSET_REF: ${{ github.action_ref || github.sha }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const {run} = require(`${process.env.OBLIGATION_ACTION_PATH}/publish.cjs`);
+          await run({github, context, core});

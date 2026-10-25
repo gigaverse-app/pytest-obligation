@@ -445,7 +445,7 @@ def render(
         "Application names, quoted reasons and diagnostic values come from application code. "
         "Guarantee labels come from pytest-obligation. Results cover collected suites only; passing checks do not rate every test's quality.",
         "",
-        f"Test step (GitHub): **{cell(test_outcome)}**",
+        f"Test step (reported): **{cell(test_outcome)}**",
         f"Source: {code(source or 'local report')}",
         "",
         "</details>",

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.19.2...v0.20.0) (2026-10-25)
+
+
+### Features
+
+* **celery:** bind worker histories with process_handoffs= and deprecate history= ([#161](https://github.com/gigaverse-app/pytest-obligation/issues/161)) ([d2b8ac2](https://github.com/gigaverse-app/pytest-obligation/commit/d2b8ac2dda5a1ebdd4805513606113b3db515ebb))
+* **report:** publish fork PR evidence with an isolated renderer ([#162](https://github.com/gigaverse-app/pytest-obligation/issues/162)) ([6936ca6](https://github.com/gigaverse-app/pytest-obligation/commit/6936ca68ce5252e4387e8f14de8bdb076b6b4777))
+
 ## [0.19.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.19.1...v0.19.2) (2026-10-24)
 
 
