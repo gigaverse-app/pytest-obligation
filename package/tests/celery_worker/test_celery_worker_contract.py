@@ -13,9 +13,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
+import celery
 import pytest
 import redis
 from celery.app.task import Task
+from packaging.version import Version
 from celery.result import AsyncResult
 
 from pytest_obligation import Claim, Findings, Profile, ReplaySafeEffect, due_work_contract_suite
@@ -53,16 +55,30 @@ def what_happened(task_id: str) -> tuple[str, int, tuple[str, ...]]:
     )
 
 
+#: Celery #10752 and #10759 stopped a task whose SUCCESS was stored from running its error callback. Both
+#: merged after 5.7.0rc1, so a released Celery has them from the next release on. (A build of Celery's main
+#: between those merges and that release still reports 5.7.0rc1; this suite runs the locked release.)
+SUCCESS_STORED_STAYS_SUCCESS = Version(celery.__version__) > Version("5.7.0rc1")
+
 # What each failure leaves after the worker starts again; every history not listed reaches normal operation.
 FINDINGS = Findings(
     ("SUCCESS", 1, (SENT,)),
     {
         "died at task_prerun": ("FAILURE", 0, ("failed: WorkerLostError",)),
+        # https://github.com/celery/celery/issues/10949
         "died at mark_as_done": ("FAILURE", 1, ("failed: WorkerLostError", SENT)),
-        "died at task_postrun": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
-        "the task's on_success hook raised": ("SUCCESS", 1, ("failed: ReceiverFailed", SENT)),
+        # https://github.com/celery/celery/issues/10725
         "the broker refused the task's link": ("FAILURE", 1, ("failed: OperationalError",)),
-    },
+    }
+    | (
+        {}
+        if SUCCESS_STORED_STAYS_SUCCESS
+        else {
+            # https://github.com/celery/celery/issues/10724, fixed by #10752 and #10759.
+            "died at task_postrun": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
+            "the task's on_success hook raised": ("SUCCESS", 1, ("failed: ReceiverFailed", SENT)),
+        }
+    ),
 )
 
 SEND_MESSAGE = worker_history(
@@ -100,7 +116,7 @@ def message_replay() -> Iterator[ReplaySafeEffect]:
 CONTRACT = worker_contract(
     name="celery reference worker",
     history=SEND_MESSAGE,
-    gap="a failure after the result is stored or the link published still runs the failure path",
+    gap="a failure after the link is published, or a refused link, still runs the failure path",
 )
 
 
