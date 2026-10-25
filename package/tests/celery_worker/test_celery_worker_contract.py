@@ -8,10 +8,10 @@ suite red until the table is updated.
 """
 
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import celery
 import pytest
@@ -24,6 +24,7 @@ from packaging.version import Version
 from pytest_obligation import Claim, Findings, Profile, ReplaySafeEffect, due_work_contract_suite
 from pytest_obligation.host import Host, hosted
 from pytest_obligation.integrations.celery_worker import worker_contract, worker_history
+from pytest_obligation.process_histories import ProcessHistory
 from tests.celery_worker import app as reference
 
 pytestmark = pytest.mark.skipif(
@@ -70,7 +71,30 @@ def what_happened(task_id: str) -> tuple[str, int, tuple[str, ...]]:
 #: Celery #10752 and #10759 stopped a task whose SUCCESS was stored from running its error callback. Both
 #: merged after 5.7.0rc1, so a released Celery has them from the next release on. (A build of Celery's main
 #: between those merges and that release still reports 5.7.0rc1; this suite runs the locked release.)
+#: Retire this gate and the rows passed to before_the_10724_fixes once uv.lock's Celery is newer than 5.7.0rc1.
 SUCCESS_STORED_STAYS_SUCCESS = Version(celery.__version__) > Version("5.7.0rc1")
+
+
+def before_the_10724_fixes(rows: dict[str, Any]) -> dict[str, Any]:
+    """Rows that diverge only on a Celery without #10752 and #10759 (https://github.com/celery/celery/issues/10724)."""
+    return {} if SUCCESS_STORED_STAYS_SUCCESS else rows
+
+
+def reference_history(name: str, send: Callable[[], str], findings: Findings) -> ProcessHistory[str, Any]:
+    """Work the reference worker runs, observed the same way: the result's state, messages sent, announcements."""
+    return worker_history(
+        name=name,
+        app="tests.celery_worker.app:app",
+        task=reference.send_message.name,
+        send=send,
+        observe=what_happened,
+        initial=("PENDING", 0, ()),
+        expected=findings.delivered,
+        settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
+        findings=findings,
+        env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+    )
+
 
 # What each failure leaves after the worker starts again; every history not listed reaches normal operation.
 FINDINGS = Findings(
@@ -82,28 +106,12 @@ FINDINGS = Findings(
         # https://github.com/celery/celery/issues/10725
         "the broker refused the task's link": ("FAILURE", 1, ("failed: OperationalError",)),
     }
-    | (
-        {}
-        if SUCCESS_STORED_STAYS_SUCCESS
-        else {
-            # https://github.com/celery/celery/issues/10724, fixed by #10752 and #10759.
+    | before_the_10724_fixes(
+        {
             "died at task_postrun": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
             "the task's on_success hook raised": ("SUCCESS", 1, ("failed: ReceiverFailed", SENT)),
         }
     ),
-)
-
-SEND_MESSAGE = worker_history(
-    name="the reference worker runs send_message",
-    app="tests.celery_worker.app:app",
-    task=reference.send_message.name,
-    send=send,
-    observe=what_happened,
-    initial=("PENDING", 0, ()),
-    expected=FINDINGS.delivered,
-    settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
-    findings=FINDINGS,
-    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
 )
 
 # The chord's state is its body's; its faults hit the first execution of a header task, and the refused
@@ -117,30 +125,17 @@ CHORD_FINDINGS = Findings(
         # https://github.com/celery/celery/issues/10725#issuecomment-6318108091
         "the broker refused the task's link": ("FAILURE", 2, ("failed: ChordError",)),
     }
-    | (
-        {}
-        if SUCCESS_STORED_STAYS_SUCCESS
-        else {
-            # https://github.com/celery/celery/issues/10724: the header is counted twice, once as a failure.
+    # Before the fixes, a header lost after its stored SUCCESS is counted twice, once as a failure.
+    | before_the_10724_fixes(
+        {
             "died at task_postrun": ("FAILURE", 2, ("failed: ChordError",)),
             "the task's on_success hook raised": ("FAILURE", 2, ("failed: ChordError",)),
         }
     ),
 )
 
-CHORD = worker_history(
-    name="the reference worker runs a chord of two send_message tasks",
-    app="tests.celery_worker.app:app",
-    task=reference.send_message.name,
-    send=send_chord,
-    observe=what_happened,
-    initial=("PENDING", 0, ()),
-    expected=CHORD_FINDINGS.delivered,
-    settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
-    findings=CHORD_FINDINGS,
-    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
-)
-
+SEND_MESSAGE = reference_history("the reference worker runs send_message", send, FINDINGS)
+CHORD = reference_history("the reference worker runs a chord of two send_message tasks", send_chord, CHORD_FINDINGS)
 
 @contextmanager
 def message_replay() -> Iterator[ReplaySafeEffect]:
@@ -162,7 +157,7 @@ def message_replay() -> Iterator[ReplaySafeEffect]:
 
 CONTRACT = worker_contract(
     name="celery reference worker",
-    histories=(SEND_MESSAGE, CHORD),
+    process_handoffs=(SEND_MESSAGE, CHORD),
     handoff_gaps={
         SEND_MESSAGE.name: "a failure after the link is published, or a refused link, still runs the failure path",
         CHORD.name: "a header lost after its effect, or a refused body publish, fails the chord for good",
