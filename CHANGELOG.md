@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.22.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.21.0...v0.22.0) (2026-10-25)
+
+
+### Features
+
+* **job-retry-limits:** prove provider waits across selection and stale delivery ([#178](https://github.com/gigaverse-app/pytest-obligation/issues/178)) ([92683e0](https://github.com/gigaverse-app/pytest-obligation/commit/92683e04fd7cdd2fd0e255425cc7ccf93bbf4df3))
+
+
+### Bug fixes
+
+* **celery:** observe each faulted run as its fault left it, so recovery inside the run counts ([#176](https://github.com/gigaverse-app/pytest-obligation/issues/176)) ([f270816](https://github.com/gigaverse-app/pytest-obligation/commit/f270816eda4d2feddfd82ab754d1bef2732f27a9))
+* **profiles:** proof 2 refuses a history that discharged before the provider applied ([#175](https://github.com/gigaverse-app/pytest-obligation/issues/175)) ([7d99250](https://github.com/gigaverse-app/pytest-obligation/commit/7d99250b608021ea954317e884458e3f3b0c1f82))
+
 ## [0.21.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.20.0...v0.21.0) (2026-10-25)
 
 
