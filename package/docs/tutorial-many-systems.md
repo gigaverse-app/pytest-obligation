@@ -393,6 +393,7 @@ def test_a_death_after_the_charge_leaves_a_charge_and_no_order():
 [`checkout/reliable.py`](../../examples/checkout_tutorial/checkout/reliable.py)
 makes three changes, one per gap:
 
+<!-- fmt:off -->
 ```python
     def place_order(self, cart: str, amount: int) -> None:
         """The web request: record the intent, then finish it the same way recovery would."""
@@ -407,6 +408,7 @@ makes three changes, one per gap:
             self.db.execute("UPDATE orders SET status = 'paid', charge = ? WHERE cart = ?", (charge, cart))
             self.db.execute("INSERT INTO outbox(topic, cart) VALUES ('order_placed', ?)", (cart,))
 ```
+<!-- fmt:on -->
 
 1. **The order is saved as `pending` before the charge.** A charge can no longer
    exist without an order that recovery can find; recovery finishes `pending`

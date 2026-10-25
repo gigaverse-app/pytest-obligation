@@ -75,6 +75,7 @@ and stamps it with a fresh random **token** and a **lease** (a deadline). It
 runs the task, then **settles** the row as `done` or failed, but only if the
 row still carries its token:
 
+<!-- fmt:off -->
 ```python
     def claim(self) -> tuple[int, uuid.UUID] | None:
         """Take the oldest due job: mark it running, with a fresh token and a lease."""
@@ -97,6 +98,7 @@ row still carries its token:
             ).rowcount
         return changed == 1
 ```
+<!-- fmt:on -->
 
 The rest of [`tinyq/__init__.py`](../../examples/task_queue_tutorial/tinyq/__init__.py):
 
@@ -265,12 +267,14 @@ is the nature of a race: it is rare, and it is real.
 
 The fix was one line, a lock in `_transaction`:
 
+<!-- fmt:off -->
 ```python
     @contextmanager
     def _transaction(self) -> Iterator[None]:
         with self._lock, self.db:
             yield
 ```
+<!-- fmt:on -->
 
 Run the race proof on every CI build. One green run says little about a race;
 many green runs over months are the evidence.
@@ -317,6 +321,7 @@ commits a claim, runs the task's effect, and commits a settlement.
 pass into a crash history: enqueue a job, run `work_once`, and observe both what
 tinyq recorded and what the task did.
 
+<!-- fmt:off -->
 ```python
         handoffs=(
             worker_history(
@@ -331,6 +336,7 @@ tinyq recorded and what the task did.
         ),
         handoff_delivery=CallableDelivery(name=f"{name}: tinyq worker", recover=partial(recover, queue)),
 ```
+<!-- fmt:on -->
 
 `recover(queue)` is what a deployment runs after a crash: time passes beyond
 the lease, the sweep returns expired jobs, and workers run until idle. tinyq's
@@ -370,11 +376,13 @@ def task_contract(
     handoff_gaps: dict[str, str] | None = None,
     fixtures: tuple[str, ...] = (),
 ) -> ObligationContract:
-    ...  # builds the contract from the ownership, bounded_retry and worker_history bindings above
+    # Builds the contract from the ownership, bounded_retry and worker_history bindings above.
+    ...
 ```
 
 The body declares tinyq's answer for each of the ten profiles:
 
+<!-- fmt:off -->
 ```python
         profiles={
             Profile.A: Decline(
@@ -391,6 +399,7 @@ The body declares tinyq's answer for each of the ten profiles:
             Profile.J: Claim(),
         },
 ```
+<!-- fmt:on -->
 
 | Profile | tinyq's answer | Why |
 | --- | --- | --- |
