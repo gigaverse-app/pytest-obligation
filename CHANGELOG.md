@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.21.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.20.0...v0.21.0) (2026-10-25)
+
+
+### Features
+
+* add faithful-fake building blocks and profile C acknowledged-effect proofs ([#164](https://github.com/gigaverse-app/pytest-obligation/issues/164)) ([471319e](https://github.com/gigaverse-app/pytest-obligation/commit/471319ef33fc5fba5c87871639a1b6fab40ecc32))
+* **celery:** kill the pool child with SIGKILL and fill a real Redis broker (land [#165](https://github.com/gigaverse-app/pytest-obligation/issues/165) on main) ([#172](https://github.com/gigaverse-app/pytest-obligation/issues/172)) ([5b3abde](https://github.com/gigaverse-app/pytest-obligation/commit/5b3abdea509dacff05d8543ba1062e6f21f2909b))
+* **preview:** show adoption reports without target repository setup ([#169](https://github.com/gigaverse-app/pytest-obligation/issues/169)) ([64cbf3d](https://github.com/gigaverse-app/pytest-obligation/commit/64cbf3d7ba97b7a25caa2812879cecaf8990c662))
+* **report:** keep the report in a README block and write a shields.io badge ([#171](https://github.com/gigaverse-app/pytest-obligation/issues/171)) ([d2b281e](https://github.com/gigaverse-app/pytest-obligation/commit/d2b281e2138d5c80b9af867804d2c69cb81731b8))
+
+
+### Bug fixes
+
+* **report:** distinguish workflow failures from contract results ([#174](https://github.com/gigaverse-app/pytest-obligation/issues/174)) ([b7b1415](https://github.com/gigaverse-app/pytest-obligation/commit/b7b14155cac4d5d69b9d3caf11119dbf70adc79a))
+* **reporting:** reject rooted cache inputs on Windows and pass the core suite there ([#170](https://github.com/gigaverse-app/pytest-obligation/issues/170)) ([4d657b8](https://github.com/gigaverse-app/pytest-obligation/commit/4d657b8809b7d9ee1d368f313d015c69928f8668))
+
 ## [0.20.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.19.2...v0.20.0) (2026-10-25)
 
 
