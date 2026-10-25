@@ -441,6 +441,7 @@ jobs:
           uv run --no-sync python scripts/check_adoption_report.py profiles-dbos.json --contract "DBOS transactional-outbox: place order" --verified I --exercised H J
           uv run --no-sync python scripts/check_adoption_report.py demos/wagtail_tasks/profiles-wagtail.json --contract "wagtail: image and document lifecycle" --contract "wagtail: publishing a page behind a CDN" --exercised I --verified H J
           uv run --no-sync python scripts/check_adoption_report.py demos/wagtail_tasks/profiles-wagtail.json --contract "wagtail: image and document lifecycle" --exercised E
+          uv run --no-sync python scripts/check_adoption_report.py demos/wagtail_tasks/profiles-wagtail.json --contract "wagtail: a throttled Cloudflare purge, with its fix" --verified J
           uv run --no-sync python scripts/check_adoption_cases.py demos/wagtail_tasks/adopters-wagtail.xml --case "*TestDatabaseWorkerRows*database_legal*" --case "*TestDatabaseWorkerRows*inadmissible*" --case "*TestDatabaseWorkerRows*poisoned_identity*" --case "*TestDatabaseWorkerRows*soft_time_limit*" --case "*TestDatabaseWorkerRows*assert_selection_is_complete*"
       - name: Keep executed profile evidence
         if: always()
