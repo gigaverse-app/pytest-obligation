@@ -16,6 +16,7 @@ from typing import cast
 import celery
 import pytest
 import redis
+from celery import chord
 from celery.app.task import Task
 from celery.result import AsyncResult
 from packaging.version import Version
@@ -35,13 +36,24 @@ MESSAGE = "your order has shipped"
 SENT = f"sent {MESSAGE!r}"
 
 
-def send() -> str:
+def empty() -> None:
     for url in (reference.BROKER, reference.BACKEND):
         redis.Redis.from_url(url).flushdb()
     reference.RECORDS.flushdb()
+
+
+def send() -> str:
+    empty()
     return reference.send_message.apply_async(
         (MESSAGE,), link=reference.announce.s(), link_error=reference.report_failure.s()
     ).id
+
+
+def send_chord() -> str:
+    # Two messages, and a body that announces them once both are sent; the body's error callback reports a failure.
+    empty()
+    header = [reference.send_message.s(f"order {n} has shipped") for n in (1, 2)]
+    return chord(header)(reference.announce_all.s().on_error(reference.report_failure.s())).id
 
 
 def what_happened(task_id: str) -> tuple[str, int, tuple[str, ...]]:
@@ -94,6 +106,41 @@ SEND_MESSAGE = worker_history(
     env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
 )
 
+# The chord's state is its body's; its faults hit the first execution of a header task, and the refused
+# publish is the last header's publish of the body.
+CHORD_FINDINGS = Findings(
+    ("SUCCESS", 2, ("sent 2 messages",)),
+    {
+        "died at task_prerun": ("FAILURE", 1, ("failed: ChordError",)),
+        # https://github.com/celery/celery/issues/10949
+        "died at mark_as_done": ("FAILURE", 2, ("failed: ChordError",)),
+        # https://github.com/celery/celery/issues/10725#issuecomment-6318108091
+        "the broker refused the task's link": ("FAILURE", 2, ("failed: ChordError",)),
+    }
+    | (
+        {}
+        if SUCCESS_STORED_STAYS_SUCCESS
+        else {
+            # https://github.com/celery/celery/issues/10724: the header is counted twice, once as a failure.
+            "died at task_postrun": ("FAILURE", 2, ("failed: ChordError",)),
+            "the task's on_success hook raised": ("FAILURE", 2, ("failed: ChordError",)),
+        }
+    ),
+)
+
+CHORD = worker_history(
+    name="the reference worker runs a chord of two send_message tasks",
+    app="tests.celery_worker.app:app",
+    task=reference.send_message.name,
+    send=send_chord,
+    observe=what_happened,
+    initial=("PENDING", 0, ()),
+    expected=CHORD_FINDINGS.delivered,
+    settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
+    findings=CHORD_FINDINGS,
+    env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+)
+
 
 @contextmanager
 def message_replay() -> Iterator[ReplaySafeEffect]:
@@ -115,8 +162,11 @@ def message_replay() -> Iterator[ReplaySafeEffect]:
 
 CONTRACT = worker_contract(
     name="celery reference worker",
-    history=SEND_MESSAGE,
-    gap="a failure after the link is published, or a refused link, still runs the failure path",
+    histories=(SEND_MESSAGE, CHORD),
+    handoff_gaps={
+        SEND_MESSAGE.name: "a failure after the link is published, or a refused link, still runs the failure path",
+        CHORD.name: "a header lost after its effect, or a refused body publish, fails the chord for good",
+    },
 )
 
 

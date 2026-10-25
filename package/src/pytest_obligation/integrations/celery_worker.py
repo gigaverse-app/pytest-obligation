@@ -202,19 +202,38 @@ RESULTS_ARE_NOT_OWED = "stored results are the record of settled work, not work 
 def worker_contract(
     *,
     name: str,
-    history: ProcessHistory[Any, Any],
+    history: ProcessHistory[Any, Any] | None = None,
     gap: str | None = None,
+    histories: Sequence[ProcessHistory[Any, Any]] = (),
+    handoff_gaps: Mapping[str, str] | None = None,
     fixtures: tuple[str, ...] = (),
 ) -> ObligationContract:
     """
-    Celery's contract with its worker: one task through the real worker, failing at each of Celery's stages.
+    Celery's contract with its worker: the adopter's work through the real worker, failing at each of Celery's stages.
 
     ``history`` is :func:`worker_history` for one of the adopter's tasks, a
-    process handoff of the contract. What it finds is declared as ``gap``, a
-    strict xfail, and, when the history carries its ``findings``, pinned
-    history by history in the same run. The profiles Celery leaves to the
-    broker or to the task are declined with the reason.
+    process handoff of the contract, and what it finds is declared as ``gap``,
+    a strict xfail. To bind several (a task, a chain, a chord), pass them as
+    ``histories`` instead, with ``handoff_gaps`` declaring each one's gap by
+    history name, as RQ's ``worker_contract`` does. When a history carries its
+    ``findings``, they are pinned history by history in the same run. The
+    profiles Celery leaves to the broker or to the task are declined with the
+    reason.
     """
+    if history is not None:
+        assert not histories and handoff_gaps is None, (
+            f"{name}: bind one history with history= and gap=, or several with histories= and handoff_gaps=, not both"
+        )
+        histories = (history,)
+        handoff_gaps = {history.name: gap} if gap is not None else {}
+    else:
+        assert gap is None, f"{name}: gap= declares history='s gap; with histories=, declare each in handoff_gaps="
+    assert histories, f"{name}: a Celery worker contract binds at least one history"
+    names = [each.name for each in histories]
+    assert len(set(names)) == len(names), f"{name}: two histories share a name: {sorted(names)}"
+    handoff_gaps = dict(handoff_gaps or {})
+    unknown = handoff_gaps.keys() - set(names)
+    assert not unknown, f"{name}: handoff_gaps name no bound history: {sorted(unknown)}; the histories are {names}"
     return ObligationContract(
         name=name,
         adoption=Adoption.LEGACY,
@@ -235,8 +254,8 @@ def worker_contract(
             Profile.G: application_gate("Celery"),
             Profile.I: application_admission("Celery"),
         },
-        process_handoffs=(history,),
-        handoff_gaps={history.name: gap} if gap is not None else {},
+        process_handoffs=tuple(histories),
+        handoff_gaps=handoff_gaps,
         fixtures=fixtures,
     )
 
