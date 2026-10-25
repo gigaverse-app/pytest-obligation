@@ -95,7 +95,9 @@ def test_numeric_columns_stay_fixed_when_counts_gain_digits() -> None:
 
 def test_application_names_cannot_create_markdown_links_or_mentions() -> None:
     body = application_html("@team [x](https://x)", dict(passed=0, failed=0, blocked=0, gaps=0, rejected=0), BASE)
-    assert "&#64;team" in body and "&#91;x&#93;" in body
+    # GitHub decodes "&#64;team" back into a mention, so the check reads the body as GitHub does.
+    assert "&#91;x&#93;" in body
+    assert "@team" not in unescape(body) and "https://x" not in unescape(body)
 
 
 def test_cli_writes_one_markdown_report_without_a_graphics_bundle(tmp_path: Path) -> None:

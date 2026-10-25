@@ -1,5 +1,5 @@
 name: pytest-obligation report
-description: Explain passing evidence, missing coverage, rejected bindings and failures in one updated PR comment.
+description: Explain passing evidence, missing coverage, rejected bindings and failures in one updated PR comment. Fork PRs get theirs from the publish action in a workflow_run job.
 branding:
   icon: shield
   color: blue
@@ -29,7 +29,7 @@ inputs:
     description: Token with pull-requests write for same-repository PR comments. No token is needed for summary-only use.
     default: ${{ github.token }}
   post-comment:
-    description: Update one PR comment. Fork PRs keep the summary and artifact without posting.
+    description: Update one PR comment on same-repository PRs. A fork PR's run cannot comment; it keeps the summary and artifact, and the publish action posts its sticky from a trusted workflow_run job.
     default: 'true'
   sticky-key:
     description: Stable key for this workflow or test lane; use distinct keys for separate sessions.
@@ -74,7 +74,8 @@ runs:
         INVENTORY_PATH: ${{ inputs.inventory-path }}
         JUNIT_PATH: ${{ inputs.junit-path }}
       run: |
-        output="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")/report.md"
+        workspace="$(mktemp -d "$RUNNER_TEMP/obligation-report.XXXXXX")"
+        output="$workspace/report.md"
         graphics_args=()
         if [[ "$REPORT_GRAPHICS" == 'true' ]]; then graphics_args+=(--graphics); fi
         inventory_args=()
@@ -92,21 +93,21 @@ runs:
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
-          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}" "${inventory_args[@]}"
+          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}" "${inventory_args[@]}" \
+          --stage-artifact "$workspace/artifact"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
-        echo "inventory-path=${output%.md}.inventory.json" >> "$GITHUB_OUTPUT"
+        echo "artifact-path=$workspace/artifact" >> "$GITHUB_OUTPUT"
+    # Fixed names (manifest.json, report.md, inventory.json, reports/, junit/) let the publish action
+    # re-render this evidence as data in a trusted job, without interpreting any uploaded path.
     - name: Preserve full evidence and rendered report
       uses: actions/upload-artifact@v7
       with:
         name: obligation-${{ inputs.sticky-key }}-${{ github.run_attempt }}
-        path: |
-          ${{ inputs.report-path }}
-          ${{ inputs.junit-path }}
-          ${{ steps.render.outputs.markdown-path }}
-          ${{ steps.render.outputs.inventory-path }}
+        path: ${{ steps.render.outputs.artifact-path }}
         if-no-files-found: error
     - name: Update PR report
-      if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+      # Runs on fork PRs too, only to say in the log and summary that a workflow_run publisher posts the sticky.
+      if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' }}
       uses: actions/github-script@v8
       env:
         OBLIGATION_MARKDOWN: ${{ steps.render.outputs.markdown-path }}

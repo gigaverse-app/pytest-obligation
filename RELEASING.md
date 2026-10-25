@@ -80,7 +80,7 @@ development rehearsal. A successful upload is immutable; do not reuse a version
 for different source.
 
 Successful releases maintain floating action tags. Use
-`gigaverse-app/pytest-obligation/collect@v1` and `report@v1` to follow stable
+`gigaverse-app/pytest-obligation/collect@v1`, `report@v1` and `publish@v1` to follow stable
 action updates. While the Python package is below 1.0, compatible releases advance
 both `v0` and `v1`; package v1 releases continue advancing `v1`. A future v2
 release leaves `v1` unchanged. Retrying an older release cannot rewind these tags,

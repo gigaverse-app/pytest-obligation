@@ -1,0 +1,29 @@
+name: Obligation sticky
+
+# A fork PR's CI token cannot comment, so CI's report step only uploads its evidence artifact.
+# GitHub runs this workflow_run file from the default branch with a write token; the publish action
+# re-renders data in an offline container with no credentials and posts the sticky.
+# It never checks out or runs the PR's code. Only reviewed changes to our main branch update this pin.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read # Read the triggering run and download its artifact.
+      pull-requests: write # Create or update the sticky comment.
+    # The PR number is unknown until the API lookup, so serialize on the head it was tested from.
+    concurrency:
+      group: obligation-sticky-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      - uses: gigaverse-app/pytest-obligation/publish@main
+        with:
+          sticky-key: example-application
