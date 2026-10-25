@@ -43,7 +43,8 @@ The harness can test a Shopify integration or any other external API through
 the application's real Python call and observed effects. The optional-import,
 dependency-free [Shopify billing simulator](shopify.md) models accepted keys,
 rejections and delayed meter visibility; it is not a Shopify HTTP client or a
-complete provider emulator. See
+complete provider emulator. To build a fake for another provider, start from the
+provider-neutral [faithful-fake building blocks](faithful-fakes.md). See
 [the adopter capability map](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/adopter-capabilities.md) for what existing suites
 actually exercise.
 

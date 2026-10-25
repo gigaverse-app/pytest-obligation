@@ -176,6 +176,7 @@ Open your application in Claude Code or Codex and ask:
 
 | You want to… | Read |
 | --- | --- |
+| Learn by doing, step by step | [Tutorials](package/docs/tutorials.md): [workflows across many systems](package/docs/tutorial-many-systems.md), [for framework authors](package/docs/tutorial-framework-authors.md), [vocabulary](package/docs/vocabulary.md) |
 | Find the right workflow or public interface | [Harness guide and module map](package/docs/harness-guide.md) |
 | Bind your application and run generated proofs | [Adoption walkthrough](package/docs/adopting.md), [runnable SQLite adopter](examples/adopter) |
 | Bind a [Due](https://github.com/gigaverse-app/due) work-table application | [Due's conformance guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md) |

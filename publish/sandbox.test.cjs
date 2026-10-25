@@ -66,6 +66,20 @@ test('preview downloads real producer evidence, renders in Docker and updates on
   assert.doesNotMatch(body, /FORGED MARKDOWN|evil.invalid|UNTRUSTED IMPORT|Evidence unavailable/);
 });
 
+test('preview downloads real producer evidence, renders in Docker and updates one comment', async () => {
+  const f = githubFixture(await fs.readFile(archive));
+  const first = await preview(f.options, f);
+  f.state.run.conclusion = 'failure';
+  const second = await preview(f.options, f);
+  assert.equal(second.url, first.url);
+  assert.equal(f.state.comments.length, 1);
+  const body = f.state.comments[0].body;
+  assert.match(body, /1 checks passed/);
+  assert.match(body, /Fork workflow: failure/);
+  assert.match(body, /Test step \(reported\): \*\*success\*\*/);
+  assert.doesNotMatch(body, /FORGED MARKDOWN|evil.invalid|UNTRUSTED IMPORT|Evidence unavailable/);
+});
+
 test('the actual container has no credentials, network, host workspace or write access to its input', async () => {
   const name = `obligation-probe-${process.pid}`;
   const args = containerArgs(image, archive, name);

@@ -23,7 +23,7 @@ it. Profiles let an adopter declare what it claims and be measured only on that.
 | --- | --- | --- |
 | A, automatic recovery | `profiles.automatic_recovery` | What work is outstanding? Is it still found after a lost message? Does anything actually run the sweep, and is the adapter describing the real one? |
 | B, bounded ownership | `profiles.bounded_ownership` | Who owns the work right now, and what happens when that owner dies? |
-| C, crash ambiguity | `profiles.crash_ambiguity` | What if the provider never answered? |
+| C, crash ambiguity | `profiles.crash_ambiguity`, `profiles.acknowledged_effects` | What if the provider never answered? When it only acknowledged receipt (`acknowledged_effects=`), does the obligation stay owed until the effect applies, and is it discharged once it does? |
 | D, durable retention | `profiles.durable_retention` | Can cleanup delete work that is still owed? |
 | E, eventual convergence | `profiles.eventual_convergence` | When a result lands, can it overwrite a newer one? |
 | F, fact-derived obligations | `profiles.fact_derived_obligations` | Can an obligation exist that nothing ever recorded? |
