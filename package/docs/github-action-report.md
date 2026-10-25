@@ -644,6 +644,68 @@ GitHub action always uses the container, including for a manual republish. The l
 is `manifest.json`, `reports/*.json`, `junit/*.xml`, optional `inventory.json`, and
 `report.md` for people. The publisher never reads that uploaded Markdown.
 
+## Keep the report in a README
+
+A repository can show its latest report on its front page, with a badge. Add the two
+markers to a Markdown document once:
+
+```markdown
+[![pytest-obligation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OWNER/REPO/main/.github/obligation-badge.json)](#contracts)
+
+<!-- pytest-obligation:start -->
+<!-- pytest-obligation:end -->
+```
+
+Then pass `readme-path` and `badge-path` to `report` in a job that runs the contracts on
+the default branch, and commit the two files when they change:
+
+```yaml
+on:
+  schedule: [{cron: "17 5 * * *"}]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Your environment setup and the contract run go here, writing obligation-profiles.json.
+      - uses: gigaverse-app/pytest-obligation/report@v1
+        if: ${{ !cancelled() }}
+        with:
+          report-path: obligation-profiles.json
+          expected-reports: '1'
+          test-outcome: ${{ steps.tests.outcome }}
+          post-comment: 'false'
+          readme-path: .github/README.md
+          readme-source: daily run on the default branch
+          badge-path: .github/obligation-badge.json
+      - if: ${{ !cancelled() }}
+        run: |
+          git add .github/README.md .github/obligation-badge.json
+          git diff --cached --quiet && exit 0
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+            commit -m "Update the pytest-obligation report"
+          git push
+```
+
+- **Only the markers' contents change.** Everything else in the document is yours, so it
+  can be edited, or merged from upstream, independently. A document without exactly one
+  start marker followed by one end marker fails the report step in words.
+- **It changes only when the evidence does.** The document's copy leaves out elapsed and
+  summed check times, the run link and source links pinned to the run's commit, and its
+  source line is `readme-source`. A run that finds the same thing commits nothing.
+- **The badge says what the report says.** It is a
+  [shields.io endpoint](https://shields.io/badges/endpoint-badge) built from the report's
+  own counts: green when every check passed, yellow when the only failures are declared
+  known defects, orange for blocked checks, red for an unexpected failure, a rejected
+  binding or a failed test step, and grey when the evidence is unavailable. A known defect
+  that a dependency fixes passes unexpectedly, which a strict expected failure turns into a
+  failed run: the badge shows it as blocked and red until the declaration is updated.
+- **GitHub shows `.github/README.md` first.** A fork can keep its upstream `README` untouched
+  and put its own front page, with the report, in `.github/README.md`.
+
 ## Which words belong to whom?
 
 | Report content | Owner |

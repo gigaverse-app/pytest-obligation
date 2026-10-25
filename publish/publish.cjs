@@ -77,14 +77,20 @@ async function buildImage(actionPath) {
   return image;
 }
 
+function rendererArgs(resolved, repositoryUrl, assetRef) {
+  return ['--head-sha', resolved.headSha, '--run-id', String(resolved.runId), '--run-attempt', String(resolved.runAttempt),
+    '--run-url', `${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt}`,
+    '--repository-url', repositoryUrl, '--asset-ref', assetRef,
+    // Only a PR from a branch of this repository keeps its contract's mentions, references and links live.
+    ...(resolved.sameRepository === true ? ['--own-text'] : [])];
+}
+
 async function renderSandbox(actionPath, archive, resolved, repositoryUrl, assetRef) {
   const image = await buildImage(actionPath);
   const name = `obligation-${crypto.randomUUID()}`;
   try {
     const {stdout} = await execute('docker', [...containerArgs(image, archive, name),
-      '--head-sha', resolved.headSha, '--run-id', String(resolved.runId), '--run-attempt', String(resolved.runAttempt),
-      '--run-url', `${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt}`,
-      '--repository-url', repositoryUrl, '--asset-ref', assetRef],
+      ...rendererArgs(resolved, repositoryUrl, assetRef)],
     {timeout: 120_000, maxBuffer: 256 * 1024, encoding: 'utf8', env:dockerEnvironment(), cwd:actionPath});
     // Captured output never reaches the Actions command parser and is never interpreted as code.
     return stdout;
@@ -133,5 +139,5 @@ async function run({github, context, core}, env = process.env) {
   })));
 }
 
-module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, renderSandbox,
+module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, rendererArgs, renderSandbox,
   dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS};

@@ -207,39 +207,55 @@ def test_stored_verdicts_and_application_text_cannot_forge_a_green_report() -> N
     assert "Owed work is discovered from stored facts" in body
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "@everyone",
-        "@gigaverse-app/engineering",
-        "celery/celery#10725",
-        "#10725",
-        "https://evil.example/x.png",
-        "www.evil.example",
-        "https://github.com/celery/celery/issues/10949",
-        # GitHub cross-references owner/repo/issues/N and /pull/N wherever they appear, with or without a host.
-        "celery/celery/issues/10949",
-        "github.com/celery/celery/pull/10950",
-    ],
-)
+#: Text GitHub acts on: it mentions, cross-references or links each one.
+GITHUB_ACTIONABLE = [
+    "@everyone",
+    "@gigaverse-app/engineering",
+    "celery/celery#10725",
+    "#10725",
+    "https://evil.example/x.png",
+    "www.evil.example",
+    "https://github.com/celery/celery/issues/10949",
+    # GitHub cross-references owner/repo/issues/N and /pull/N wherever they appear, with or without a host.
+    "celery/celery/issues/10949",
+    "github.com/celery/celery/pull/10950",
+]
+
+
+def _naming(text: str) -> dict[str, SuiteCoverage]:
+    return {
+        "test_app.Orders": SuiteCoverage(
+            name=f"orders {text}",
+            profiles={
+                "F": ProfileCoverage(
+                    title="discovery",
+                    assessment=Assessment(state="not applicable", because=f"see {text}"),
+                    cases={},
+                )
+            },
+        )
+    }
+
+
+@pytest.mark.parametrize("text", GITHUB_ACTIONABLE)
 @pytest.mark.parametrize("graphics", [False, True])
 def test_application_text_cannot_mention_link_or_cross_reference(text: str, graphics: bool) -> None:
     # GitHub decodes HTML entities before it finds mentions, issue references and bare URLs, so the
     # check reads the body as GitHub does: an entity-encoded "&#64;everyone" still pings everyone.
     # Measured with GitHub's Markdown API (POST /markdown); a zero-width space breaks each of them.
-    suite = SuiteCoverage(
-        name=f"orders {text}",
-        profiles={
-            "F": ProfileCoverage(
-                title="discovery",
-                assessment=Assessment(state="not applicable", because=f"see {text}"),
-                cases={},
-            )
-        },
-    )
-    body = html.unescape(render({"test_app.Orders": suite}, graphics=graphics))
+    body = html.unescape(render(_naming(text), graphics=graphics))
     assert "orders" in body and "see" in body, "the application text must still be shown"
     assert text not in body, f"{text!r} reaches GitHub intact, where it mentions, links or cross-references"
+
+
+@pytest.mark.parametrize("text", GITHUB_ACTIONABLE)
+@pytest.mark.parametrize("graphics", [False, True])
+def test_the_repositorys_own_text_keeps_its_mentions_references_and_links(text: str, graphics: bool) -> None:
+    # A push, a schedule or a same-repository PR renders contracts written by someone with write access,
+    # so their links stay clickable; only a PR from another repository's fork is a stranger's text.
+    assert text in html.unescape(render(_naming(text), graphics=graphics, own_text=True))
+    # The switch ends with the rendering: the next report is a stranger's again unless it says otherwise.
+    assert text not in html.unescape(render(_naming(text), graphics=graphics))
 
 
 @pytest.mark.parametrize("content", [None, "{broken", '{"unknown": {}}'])
