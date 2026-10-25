@@ -16,6 +16,15 @@ BACKEND = redis_url("celery backend")
 RECORDS = redis.Redis.from_url(redis_url("celery records"), decode_responses=True)
 
 app = Celery("due_work_reference", broker=BROKER, backend=BACKEND)
+
+
+def empty() -> None:
+    """ARRANGE: an empty broker, result backend and record."""
+    for url in (BROKER, BACKEND):
+        redis.Redis.from_url(url).flushdb()
+    RECORDS.flushdb()
+
+
 app.conf.update(task_acks_late=True, worker_prefetch_multiplier=1)
 
 
@@ -40,3 +49,11 @@ def report_failure(request: Any, exc: BaseException, traceback: Any) -> None:
 def announce_all(results: list[str]) -> None:
     """A chord's body: tell the customer every message in the header was sent."""
     RECORDS.rpush("announced", f"sent {len(results)} messages")
+
+
+@app.task(acks_late=True, reject_on_worker_lost=True)
+def send_message_once(message: str) -> str:
+    """Requeued when its pool child is lost, and sent with a key, so a repeat leaves no second message."""
+    if RECORDS.set(f"key:{message}", 1, nx=True):
+        RECORDS.rpush("sent", message)
+    return message

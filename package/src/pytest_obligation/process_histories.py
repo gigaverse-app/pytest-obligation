@@ -123,8 +123,12 @@ class ProcessHistory(ExpectedOutcome[HandleT, ObservationT]):
 
     #: FAULT INJECTION: run the real program in a child process, told to die at
     #: the given point (``None`` for normal operation). Returns the handle to
-    #: observe and the child's exit status.
-    run: Callable[[str | None], tuple[HandleT, int]]
+    #: observe and the child's exit status, and optionally a third item: the
+    #: observation taken as the fault happened. Return it when the program
+    #: recovers inside the run (a worker whose main process replaces a lost pool
+    #: child and runs its requeued task), so the verdict can see that recovery
+    #: changed something; otherwise the run's work is observed once it returns.
+    run: Callable[[str | None], tuple[HandleT, int] | tuple[HandleT, int, ObservationT]]
 
     #: OBSERVE: product and obligation state, including what external systems saw.
     observe: Callable[[HandleT], ObservationT]
@@ -144,9 +148,9 @@ class ProcessHistory(ExpectedOutcome[HandleT, ObservationT]):
 
 
 def _run(history: ProcessHistory[Any, Any], point: str | None) -> HistoryRun:
-    handle, status = history.run(point)
+    handle, status, *at_fault = history.run(point)
     expected = history.expected_for(handle)
-    midway = history.observe(handle)
+    midway = at_fault[0] if at_fault else history.observe(handle)
     history.recover(handle)
     if point is None:
         label = "normal operation"

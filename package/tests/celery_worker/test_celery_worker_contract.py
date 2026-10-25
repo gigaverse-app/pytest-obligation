@@ -33,6 +33,7 @@ from pytest_obligation.integrations.celery_worker import (
 )
 from pytest_obligation.process_histories import ProcessHistory
 from tests.celery_worker import app as reference
+from tests.celery_worker.app import empty
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32",
@@ -42,12 +43,6 @@ pytestmark = pytest.mark.skipif(
 
 MESSAGE = "your order has shipped"
 SENT = f"sent {MESSAGE!r}"
-
-
-def empty() -> None:
-    for url in (reference.BROKER, reference.BACKEND):
-        redis.Redis.from_url(url).flushdb()
-    reference.RECORDS.flushdb()
 
 
 def send() -> str:
