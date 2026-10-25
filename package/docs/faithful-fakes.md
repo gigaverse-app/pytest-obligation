@@ -73,7 +73,7 @@ rather than exceptions. Against Wagtail it shows:
   request without it: a mutation test proves the check can fail.
 - A throttled purge is logged and dropped. django-tasks-db records the task
   SUCCESSFUL, so the CDN keeps serving the old page with nothing to retry it.
-  The publishing contract declares this as a gap on a profile J classified
+  An as-shipped contract declares this as a gap on a profile J classified
   failure, and a second contract with a one-class fix passes as the positive control.
 - Cloudflare offers no purge status to read back, so the acknowledged-effect
   binding does not apply: there is nothing a correct implementation could check.

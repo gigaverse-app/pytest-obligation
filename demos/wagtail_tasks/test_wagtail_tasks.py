@@ -74,7 +74,6 @@ from pytest_obligation.integrations.django_tasks import RUNS_ONCE, TaskOutcome, 
 from pytest_obligation.profiles.catalog import ConvergenceFamily
 
 from . import cdn
-from .cloudflare import CLOUDFLARE_RATE_LIMIT_GAP, cloudflare_rate_limit
 from .test_feature_detection import focal_point_replay, focal_point_snapshot
 
 # The workers production runs, in batch mode: every ready task, then stop.
@@ -478,7 +477,7 @@ WAGTAIL_PUBLISHING = ObligationContract(
             "the obligation"
         ),
         Profile.H: Claim(),
-        Profile.J: Claim(gaps=CLOUDFLARE_RATE_LIMIT_GAP),
+        Profile.J: Claim(),
         Profile.G: NotApplicable(
             "The purge is immediately eligible after publication; it has no later product prerequisite."
         ),
@@ -491,7 +490,6 @@ WAGTAIL_PUBLISHING = ObligationContract(
     },
     replay=purge_replay,
     retry=partial(task_failure_limit, "purge"),
-    classified_failures={"Cloudflare purge rate limit": cloudflare_rate_limit},
     handoffs=(PUBLISH_PAGE,),
     handoff_delivery=WORKER,
     handoff_gaps={

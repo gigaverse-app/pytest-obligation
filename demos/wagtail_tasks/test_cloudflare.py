@@ -12,8 +12,8 @@ built from ``pytest_obligation.fakes``, and finds:
 * **Rate limit: a finding.** When Cloudflare throttles a purge, Wagtail logs the
   refusal and returns. django-tasks-db records the task as successful, nothing
   retries it, and the CDN keeps serving the old page until its cache expires.
-  ``WAGTAIL_PUBLISHING`` declares this as a gap on its classified failure; the
-  contract below, with the one-line fix, is the positive control.
+  ``CLOUDFLARE_AS_SHIPPED`` declares this as a gap on its classified failure;
+  ``CLOUDFLARE_WITH_THE_FIX``, with the one-class fix, is the positive control.
 * **Acknowledgement: not applicable.** Cloudflare answers a purge with
   ``success: true`` and offers no status to read back, so there is nothing an
   implementation could verify. Profile C's ``acknowledged_effects`` binding is
@@ -29,6 +29,7 @@ from wagtail.contrib.frontend_cache.backends import CloudflareBackend
 from wagtail.contrib.frontend_cache.tasks import purge_urls_from_cache_task
 
 from pytest_obligation import (
+    Adoption,
     Claim,
     NotApplicable,
     ObligationContract,
@@ -38,18 +39,36 @@ from pytest_obligation import (
 
 from .cloudflare import (
     CLOUDFLARE_PURGE_LIMIT,
+    CLOUDFLARE_RATE_LIMIT_GAP,
     FAILS_LOUDLY_BACKEND,
     cloudflare_in_front,
     cloudflare_rate_limit,
 )
 
-_CONTROL_SCOPE = "the positive control measures one classification; WAGTAIL_PUBLISHING declares this profile"
+_SCOPE = "this contract measures one classification of the purge; WAGTAIL_PUBLISHING declares this profile"
+
+CLOUDFLARE_AS_SHIPPED = ObligationContract(
+    name="wagtail: a throttled Cloudflare purge, as shipped",
+    adoption=Adoption.LEGACY,
+    transactional=True,
+    profiles={
+        **{profile: NotApplicable(_SCOPE) for profile in Profile},
+        Profile.J: Claim(gaps=CLOUDFLARE_RATE_LIMIT_GAP),
+    },
+    classified_failures={"Cloudflare purge rate limit": cloudflare_rate_limit},
+)
+
+
+@due_work_contract_suite(CLOUDFLARE_AS_SHIPPED)
+class TestCloudflareAsShipped:
+    """Wagtail logs a throttled purge and returns, so the task ends SUCCESSFUL and the declared FAILED never shows."""
+
 
 CLOUDFLARE_WITH_THE_FIX = ObligationContract(
     name="wagtail: a throttled Cloudflare purge, with its fix",
     transactional=True,
     profiles={
-        **{profile: NotApplicable(_CONTROL_SCOPE) for profile in Profile},
+        **{profile: NotApplicable(_SCOPE) for profile in Profile},
         Profile.J: Claim(),
     },
     classified_failures={"Cloudflare purge rate limit": partial(cloudflare_rate_limit, FAILS_LOUDLY_BACKEND)},
