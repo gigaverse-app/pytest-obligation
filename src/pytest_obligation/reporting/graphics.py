@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from html import escape
 from unicodedata import combining, east_asian_width
 
-from .evidence import cell, inert
+from .evidence import application_text, cell
 
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = ("applications", "checks passed", "failures", "blocked checks", "coverage gaps", "rejected bindings")
@@ -96,7 +96,7 @@ def application_name(name: str) -> tuple[str, bool]:
         while columns(display) > 19:
             display = display[:-1]
         display += "…"
-    title = f' title="{escape(inert(clean[:700]), quote=True)}"' if shortened else ""
+    title = f' title="{escape(application_text(clean[:700]), quote=True)}"' if shortened else ""
     return f"<samp{title}><strong>{cell(display)}</strong>" + "&nbsp;" * (20 - columns(display)) + "</samp>", shortened
 
 

@@ -38,6 +38,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--run-url", default="")
     parser.add_argument("--repository-url", default="")
     parser.add_argument("--asset-ref", default="main")
+    parser.add_argument(
+        "--own-text",
+        action="store_true",
+        help="The API shows the PR's head is this repository, not another's fork: keep the contract's mentions, "
+        "issue references and links live. Never derived from the artifact",
+    )
     args = parser.parse_args(argv)
     if args.run_url and not safe_run_url(args.run_url):
         parser.error("run URL must be an HTTPS URL without Markdown delimiters")
@@ -71,6 +77,7 @@ def _render(args: argparse.Namespace, evidence: StagedEvidence) -> None:
         # The source link is anchored to the API-verified PR head. A producer's revision is only a claim.
         revision=args.head_sha,
         graphics=manifest.graphics if manifest else False,
+        own_text=args.own_text,
     )
     write_report(args.output, body, evidence.inventory)
 
