@@ -1,0 +1,129 @@
+name: pytest-obligation publish
+description: Post the report action's PR sticky from a trusted workflow_run job, including for fork PRs, by re-rendering the run's evidence as data.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  sticky-key:
+    description: The report action's sticky-key in the triggering run. Its artifact is obligation-<sticky-key>-<attempt>.
+    default: obligation
+  github-token:
+    description: Token with actions read (artifact download) and pull-requests write (the comment).
+    default: ${{ github.token }}
+  run-id:
+    description: Triggering run to publish. Defaults to github.event.workflow_run.id; set it to republish a run from workflow_dispatch.
+    default: ''
+  run-attempt:
+    description: Attempt of run-id to publish. Defaults to the workflow_run event's attempt, otherwise the run's latest.
+    default: ''
+  python-version:
+    description: Python for the reporter. It reads evidence only; no application source is parsed here.
+    default: '3.11'
+outputs:
+  pull-request:
+    description: Number of the PR the sticky belongs to; empty when there was nothing to publish.
+    value: ${{ steps.resolve.outputs.pull-request }}
+  published:
+    description: "'true' when the sticky was created or updated by this step."
+    value: ${{ steps.publish.outputs.published || 'false' }}
+  markdown-path:
+    description: Markdown re-rendered by this action's own reporter, also written to the job summary.
+    value: ${{ steps.render.outputs.markdown-path }}
+runs:
+  using: composite
+  steps:
+    # The run, its PR and its artifact come from the API. A PR is accepted only when it is open in
+    # this repository and its head is the run's head commit; nothing is taken from the artifact.
+    - id: resolve
+      uses: actions/github-script@v8
+      env:
+        OBLIGATION_ACTION_PATH: ${{ github.action_path }}
+        OBLIGATION_RUN_ID: ${{ inputs.run-id }}
+        OBLIGATION_RUN_ATTEMPT: ${{ inputs.run-attempt }}
+        OBLIGATION_STICKY_KEY: ${{ inputs.sticky-key }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {resolveTriggeringRun} = require(`${process.env.OBLIGATION_ACTION_PATH}/../report/publish.cjs`);
+          const resolved = await resolveTriggeringRun({github, context, core}, {
+            runId: process.env.OBLIGATION_RUN_ID,
+            runAttempt: process.env.OBLIGATION_RUN_ATTEMPT,
+            stickyKey: process.env.OBLIGATION_STICKY_KEY,
+          });
+          if (!resolved) return;
+          for (const [name, value] of Object.entries({
+            'pull-request': resolved.pullRequest,
+            'head-sha': resolved.headSha,
+            'run-id': resolved.runId,
+            'run-attempt': resolved.runAttempt,
+            artifact: resolved.artifact,
+            directory: fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'obligation-publish-')),
+          })) core.setOutput(name, String(value));
+    - if: ${{ steps.resolve.outputs.pull-request != '' }}
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ steps.resolve.outputs.artifact }}
+        run-id: ${{ steps.resolve.outputs.run-id }}
+        github-token: ${{ inputs.github-token }}
+        path: ${{ steps.resolve.outputs.directory }}/artifact
+    - id: runtime
+      if: ${{ steps.resolve.outputs.pull-request != '' }}
+      shell: bash
+      run: |
+        if command -v uv >/dev/null; then echo 'uv=true' >> "$GITHUB_OUTPUT"; fi
+    - uses: astral-sh/setup-uv@v7
+      if: ${{ steps.resolve.outputs.pull-request != '' && steps.runtime.outputs.uv != 'true' }}
+      with:
+        enable-cache: 'false'
+    # Only values from the API and this workflow reach the shell. The artifact is read by the
+    # reporter of this action's revision, in isolated mode, and its uploaded Markdown is ignored.
+    - name: Re-render the run's evidence
+      id: render
+      if: ${{ steps.resolve.outputs.pull-request != '' }}
+      shell: bash
+      env:
+        ARTIFACT_DIR: ${{ steps.resolve.outputs.directory }}/artifact
+        OUTPUT_DIR: ${{ steps.resolve.outputs.directory }}/rendered
+        REPORTER_PACKAGE: ${{ github.action_path }}/../package
+        REPORTER_PYTHON: ${{ inputs.python-version }}
+        HEAD_SHA: ${{ steps.resolve.outputs.head-sha }}
+        RUN_ID: ${{ steps.resolve.outputs.run-id }}
+        RUN_ATTEMPT: ${{ steps.resolve.outputs.run-attempt }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.resolve.outputs.run-id }}/attempts/${{ steps.resolve.outputs.run-attempt }}
+        REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
+        REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
+      run: |
+        output="$OUTPUT_DIR/report.md"
+        uvx --python "$REPORTER_PYTHON" --from "$REPORTER_PACKAGE[report]" python -I -m pytest_obligation.reporting.republish \
+          --artifact "$ARTIFACT_DIR" --output "$output" --head-sha "$HEAD_SHA" --run-id "$RUN_ID" \
+          --run-attempt "$RUN_ATTEMPT" --run-url "$RUN_URL" --asset-ref "$REPORT_ASSET_REF" \
+          --repository-url "$REPORT_REPOSITORY"
+        echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
+    - name: Update PR report
+      id: publish
+      if: ${{ steps.resolve.outputs.pull-request != '' }}
+      uses: actions/github-script@v8
+      env:
+        OBLIGATION_ACTION_PATH: ${{ github.action_path }}
+        OBLIGATION_MARKDOWN: ${{ steps.render.outputs.markdown-path }}
+        OBLIGATION_STICKY_KEY: ${{ inputs.sticky-key }}
+        OBLIGATION_PULL_REQUEST: ${{ steps.resolve.outputs.pull-request }}
+        OBLIGATION_HEAD_SHA: ${{ steps.resolve.outputs.head-sha }}
+        OBLIGATION_RUN_ID: ${{ steps.resolve.outputs.run-id }}
+        OBLIGATION_RUN_ATTEMPT: ${{ steps.resolve.outputs.run-attempt }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const {publishSticky} = require(`${process.env.OBLIGATION_ACTION_PATH}/../report/publish.cjs`);
+          const env = process.env;
+          const published = await publishSticky({github, context, core}, {
+            pullRequest: env.OBLIGATION_PULL_REQUEST,
+            headSha: env.OBLIGATION_HEAD_SHA,
+            runId: env.OBLIGATION_RUN_ID,
+            runAttempt: env.OBLIGATION_RUN_ATTEMPT,
+            stickyKey: env.OBLIGATION_STICKY_KEY,
+            markdownPath: env.OBLIGATION_MARKDOWN,
+          });
+          core.setOutput('published', String(published));

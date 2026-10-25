@@ -564,7 +564,8 @@ jobs:
   actions:
     permissions:
       contents: read
-      pull-requests: write # Dogfood the report; forks retain summary/artifact only.
+      actions: read # The publisher smoke reads this run and downloads its artifact.
+      pull-requests: write # Dogfood the report; a fork's sticky comes from obligation-sticky.yml.
     needs: select-tests
     if: >-
       ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
@@ -623,12 +624,37 @@ jobs:
           test "$WARM_REUSED" = true
           test "$REQUIRED" = false
       - name: Smoke-test the evidence report action
+        id: report-smoke
         if: always()
         uses: ./report
         with:
           report-path: examples/adopter/profiles-example.json
           sticky-key: example-application
           test-outcome: ${{ steps.example-contracts.outcome }}
+      # The workflow_run trigger itself only fires from the default branch (obligation-sticky.yml);
+      # this runs the rest of that path on this run: API lookup, artifact download, re-render, sticky.
+      - name: Smoke-test the trusted publisher on this run's artifact
+        id: publish-smoke
+        if: ${{ !cancelled() && steps.report-smoke.outcome == 'success' }}
+        uses: ./publish
+        with:
+          run-id: ${{ github.run_id }}
+          run-attempt: ${{ github.run_attempt }}
+          sticky-key: example-application
+      - name: Require the publisher's re-render to equal the run's own report
+        if: ${{ !cancelled() && steps.publish-smoke.outcome == 'success' && github.event_name == 'pull_request' }}
+        env:
+          REPORTED: ${{ steps.report-smoke.outputs.markdown-path }}
+          REPUBLISHED: ${{ steps.publish-smoke.outputs.markdown-path }}
+          PULL_REQUEST: ${{ steps.publish-smoke.outputs.pull-request }}
+          EXPECTED_PULL_REQUEST: ${{ github.event.pull_request.number }}
+          PUBLISHED: ${{ steps.publish-smoke.outputs.published }}
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          test "$PULL_REQUEST" = "$EXPECTED_PULL_REQUEST"
+          cmp "$REPORTED" "$REPUBLISHED"
+          # A fork's read-only token degrades to a warning; the same repository must publish.
+          if [[ "$SAME_REPOSITORY" == true ]]; then test "$PUBLISHED" = true; else test "$PUBLISHED" = false; fi
       - name: Require example capabilities
         working-directory: examples/adopter
         run: |
