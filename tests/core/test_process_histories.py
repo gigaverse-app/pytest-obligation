@@ -169,3 +169,33 @@ def test_explicit_none_can_be_the_correct_product_outcome(ledger_host: object) -
 
     history = _history(("before_send",)).model_copy(update={"initial": "absent", "observe": pending, "expected": None})
     assert_process_deaths_converge(history)
+
+
+def _recovers_inside_the_run(point: str | None, *, at_fault: bool) -> tuple[int, int] | tuple[int, int, object]:
+    """A program that recovers before the run returns, as a worker replacing a lost pool child does."""
+    attempt = ref.running_attempt()
+    observed = ref.status_and_notifications(attempt)
+    ref.complete_notifying(attempt)
+    if point is None:
+        return attempt, 0
+    return (attempt, 1, observed) if at_fault else (attempt, 1)
+
+
+def _recovered_inside_the_run(*, at_fault: bool) -> ProcessHistory[int, tuple[str, int]]:
+    return ProcessHistory(
+        name="completion recovered inside the run",
+        initial=("absent", 0),
+        run=lambda point: _recovers_inside_the_run(point, at_fault=at_fault),
+        observe=ref.status_and_notifications,
+        recover=ref.recover_after_death,
+        death_points=("before_send",),
+    )
+
+
+def test_recovery_inside_the_run_counts_when_the_run_observed_its_fault(ledger_host: object) -> None:
+    assert_process_deaths_converge(_recovered_inside_the_run(at_fault=True))
+
+
+def test_recovery_inside_the_run_is_invisible_without_the_observation_at_the_fault(ledger_host: object) -> None:
+    with pytest.raises(AssertionError, match="recovery changed the observation in none of them"):
+        assert_process_deaths_converge(_recovered_inside_the_run(at_fault=False))
