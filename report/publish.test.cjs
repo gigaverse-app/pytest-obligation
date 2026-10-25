@@ -137,7 +137,7 @@ test('a fork PR is found by its head owner and branch, and must point at the run
   assert.deepEqual(artifacts, {owner:'owner', repo:'app', run_id:200, name:'obligation-python-2', per_page:100});
 });
 
-test('a PR from a branch of this repository is marked as the repository's own, from the API alone', async t => {
+test("a PR from a branch of this repository is marked as the repository's own, from the API alone", async t => {
   const f = fixture(t);
   forkRun(f, {head_repository:{full_name:'owner/app', owner:{login:'owner'}}});
   f.state.pulls[0].head.repo.full_name = 'owner/app';
