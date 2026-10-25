@@ -96,7 +96,7 @@ def _clock(queue: Queue) -> ManualClock:
 def empty(queue: Queue) -> None:
     """Delete every job, so each generated case starts from an empty queue."""
     with queue.db:
-        queue.db.execute("DELETE FROM tinyq_jobs")
+        queue.db.execute("DELETE FROM jobs")
 
 
 def recover(queue: Queue, *, rounds: int = 3) -> None:

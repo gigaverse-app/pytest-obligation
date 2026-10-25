@@ -1,9 +1,9 @@
 """tinyq: a deliberately small task queue on SQLite, written for the framework-author tutorial.
 
-Jobs are rows. A worker claims a row with a lease and a fresh token, runs the
-task, and settles the row only if it still holds that token. A sweep returns
-rows whose lease expired to the queue, and a failing task is retried until its
-attempts run out. That is the whole promise this tutorial tests.
+A job is a row in the `jobs` table. Its status moves ready -> running -> done,
+or back to ready to retry, or to failed when its attempts run out. A worker
+takes a job, runs its task, and records the result. If a worker dies, a sweep
+gives its job back to the queue. That is the whole promise this tutorial tests.
 """
 
 import json
@@ -16,12 +16,16 @@ from contextlib import contextmanager
 from typing import Any
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS tinyq_jobs (
-    id INTEGER PRIMARY KEY, task TEXT NOT NULL, args TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'ready', attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL,
-    token TEXT, lease_until REAL, run_after REAL NOT NULL DEFAULT 0, error TEXT
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY, task TEXT NOT NULL, args TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready',
+    attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL, run_after REAL NOT NULL DEFAULT 0,
+    token TEXT, lease_until REAL, error TEXT
 );
 """
+
+DUE = "SELECT id FROM jobs WHERE status = 'ready' AND run_after <= ? ORDER BY id"
+# A worker may change a job only while it is running and still carries the worker's token.
+OWNED = "id = ? AND token = ? AND status = 'running'"
 
 
 class Queue:
@@ -45,78 +49,61 @@ class Queue:
         return function
 
     def enqueue(self, function: Callable[..., Any], *args: Any, max_attempts: int = 3) -> int:
-        """Record a job in the caller's transaction (call it inside `with db:`): it commits or rolls back with them."""
-        row = self._execute(
-            "INSERT INTO tinyq_jobs(task, args, max_attempts) VALUES (?, ?, ?) RETURNING id",
-            (function.__name__, json.dumps(args), max_attempts),
-        ).fetchone()
-        return int(row[0])
+        """Add a job. Call it inside `with db:`, so the job commits or rolls back with your own writes."""
+        sql = "INSERT INTO jobs (task, args, max_attempts) VALUES (?, ?, ?) RETURNING id"
+        return self._one(sql, function.__name__, json.dumps(args), max_attempts)
 
     def due(self) -> list[int]:
-        """The jobs a worker may claim now."""
-        rows = self._execute(
-            "SELECT id FROM tinyq_jobs WHERE status = 'ready' AND run_after <= ? ORDER BY id", (self.clock(),)
-        )
-        return [job_id for (job_id,) in rows.fetchall()]
+        """The jobs a worker may take now."""
+        return self._column(DUE, self.clock())
 
     def claim(self) -> tuple[int, uuid.UUID] | None:
-        """Take the oldest due job: mark it running, with a fresh token and a lease."""
-        token, now = uuid.uuid4(), self.clock()
+        """Take the oldest due job: mark it running, give it a fresh token, and start its lease."""
         with self._transaction():
-            row = self._execute(
-                "UPDATE tinyq_jobs SET status = 'running', token = ?, lease_until = ? WHERE id = ("
-                "SELECT id FROM tinyq_jobs WHERE status = 'ready' AND run_after <= ? ORDER BY id LIMIT 1) RETURNING id",
-                (str(token), now + self.lease_seconds, now),
-            ).fetchone()
-        return None if row is None else (int(row[0]), token)
+            job_id = self._one(DUE, self.clock())
+            if job_id is None:
+                return None
+            token, lease_until = uuid.uuid4(), self.clock() + self.lease_seconds
+            sql = "UPDATE jobs SET status = 'running', token = ?, lease_until = ? WHERE id = ?"
+            self._run(sql, str(token), lease_until, job_id)
+        return job_id, token
 
     def complete(self, job_id: int, token: uuid.UUID) -> bool:
-        """Settle a job as done, only if `token` still owns it."""
+        """Mark the job done, but only if the caller still owns it."""
         with self._transaction():
-            changed = self._execute(
-                "UPDATE tinyq_jobs SET status = 'done', token = NULL, lease_until = NULL "
-                "WHERE id = ? AND token = ? AND status = 'running'",
-                (job_id, str(token)),
-            ).rowcount
-        return changed == 1
+            return self._run(f"UPDATE jobs SET status = 'done' WHERE {OWNED}", job_id, str(token)) == 1
 
     def fail(self, job_id: int, token: uuid.UUID, error: BaseException) -> bool:
-        """Count a failed attempt, only if `token` still owns the job: retry later, or stop after the last attempt."""
+        """Count a failed attempt, if the caller still owns the job: retry it later, or stop after the last one."""
         with self._transaction():
-            changed = self._execute(
-                "UPDATE tinyq_jobs SET attempts = attempts + 1, error = ?, token = NULL, lease_until = NULL, "
-                "status = CASE WHEN attempts + 1 >= max_attempts THEN 'failed' ELSE 'ready' END, run_after = ? "
-                "WHERE id = ? AND token = ? AND status = 'running'",
-                (repr(error), self.clock() + self.retry_delay, job_id, str(token)),
-            ).rowcount
-        return changed == 1
+            row = self._row(f"SELECT attempts, max_attempts FROM jobs WHERE {OWNED}", job_id, str(token))
+            if row is None:
+                return False
+            attempts, max_attempts = row[0] + 1, row[1]
+            status = "failed" if attempts >= max_attempts else "ready"
+            sql = "UPDATE jobs SET status = ?, attempts = ?, error = ?, token = NULL, run_after = ? WHERE id = ?"
+            self._run(sql, status, attempts, repr(error), self.clock() + self.retry_delay, job_id)
+        return True
 
     def renew(self, job_id: int, token: uuid.UUID) -> bool:
-        """Extend the lease of a long job, only if `token` still owns it."""
+        """Extend a long job's lease, if the caller still owns it."""
+        lease_until = self.clock() + self.lease_seconds
         with self._transaction():
-            changed = self._execute(
-                "UPDATE tinyq_jobs SET lease_until = ? WHERE id = ? AND token = ? AND status = 'running'",
-                (self.clock() + self.lease_seconds, job_id, str(token)),
-            ).rowcount
-        return changed == 1
+            return self._run(f"UPDATE jobs SET lease_until = ? WHERE {OWNED}", lease_until, job_id, str(token)) == 1
 
     def reclaim_expired(self) -> list[int]:
-        """The sweep: return jobs whose worker stopped renewing its lease, presumed dead, to the queue."""
+        """The sweep: give back to the queue every job whose worker's lease ran out, presumed dead."""
+        sql = "UPDATE jobs SET status = 'ready', token = NULL WHERE status = 'running' AND lease_until < ? RETURNING id"
         with self._transaction():
-            rows = self._execute(
-                "UPDATE tinyq_jobs SET status = 'ready', token = NULL, lease_until = NULL "
-                "WHERE status = 'running' AND lease_until < ? RETURNING id",
-                (self.clock(),),
-            ).fetchall()
-        return [job_id for (job_id,) in rows]
+            return self._column(sql, self.clock())
 
     def work_once(self) -> bool:
-        """One worker pass: claim a job, run its task, settle it. False when nothing was due."""
+        """One worker pass: take a job, run its task, record the result. False when nothing was due."""
         claimed = self.claim()
         if claimed is None:
             return False
         job_id, token = claimed
-        task, args = self._execute("SELECT task, args FROM tinyq_jobs WHERE id = ?", (job_id,)).fetchone()
+        task, args = self._row("SELECT task, args FROM jobs WHERE id = ?", job_id)
         try:
             self.tasks[task](*json.loads(args))
         except Exception as error:
@@ -130,11 +117,26 @@ class Queue:
             pass
 
     def status(self, job_id: int) -> str:
-        return self._execute("SELECT status FROM tinyq_jobs WHERE id = ?", (job_id,)).fetchone()[0]
+        return self._one("SELECT status FROM jobs WHERE id = ?", job_id)
 
     def state(self, job_id: int) -> tuple[str, int, float | None]:
         """Status, attempts used and lease deadline: what an operator's dashboard shows for a job."""
-        return self._execute("SELECT status, attempts, lease_until FROM tinyq_jobs WHERE id = ?", (job_id,)).fetchone()
+        return self._row("SELECT status, attempts, lease_until FROM jobs WHERE id = ?", job_id)
+
+    # Small helpers, so each method above reads as one SQL statement per step.
+
+    def _one(self, sql: str, *parameters: Any) -> Any:
+        row = self._execute(sql, parameters).fetchone()
+        return None if row is None else row[0]
+
+    def _row(self, sql: str, *parameters: Any) -> Any:
+        return self._execute(sql, parameters).fetchone()
+
+    def _column(self, sql: str, *parameters: Any) -> list[Any]:
+        return [row[0] for row in self._execute(sql, parameters).fetchall()]
+
+    def _run(self, sql: str, *parameters: Any) -> int:
+        return self._execute(sql, parameters).rowcount
 
     # Every statement and every commit tinyq makes goes through these two methods.
     # tinyq.testing hooks them to count commits and to stop a "dead" worker.

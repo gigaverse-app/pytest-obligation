@@ -2,51 +2,46 @@
 
 [All tutorials](tutorials.md) · [Vocabulary](vocabulary.md)
 
-You maintain a task queue (a Celery, RQ or Django Tasks backend) or a durable
-work library (something like procrastinate, DBOS or Due). Your README makes
-promises:
+You maintain a library that runs code in the background: a task queue, a job
+scheduler, a workflow engine. Here is a moment your users will meet sooner or
+later.
 
-- a job still runs if its worker dies;
-- a worker that was presumed dead cannot overwrite the result of the worker
-  that replaced it;
-- a failing job is retried a fixed number of times, then stops;
-- enqueueing commits together with the application's own writes.
+A user signs up. Your library is meant to send their welcome email in the
+background. A worker picks up the job and starts sending, and at that moment a
+deploy restarts the worker.
 
-Your unit tests check each function once, in one process, with nothing failing.
-The promises live *between* those functions: in the gap between a claim and a
-settlement, in two workers racing for the same row, in a worker that dies after
-a task's effect but before its record. Unit tests rarely reach there, and the
-bugs that live there are found by users in production.
+What should happen next? Most libraries promise three things, even if the
+README puts them differently:
 
-These questions are the same for every library, whatever its design.
-pytest-obligation already ships integrations that bind its proofs to several
-libraries' own workers and recovery:
+1. **The email still goes out.** A job is not lost because its worker died.
+2. **A broken dependency is retried, then given up on.** If the email provider
+   is down, the job is tried a few times and then marked failed, visibly. It
+   does not retry forever, and it does not vanish.
+3. **A worker that comes back late cannot undo the work of its replacement.**
+   If the "dead" worker was only stuck and wakes up later, whatever it tries to
+   record about the job is ignored.
 
-| Library | What its integration drives |
-| --- | --- |
-| RQ | A real worker pass, its maintenance and its retries |
-| Celery | A real worker process, its publications and its hooks |
-| procrastinate | Its worker, heartbeats and stalled-job reclaim |
-| django-tasks-db | Its `db_worker` and its retention command |
-| DBOS | The application's own startup, restarted after a real process death |
-| Prefect | The real body of a flow |
+These promises are hard to test with ordinary unit tests, which call each
+function once, in one process, with nothing failing. The promises are about
+what happens *between* functions: a worker dying halfway through a job, two
+workers overlapping. pytest-obligation tests exactly that. It kills workers at
+every point where your library saves something, makes dependencies fail on
+purpose, and races two workers against each other, then checks the outcome.
 
-None of them is required. pytest-obligation has no stack of its own: its core
-takes plain Python callables, and an integration is a shortcut for wiring one
-library. This tutorial builds that wiring for a library of your own.
+There is a fourth thing only a library can do for its users. Promise 1 has a
+price: a job whose worker died gets run again, so some tasks run twice. Whether
+that is harmless depends on the task (writing a file twice is fine, sending an
+email twice is not), and only your users know their tasks. You can hand them
+tests that find out.
 
-This tutorial has two halves:
+So this tutorial has two halves:
 
-1. **Prove your own guarantees.** Bind your library to pytest-obligation's
-   standard proofs for ownership, retries and crashes, and let it find what
-   your unit tests cannot.
-2. **Give your users tests.** Ship a small testing module, so an application
-   built on your library gets the same generated suite for *its own* tasks in a
-   few lines, and learns when its task is not safe to run twice.
+- **Prove your own promises**, against your library's real code.
+- **Give your users tests** for their own tasks, ready-made, in a few lines.
 
-The library you will test is `tinyq`, a deliberately small task queue on SQLite
-in [`examples/task_queue_tutorial`](../../examples/task_queue_tutorial). It is
-about 150 lines, so you can read all of it. To run everything in this tutorial:
+The library you will test is `tinyq`, a deliberately small task queue in
+[`examples/task_queue_tutorial`](../../examples/task_queue_tutorial). To run
+everything in this tutorial:
 
 ```bash
 git clone https://github.com/gigaverse-app/pytest-obligation.git
@@ -56,82 +51,156 @@ cd examples/task_queue_tutorial
 uv run --project ../.. --no-sync pytest
 ```
 
-It should end with `75 passed, 1 xfailed`. If you have not used
-pytest-obligation before, [the multi-system tutorial](tutorial-many-systems.md)
-introduces crash histories on an application first; this one reuses those
-ideas and adds the proofs a library needs.
+It should end with `75 passed, 1 xfailed`. If you have never used
+pytest-obligation, [the multi-system tutorial](tutorial-many-systems.md) is the
+gentler start; this one builds on the same ideas.
 
-## How to read the code
+**How to read the code.** Names imported from `pytest_obligation` are the
+library being taught; each is explained before it is used, with a short table
+after the block. `tinyq` and `tinyq.testing` are the library under test, the
+part you would replace with your own. `welcome` is an application built on
+tinyq, the part your users write. Bindings carry four labelled comments,
+`ARRANGE`, `REAL PRODUCTION`, `EXTERNAL SEAM` and `OBSERVE`, which say what is
+test setup, what is the code under test, what stands in for an outside system,
+and what proves the work happened.
 
-| Kind | How to recognise it | What the tutorial does with it |
-| --- | --- | --- |
-| **Python and pytest** | `sqlite3`, `uuid`, `unittest.mock.patch` | Assumes you know it |
-| **The library under test** | `tinyq` and `tinyq.testing` | Shows it in full; this is what you replace with your library |
-| **An application on the library** | `welcome`, `reference_jobs` | Shown in full; this is what your users write |
-| **pytest-obligation** | Imported from `pytest_obligation` | Explained before its first use, with a short comment in the code and a table after the block |
+## 1. Meet tinyq
 
-Bindings carry four labelled comments, `ARRANGE`, `REAL PRODUCTION`,
-`EXTERNAL SEAM` and `OBSERVE`, which say what is test setup, what is the code
-under test, what is a stand-in, and what proves the work happened.
-pytest-obligation refuses to build a contract whose profile bindings lack them.
+tinyq keeps jobs as rows in one database table, `jobs`. Everything about a job
+is in its `status`:
 
-## The library
+```text
+             enqueue
+                |
+                v
+   +-------> ready ---- a worker takes it ----> running ---- task succeeds ----> done
+   |                                              |
+   +--- task failed, attempts left ---------------+
+   +--- worker's time ran out (presumed dead) ----+
+                                                  +---- task failed, no attempts left ----> failed
+```
 
-A job is a row. A worker **claims** the oldest due row: it marks it `running`
-and stamps it with a fresh random **token** and a **lease** (a deadline). It
-runs the task, then **settles** the row as `done` or failed, but only if the
-row still carries its token:
+A worker runs this loop, `work_once`, over and over:
 
 <!-- fmt:off -->
 ```python
-    def claim(self) -> tuple[int, uuid.UUID] | None:
-        """Take the oldest due job: mark it running, with a fresh token and a lease."""
-        token, now = uuid.uuid4(), self.clock()
-        with self._transaction():
-            row = self._execute(
-                "UPDATE tinyq_jobs SET status = 'running', token = ?, lease_until = ? WHERE id = ("
-                "SELECT id FROM tinyq_jobs WHERE status = 'ready' AND run_after <= ? ORDER BY id LIMIT 1) RETURNING id",
-                (str(token), now + self.lease_seconds, now),
-            ).fetchone()
-        return None if row is None else (int(row[0]), token)
-
-    def complete(self, job_id: int, token: uuid.UUID) -> bool:
-        """Settle a job as done, only if `token` still owns it."""
-        with self._transaction():
-            changed = self._execute(
-                "UPDATE tinyq_jobs SET status = 'done', token = NULL, lease_until = NULL "
-                "WHERE id = ? AND token = ? AND status = 'running'",
-                (job_id, str(token)),
-            ).rowcount
-        return changed == 1
+    def work_once(self) -> bool:
+        """One worker pass: take a job, run its task, record the result. False when nothing was due."""
+        claimed = self.claim()
+        if claimed is None:
+            return False
+        job_id, token = claimed
+        task, args = self._row("SELECT task, args FROM jobs WHERE id = ?", job_id)
+        try:
+            self.tasks[task](*json.loads(args))
+        except Exception as error:
+            self.fail(job_id, token, error)
+        else:
+            self.complete(job_id, token)
+        return True
 ```
 <!-- fmt:on -->
 
-The rest of [`tinyq/__init__.py`](../../examples/task_queue_tutorial/tinyq/__init__.py):
+Take a job, run its task, record success or failure. The rest of
+[`tinyq/__init__.py`](../../examples/task_queue_tutorial/tinyq/__init__.py) is
+one small method per step, each one or two short SQL statements:
 
 | Method | What it does |
 | --- | --- |
-| `enqueue(task, *args, max_attempts=3)` | Inserts a job inside the caller's transaction, so it commits or rolls back with the application's writes |
-| `due()` | The jobs a worker may claim now |
-| `fail(job_id, token, error)` | Counts a failed attempt if `token` still owns the job: back to `ready` after `retry_delay`, or `failed` after the last attempt |
-| `renew(job_id, token)` | Extends a long job's lease if `token` still owns it |
-| `reclaim_expired()` | The sweep: jobs whose lease expired (their worker presumed dead) go back to `ready` |
-| `work_once()` | One worker pass: claim, run the task, `complete` or `fail` |
-| `_execute()`, `_transaction()` | Every SQL statement and every commit tinyq makes goes through these two |
+| `enqueue(task, *args)` | Adds a job, inside the caller's own transaction, so it is saved together with the application's writes, or not at all |
+| `claim()` | Takes the oldest job that is due and marks it `running` |
+| `complete(...)` / `fail(...)` | Records the result. A failure goes back to `ready` for a later retry, or to `failed` when no attempts are left |
+| `reclaim_expired()` | The **sweep**: puts `running` jobs whose worker seems to have died back to `ready` |
+| `run_until_idle()` | Runs `work_once` until nothing is due |
 
-The token is what makes a presumed-dead worker harmless. If worker A's lease
-expires, the sweep returns the job, and worker B claims it with a new token,
-then A waking up and calling `complete` with its old token changes nothing.
-That technique is called [fencing](vocabulary.md#claim-lease-and-fencing-token).
+The `token` passed around is for promise 3; step 5 explains it. You can follow
+steps 2 to 4 without it.
 
-## 1. Tell the harness where your commits are
+## 2. What your users will write
 
-Many of the proofs kill a worker right after one of its commits. pytest-obligation
-never guesses where commits are; a **host** tells it. Your library is the right
-place to answer that question once, so your users never have to. tinyq routes
-all its SQL through `_execute` and all its commits through `_transaction`, and
-[`tinyq/testing.py`](../../examples/task_queue_tutorial/tinyq/testing.py) hooks
-both:
+Start with the end result. Here is an application built on tinyq,
+[`welcome`](../../examples/task_queue_tutorial/welcome/__init__.py). It signs a
+user up and emails them in the background:
+
+```python
+@queue.task
+def send_welcome_email_once(email: str) -> None:
+    """The fixed version: the provider drops a repeat of the same key."""
+    mailer.send(email, key=f"welcome:{email}")
+
+
+def sign_up(email: str, *, task: Callable[[str], None] = send_welcome_email) -> int:
+    """Create the user and owe their welcome email in one transaction; return the email job's id."""
+    with db:
+        db.execute("INSERT INTO users(email) VALUES (?)", (email,))
+        return queue.enqueue(task, email)
+```
+
+And here is its test, from
+[`tests/test_welcome_email.py`](../../examples/task_queue_tutorial/tests/test_welcome_email.py).
+`task_contract` is something tinyq ships for its users:
+
+```python
+def welcome_contract(
+    name: str, task: Callable[[str], None], *, gaps: dict[str, str] | None = None
+) -> ObligationContract:
+    return task_contract(
+        welcome.queue,
+        name=name,
+        # REAL PRODUCTION: the app's sign-up command, which enqueues the task in its own transaction.
+        enqueue=lambda: sign_up_someone(task),
+        # OBSERVE: how many welcome emails this user received; one successful run sends exactly one.
+        effect=lambda job_id: MAILER.delivered.count(addresses[job_id]),
+        expected=1,
+        enqueue_failing=a_failing_welcome,
+        failures=lambda _job_id: MAILER.failed_calls,
+        max_attempts=3,
+        # EXTERNAL SEAM: the email provider; the worker also dies right after each send.
+        external_calls=(ExternalCall(FakeMailer, "send"),),
+        fixtures=("fresh_welcome",),
+        handoff_gaps=gaps,
+    )
+
+
+@due_work_contract_suite(welcome_contract("welcome email", welcome.send_welcome_email_once))
+class TestWelcomeEmail:
+    pass
+```
+
+The user says three things: how to enqueue their task, how to see what it did,
+and what that should be after one successful run. In return, pytest collects 25
+test cases against their real task, covering every promise above, under worker
+deaths, failing providers and racing workers:
+
+```text
+tests/test_welcome_email.py::TestWelcomeEmail: 25 passed
+```
+
+Everything below is how tinyq makes those few lines possible.
+
+## 3. Promise 1: a job survives its worker dying
+
+### The test, in plain words
+
+Take one job and run one worker pass on it, many times over. The first time,
+let it finish normally and note the outcome: the job is `done`, one email was
+sent. Then repeat it, killing the worker at a different point each time: right
+after each moment tinyq saves something, and right after each call to the
+email provider. After each death, run what a real deployment would run (time
+passes, the sweep returns the job, workers pick it up) and look again. Every
+version must end like the normal one.
+
+pytest-obligation calls each of these runs a **history**, and a step tested
+this way a [handoff](vocabulary.md#handoff). It needs three things from you.
+
+### What it needs: when your library saves something
+
+To kill a worker "right after tinyq saves something", the harness must know
+when tinyq commits. It never guesses; a **host** tells it. Your library is the
+right place to answer that once, so that your users never have to. tinyq sends
+every SQL statement through `_execute` and every commit through
+`_transaction`, so [`tinyq/testing.py`](../../examples/task_queue_tutorial/tinyq/testing.py)
+watches those two:
 
 ```python
 # The worker the harness is currently counting, while a history's transition runs.
@@ -174,123 +243,85 @@ def tinyq_host(production_packages: set[str]) -> Host:
 
 | Name | Comes from | What it does |
 | --- | --- | --- |
-| `CommitWorker` | pytest-obligation | Counts commits. When asked to die after commit *k*, `committed()` raises `WorkerDied` there; afterwards `refuse_if_dead()` raises on every statement, because a dead process runs nothing more. |
-| `tinyq_worker_killer` | Your library | The **worker killer** the host protocol asks for: given *k*, count tinyq's commits and die after the *k*-th. |
-| `Host` | pytest-obligation | What only your framework knows. `production_packages` names the code under test; adding `"tinyq"` lets bindings that live inside your library count as production. |
+| `CommitWorker` | pytest-obligation | Counts commits. Asked to die after commit *k*, it raises `WorkerDied` there and refuses every later statement, because a dead process runs nothing more. |
+| `tinyq_worker_killer` | tinyq | Installs a `CommitWorker` on tinyq's two methods while one history runs |
+| `Host` | pytest-obligation | What only your library knows. `production_packages` names the code under test. |
 
-Real integrations do the same at a lower level: `redis_host` hooks the Redis
-client's commands, `django_host` hooks the database connection's commit, and
-Due's `work_table_host` wraps `django_host` and adds its own publication
-recorder.
+### What it needs: how your library recovers
 
-## 2. Prove ownership, and find the unfenced settlement
-
-Profile B, **bounded ownership**, asks: who owns a job right now, and what
-happens when that owner dies? It is the part hand-written queues most often
-get wrong, because every failure needs two workers to observe. The
-`FencedOwnership` binding hands the proofs your real ownership operations:
+After a death, the harness runs what a deployment would run. For tinyq, that
+is: wait out the lease, run the sweep, run the workers.
 
 ```python
-def ownership(queue: Queue, *, enqueue: Callable[[], int]) -> FencedOwnership:
-    # ARRANGE: jobs enqueued through the application's own command (enqueue).
-    # REAL PRODUCTION: tinyq's claim, complete, fail, renew and reclaim_expired.
-    # EXTERNAL SEAM: none; moving the queue's clock past the lease stands for the owner's death.
-    # OBSERVE: the job's status, attempts and lease deadline (Queue.state).
-    return FencedOwnership(
-        name="tinyq job ownership",
-        make_claimable=enqueue,
-        claim=queue.claim,
-        fenced_write=queue.complete,
-        other_fenced_writes={"fail": lambda job_id, token: queue.fail(job_id, token, RuntimeError("stale owner"))},
-        renew_lease=queue.renew,
-        expire_lease=lambda _job_id: _clock(queue).advance(queue.lease_seconds + 1),
-        reclaim_stalled=lambda job_id: job_id if job_id in queue.reclaim_expired() else None,
-        observe=queue.state,
-    )
+def recover(queue: Queue, *, rounds: int = 3) -> None:
+    """What a deployment runs: the expired-lease sweep and the workers, after enough time for leases and retries."""
+    for _round in range(rounds):
+        _clock(queue).advance(queue.lease_seconds + queue.retry_delay + 1)
+        queue.reclaim_expired()
+        queue.run_until_idle()
 ```
 
-| Field | What the proofs do with it |
-| --- | --- |
-| `make_claimable` | Create one claimable job, through the application's command |
-| `claim` | Your claim; must return `(job id, token)`, or `None` when nothing is due |
-| `fenced_write`, `other_fenced_writes` | **Every** write an owner can make. Each is proven to succeed under the current token and to be refused under a superseded one. |
-| `renew_lease` | Your heartbeat, proven fenced the same way |
-| `expire_lease` | Simulate the owner's death. tinyq's clock is injectable, so the binding just moves it past the lease. |
-| `reclaim_stalled` | Your sweep, for one job: what it did, or `None` for nothing |
-| `observe` | Optional, and worth giving: with it, an accepted write must change the job and a refused one must leave it untouched, not just return the right boolean |
+tinyq's clock is injectable, so in tests "wait 30 seconds" is a call to
+`advance`, and every history runs in milliseconds.
 
-From this one binding the harness generates twelve cases. Two check that the
-binding really calls tinyq. Nine check behaviour: a claim is exclusive (twice
-in sequence, and with two threads racing), reclaiming issues a new token, the
-current token's writes and renewals are accepted, a stale token's writes and
-renewals are refused, a live lease blocks the sweep, and an expired one permits
-it. The last checks that giving a job back leaves its retry budget unspent; it
-passes trivially here, because tinyq has no separate "give back" operation and
-the binding does not declare one.
+### What it needs: the step itself
 
-tinyq's first draft of settlement checked *which* job to settle but not *who*
-was settling it. It is kept in
-[`tinyq/draft.py`](../../examples/task_queue_tutorial/tinyq/draft.py):
-
-```python
-class DraftQueue(Queue):
-    def complete(self, job_id: int, token: uuid.UUID) -> bool:
-        with self._transaction():
-            changed = self._execute(
-                "UPDATE tinyq_jobs SET status = 'done', token = NULL, lease_until = NULL WHERE id = ?", (job_id,)
-            ).rowcount
-        return changed == 1
-```
-
-Against the draft, the stale-token proof fails:
-
-```text
-tinyq job ownership: fenced_write, other_fenced_writes['fail'] carrying a superseded token was
-accepted. A slow worker that wakes up after its claim was reaped would corrupt the new owner's state
-```
-
-This is exactly the gap fencing exists to close, and it only shows when two
-workers overlap, so a single-threaded unit test never sees it. The proof caught
-it before release. The fix is the `AND token = ?` you saw in `complete`. [`tests/test_draft_finding.py`](../../examples/task_queue_tutorial/tests/test_draft_finding.py)
-keeps the draft's finding as a test that passes only while the harness still
-detects it.
-
-## 3. The race a single-threaded test cannot see
-
-After the token fix, one generated case still failed, and only sometimes:
-
-```text
-AssertionError: tinyq job ownership: a racing claim raised instead of losing cleanly:
-[OperationalError('cannot commit - no transaction is active')]. Losing a claim race is an ordinary
-outcome and must return None, not error. ...
-```
-
-`assert_claim_is_exclusive_across_connections` starts two threads at a barrier
-and has both claim at once. tinyq let several worker threads share one SQLite
-connection, and two transactions on one connection interleaved: one thread
-committed the other's transaction, and the second commit found nothing to
-commit. A worker would have crashed mid-claim. In 20 runs it failed once. That
-is the nature of a race: it is rare, and it is real.
-
-The fix was one line, a lock in `_transaction`:
+`worker_history`, from pytest-obligation's task-queue helpers, turns one worker
+pass into a handoff. It enqueues a job, runs `work_once`, and observes two
+things: the status tinyq recorded, and what the task actually did.
 
 <!-- fmt:off -->
 ```python
-    @contextmanager
-    def _transaction(self) -> Iterator[None]:
-        with self._lock, self.db:
-            yield
+        handoffs=(
+            worker_history(
+                name="a worker runs the task",
+                enqueue=enqueue,
+                effect=effect,
+                expected=TaskOutcome(status="done", effect=expected),
+                status_of=queue.status,
+                run_worker=lambda _job_id: queue.work_once(),
+                external_calls=external_calls,
+            ),
+        ),
+        handoff_delivery=CallableDelivery(name=f"{name}: tinyq worker", recover=partial(recover, queue)),
 ```
 <!-- fmt:on -->
 
-Run the race proof on every CI build. One green run says little about a race;
-many green runs over months are the evidence.
+`CallableDelivery` tells the harness how the job reaches a worker and how
+production recovers. tinyq's queue is a table its workers poll, so there is no
+message that could be lost on the way, and the delivery declares none.
 
-## 4. Prove the retry budget
+### What the harness ran
 
-Profile J, **job retry limits**, asks: does a failing job stop after its
-budget, and stay stopped? `BoundedRetry` binds your selection and your worker
-to a job whose dependency always fails:
+For the welcome email, these are the histories, and what each one ended with:
+
+| History | What happened | Status, emails |
+| --- | --- | --- |
+| normal operation | Nothing failed | `done`, 1 |
+| worker died after commit 1 | Died right after taking the job; the sweep gave it back and another pass ran it | `done`, 1 |
+| worker died after commit 2 | Died right after recording `done`; nothing left to do | `done`, 1 |
+| worker died after external call 1 | Died right after the email left, before recording `done`; the job ran again | `done`, 1 with the keyed task, **2** with the first version |
+
+Promise 1 holds: every history ends `done`. The last row is its price: the task
+ran twice. The keyed task still sends one email, because the provider ignores a
+repeated key. The first version sends two. That is not tinyq's to fix, and it
+is exactly what your users' tests find (step 7).
+
+## 4. Promise 2: a failing job stops after its last attempt
+
+Make the email provider fail every time. tinyq should try the job
+`max_attempts` times, then mark it `failed` and leave it alone. `BoundedRetry`
+checks that against tinyq's real worker. You point each field at a piece of
+tinyq or of the user's app:
+
+| What the proof needs | What tinyq gives it |
+| --- | --- |
+| A job whose task always fails | the user's command, with the provider set to fail |
+| The jobs a worker would take now | `queue.due` |
+| One worker pass | `queue.work_once` |
+| Wait until the retry is due | move tinyq's clock by `retry_delay` |
+| Has the job given up? | `queue.status(job) == "failed"` |
+| How often the failing dependency was really called | a counter on the provider stand-in |
 
 ```python
 def bounded_retry(
@@ -313,61 +344,153 @@ def bounded_retry(
     )
 ```
 
-The proofs check four things: your selection finds the job before every
-attempt; every worker pass reaches the failing dependency exactly once (so an
-attempt that never ran cannot count); the job becomes terminal exactly at
-`max_executions`; and one more worker pass changes nothing and calls nothing.
-`failure_attempt_count` is the positive control: it counts calls at the failing
-dependency itself, so the proof cannot pass on bookkeeping alone.
+The proof checks four things. The job is picked up before every attempt. Each
+worker pass really reaches the failing provider, once. The job becomes `failed`
+exactly at the last attempt. One more worker pass changes nothing and calls
+nothing. Counting the calls at the provider itself is what keeps the proof
+honest: a library that only *recorded* attempts without running them would
+fail it.
 
-## 5. The worker under crashes
+## 5. Promise 3: a worker that comes back late changes nothing
 
-The last piece is the worker itself as a [handoff](vocabulary.md#handoff): it
-commits a claim, runs the task's effect, and commits a settlement.
-`worker_history`, from pytest-obligation's task-queue helpers, turns one worker
-pass into a crash history: enqueue a job, run `work_once`, and observe both what
-tinyq recorded and what the task did.
+### The problem
+
+A database cannot tell a dead worker from a stuck one. So tinyq gives each
+worker a deadline, and if the worker misses it, tinyq assumes it died and gives
+the job to someone else. Usually the worker really did die. But consider:
+
+```text
+10:00:00  worker A takes job 7
+10:00:05  A gets stuck (a long pause, a hung network call)
+10:00:30  A's deadline passes; the sweep puts job 7 back
+10:00:31  worker B takes job 7, and finishes it
+10:00:40  A wakes up, and tries to record that job 7 failed
+```
+
+What should happen at 10:00:40? Nothing. Job 7 is B's now, and it is done.
+
+tinyq handles this with two ideas:
+
+- The deadline is the job's **lease**. Taking a job starts it; the sweep only
+  touches jobs whose lease has passed.
+- Each time a job is taken, it gets a fresh random **token**, and the worker
+  keeps a copy. Every update a worker makes says "only if the job still has my
+  token". At 10:00:40, job 7 has B's token, so A's update matches no row.
+
+Shutting out a worker that has lost its right to act, even though it does not
+know yet, is called [fencing](vocabulary.md#claim-lease-and-fencing-token). In
+tinyq it is visible in `claim` and `complete`:
 
 <!-- fmt:off -->
 ```python
-        handoffs=(
-            worker_history(
-                name="a worker runs the task",
-                enqueue=enqueue,
-                effect=effect,
-                expected=TaskOutcome(status="done", effect=expected),
-                status_of=queue.status,
-                run_worker=lambda _job_id: queue.work_once(),
-                external_calls=external_calls,
-            ),
-        ),
-        handoff_delivery=CallableDelivery(name=f"{name}: tinyq worker", recover=partial(recover, queue)),
+    def claim(self) -> tuple[int, uuid.UUID] | None:
+        """Take the oldest due job: mark it running, give it a fresh token, and start its lease."""
+        with self._transaction():
+            job_id = self._one(DUE, self.clock())
+            if job_id is None:
+                return None
+            token, lease_until = uuid.uuid4(), self.clock() + self.lease_seconds
+            sql = "UPDATE jobs SET status = 'running', token = ?, lease_until = ? WHERE id = ?"
+            self._run(sql, str(token), lease_until, job_id)
+        return job_id, token
+
+    def complete(self, job_id: int, token: uuid.UUID) -> bool:
+        """Mark the job done, but only if the caller still owns it."""
+        with self._transaction():
+            return self._run(f"UPDATE jobs SET status = 'done' WHERE {OWNED}", job_id, str(token)) == 1
 ```
 <!-- fmt:on -->
 
-`recover(queue)` is what a deployment runs after a crash: time passes beyond
-the lease, the sweep returns expired jobs, and workers run until idle. tinyq's
-queue is a table its workers poll, so there is no message to lose; the delivery
-declares no `lose`, and the harness skips the lost-message history. For one job
-whose task makes one external call, the harness runs:
+`OWNED` is the condition `id = ? AND token = ? AND status = 'running'`, shared
+by every update a worker makes.
 
-| History | What happened |
+### The proof
+
+`FencedOwnership` replays the 10:00 story, and its variations, against tinyq's
+real methods. It has more fields than the other bindings, because there are
+more operations whose ownership must hold. Each field just names one of your
+methods:
+
+| What the proof needs | tinyq's method |
 | --- | --- |
-| normal operation | Claim, task, `complete` |
-| worker died after commit 1 | Died holding the claim; the sweep returned the job after its lease and another pass ran it |
-| worker died after commit 2 | Died after settling; nothing left to do |
-| worker died after external call 1 | Died after the task's effect, before settling; the sweep returned the job and **the task ran again** |
+| Create a job that can be taken | the application's own command |
+| Take a job, returning its id and token | `claim` |
+| Every update a worker can make | `complete`, `fail` |
+| Extend a lease | `renew` |
+| Make a worker "die": let its lease pass | move tinyq's clock past the lease |
+| Run the sweep for one job | `reclaim_expired` |
+| What the job looks like right now | `state` |
 
-That last row is the important one, and it is not tinyq's to fix. Any queue
-that survives worker death runs some tasks twice. Whether that is harmless
-depends on the task, which is exactly why your users need these tests too.
+```python
+def ownership(queue: Queue, *, enqueue: Callable[[], int]) -> FencedOwnership:
+    # ARRANGE: jobs enqueued through the application's own command (enqueue).
+    # REAL PRODUCTION: tinyq's claim, complete, fail, renew and reclaim_expired.
+    # EXTERNAL SEAM: none; moving the queue's clock past the lease stands for the owner's death.
+    # OBSERVE: the job's status, attempts and lease deadline (Queue.state).
+    return FencedOwnership(
+        name="tinyq job ownership",
+        make_claimable=enqueue,
+        claim=queue.claim,
+        fenced_write=queue.complete,
+        other_fenced_writes={"fail": lambda job_id, token: queue.fail(job_id, token, RuntimeError("stale owner"))},
+        renew_lease=queue.renew,
+        expire_lease=lambda _job_id: _clock(queue).advance(queue.lease_seconds + 1),
+        reclaim_stalled=lambda job_id: job_id if job_id in queue.reclaim_expired() else None,
+        observe=queue.state,
+    )
+```
+
+From this one binding, the harness checks that:
+
+- a job cannot be taken twice, in sequence or by two threads racing;
+- when the sweep returns a job, the next worker gets a new token;
+- the current owner's updates and lease renewals work;
+- a previous owner's updates and renewals are refused, and change nothing;
+- the sweep leaves a job alone while its lease runs, and takes it back after.
+
+### What it found
+
+tinyq's first draft of recording a result is kept in
+[`tinyq/draft.py`](../../examples/task_queue_tutorial/tinyq/draft.py). It
+checks *which* job to update, but not *who* is updating it:
+
+```python
+class DraftQueue(Queue):
+    def complete(self, job_id: int, token: uuid.UUID) -> bool:
+        with self._transaction():
+            return self._run("UPDATE jobs SET status = 'done' WHERE id = ?", job_id) == 1
+```
+
+Against the draft, the proof fails with the 10:00:40 story:
+
+```text
+tinyq job ownership: fenced_write, other_fenced_writes['fail'] carrying a superseded token was
+accepted. A slow worker that wakes up after its claim was reaped would corrupt the new owner's state
+```
+
+This gap only shows when two workers overlap, so a single-threaded unit test
+never sees it. The fix is the `OWNED` condition you saw in `complete`.
+[`tests/test_draft_finding.py`](../../examples/task_queue_tutorial/tests/test_draft_finding.py)
+keeps the finding as a test that passes only while the harness detects it.
+
+The two-thread check found a second problem. tinyq lets several worker threads
+share one database connection, and without care, two threads' transactions on
+that connection interleave. Without a lock, the check failed on every one of 30
+runs:
+
+```text
+AssertionError: tinyq job ownership: a racing claim raised instead of losing cleanly:
+[OperationalError('cannot commit - no transaction is active')]. ...
+```
+
+The fix is one line: `_transaction` holds a lock while it runs.
 
 ## 6. Package it for your users
 
-Everything so far was about tinyq. Here is the part that helps everyone who
-builds on it: a function that returns a complete contract for one of the
-user's tasks. The user supplies what only they know; tinyq supplies the rest.
+Steps 3 to 5 built three bindings. `task_contract` puts them together, so a
+user only supplies what is about their own task:
 
+<!-- fmt:off -->
 ```python
 def task_contract(
     queue: Queue,
@@ -386,77 +509,30 @@ def task_contract(
     # Builds the contract from the ownership, bounded_retry and worker_history bindings above.
     ...
 ```
-
-The body declares tinyq's answer for each of the ten profiles:
-
-<!-- fmt:off -->
-```python
-        profiles={
-            Profile.A: Decline(
-                "workers poll the job table, so no message can be lost; reclaiming a dead worker's job is B"
-            ),
-            Profile.B: Claim(),
-            Profile.C: Decline("tinyq runs a job at least once; a task must tolerate running again after a reclaim"),
-            Profile.D: NotApplicable("tinyq never deletes jobs"),
-            Profile.E: settled_by_one_worker("job"),
-            Profile.F: the_obligation_is_the("job"),
-            Profile.G: application_gate("tinyq"),
-            Profile.H: replay_safety_is_the_functions("job", "tinyq", runs_again="after its worker died"),
-            Profile.I: application_admission("tinyq"),
-            Profile.J: Claim(),
-        },
-```
 <!-- fmt:on -->
 
-| Profile | tinyq's answer | Why |
-| --- | --- | --- |
-| A automatic recovery | `Decline` | Workers poll the table; reclaiming a dead worker's job is B's job |
-| B bounded ownership | `Claim` | Proven by the `ownership` binding |
-| C crash ambiguity | `Decline` | tinyq is at-least-once by design |
-| D durable retention | `NotApplicable` | tinyq deletes nothing |
-| E, F | `NotApplicable` (via `settled_by_one_worker`, `the_obligation_is_the`) | One worker settles each job; the job row *is* the obligation |
-| G, I | `Decline` (via `application_gate`, `application_admission`) | Readiness gates and atomic admission belong to the application's own commands, not the queue |
-| H harmless replay | `Decline` (via `replay_safety_is_the_functions`) | Whether a rerun is safe is a property of each task, which the crash history tests |
-| J job retry limits | `Claim` | Proven by the `bounded_retry` binding |
+An **`ObligationContract`** is pytest-obligation's declaration of everything
+to test about one piece of work. It asks ten standard questions, the
+[profiles A to J](vocabulary.md#profiles-a-to-j), and wants an answer for each.
+tinyq answers them once, for all its users:
 
-The helpers `settled_by_one_worker`, `the_obligation_is_the`,
-`application_gate`, `application_admission` and `replay_safety_is_the_functions`
-come from `pytest_obligation.integrations.task_queues`. They are the reasons
-RQ's and django-tasks-db's contracts already give, so every task queue answers
-those questions in the same words.
+| Question | tinyq's answer |
+| --- | --- |
+| B: who owns a job, and what happens when the owner dies? | **Claim**: proven by `ownership` (step 5) |
+| J: does a failing job stop at its limit? | **Claim**: proven by `bounded_retry` (step 4) |
+| A, C, D, E, F | Declined or not applicable, each with a one-line reason: workers poll the table, so no message can be lost; tinyq runs jobs at least once; it never deletes jobs; one worker records each result; the job row is the obligation |
+| G, H, I | Declined: whether a task may run yet, whether it is safe to repeat, and whether it is enqueued together with the app's writes are questions about the user's code, which the crash history tests |
 
-One design choice deserves a sentence: `adoption=Adoption.LEGACY if gaps else
-Adoption.NEW_FEATURE`. A user can record a finding they cannot fix yet (a
-strict expected failure) only by passing `handoff_gaps`; otherwise every case
-must pass.
+Reasons that apply to any task queue come ready-worded in
+`pytest_obligation.integrations.task_queues` (`settled_by_one_worker`,
+`the_obligation_is_the`, `replay_safety_is_the_functions`, `application_gate`,
+`application_admission`), so different queues answer those questions the same
+way.
 
-## 7. What your users write
+## 7. Your users' side
 
-The [`welcome`](../../examples/task_queue_tutorial/welcome/__init__.py) app signs
-a user up and emails them in the background:
-
-```python
-@queue.task
-def send_welcome_email(email: str) -> None:
-    """The first version: every run sends another email."""
-    mailer.send(email, key=None)
-
-
-@queue.task
-def send_welcome_email_once(email: str) -> None:
-    """The fixed version: the provider drops a repeat of the same key."""
-    mailer.send(email, key=f"welcome:{email}")
-
-
-def sign_up(email: str, *, task: Callable[[str], None] = send_welcome_email) -> int:
-    """Create the user and owe their welcome email in one transaction; return the email job's id."""
-    with db:
-        db.execute("INSERT INTO users(email) VALUES (?)", (email,))
-        return queue.enqueue(task, email)
-```
-
-Its test setup is one `conftest.py`. The example shares it with tinyq's own
-suite (the `reference_jobs` lines, covered in step 8):
+Besides the contract from step 2, a user writes one `conftest.py`. The example
+shares it with tinyq's own suite (the `reference_jobs` lines, see step 8):
 
 ```python
 from collections.abc import Iterator
@@ -495,66 +571,22 @@ def fresh_welcome() -> Iterator[None]:
     yield
 ```
 
-| Line | Comes from | Why the user needs it |
-| --- | --- | --- |
-| `configure(tinyq_host(...))` | tinyq | The host from step 1: the user names their packages and never writes a worker killer |
-| `welcome.queue.clock = ManualClock()` | tinyq | Leases and retry delays pass by moving this clock, so a generated case takes milliseconds instead of minutes. `task_contract` refuses to run without it and says so. |
-| `welcome.mailer = MAILER` | The user's app | Point the app at the test's email stand-in |
-| `fresh_welcome` | The user's test | Empties the queue and the mailbox before every generated case; the contract requests it by name through `fixtures=` |
+The host comes from tinyq; the user never writes a worker killer. The manual
+clock makes leases and retry delays pass instantly. `fresh_welcome` gives every
+generated case an empty queue and mailbox; the contract asks for it by name
+with `fixtures=`.
 
-Then one call to `task_contract`, from
-[`tests/test_welcome_email.py`](../../examples/task_queue_tutorial/tests/test_welcome_email.py):
+In the contract, `sign_up_someone` signs up a new address for every history
+and remembers it, so each history counts only its own user's emails. That
+detail matters. An early version of this file signed up the same address every
+time, and pytest-obligation refused it, because a second normal run saw two
+emails instead of one. Checking that normal operation repeats exactly is one of
+the safeguards ([positive controls](vocabulary.md#positive-control)) that stop
+a test from passing for the wrong reason.
 
-```python
-def welcome_contract(
-    name: str, task: Callable[[str], None], *, gaps: dict[str, str] | None = None
-) -> ObligationContract:
-    return task_contract(
-        welcome.queue,
-        name=name,
-        # REAL PRODUCTION: the app's sign-up command, which enqueues the task in its own transaction.
-        enqueue=lambda: sign_up_someone(task),
-        # OBSERVE: how many welcome emails this user received; one successful run sends exactly one.
-        effect=lambda job_id: MAILER.delivered.count(addresses[job_id]),
-        expected=1,
-        enqueue_failing=a_failing_welcome,
-        failures=lambda _job_id: MAILER.failed_calls,
-        max_attempts=3,
-        # EXTERNAL SEAM: the email provider; the worker also dies right after each send.
-        external_calls=(ExternalCall(FakeMailer, "send"),),
-        fixtures=("fresh_welcome",),
-        handoff_gaps=gaps,
-    )
-
-
-@due_work_contract_suite(welcome_contract("welcome email", welcome.send_welcome_email_once))
-class TestWelcomeEmail:
-    pass
-```
-
-`MAILER` is the test's email-provider stand-in, from `tests/email_provider.py`.
-`sign_up_someone` signs up a new address for each history and remembers it, so
-each history observes only its own user. That detail matters: an early version
-of this file signed up the same address every time, and the harness refused
-it, because normal operation observed one email the first time and two the
-second. The check that normal operation repeats exactly is one of the
-[positive controls](vocabulary.md#positive-control) that keep a green result
-honest.
-
-For those few lines, the user gets 25 generated cases, including every
-ownership and retry proof run against *their* task, and the crash history of a
-worker running *their* task. For the keyed version, all pass. For the first
-version, the crash history finds what tinyq's documentation could only warn
-about:
-
-| History | Welcome emails received |
-| --- | --- |
-| normal operation | 1 |
-| worker died after commit 1 | 1 |
-| worker died after commit 2 | 1 |
-| worker died after external call 1 | **2** |
-
-The app records it as a strict expected failure until it is fixed:
+The first version of the welcome task sends two emails after a death right
+after sending (step 3). Until it is fixed, the app records that as a known
+finding instead of hiding it:
 
 ```python
 @due_work_contract_suite(
@@ -568,57 +600,55 @@ class TestFirstWelcomeEmail:
     pass
 ```
 
-The day someone fixes `send_welcome_email`, that case passes, the strict
-expected failure turns red, and the entry has to be deleted in the same change.
+The entry becomes a [strict expected failure](vocabulary.md#strict-expected-failure):
+it passes while the problem exists and fails the day someone fixes the task, so
+the entry has to be removed in the same change.
 
-## 8. Keep your own suite honest
+## 8. Keep your own suite honest, and cover every task
 
 tinyq's own test,
 [`tests/test_tinyq_guarantees.py`](../../examples/task_queue_tutorial/tests/test_tinyq_guarantees.py),
-calls the same `task_contract` with a reference job that is safe to repeat. That
-is deliberate: the contract your users rely on is the one your CI runs, so it
-cannot drift from what you prove. RQ's own test suite does the same with
-`rq.worker_contract`.
-
-Keep the reference job replay-safe. Then any divergence in your suite is
-tinyq's, not the task's.
-
-## 9. Make sure every task is covered
+calls the same `task_contract` with a reference job that is safe to repeat. So
+the contract your users rely on is the one your CI runs. Keep the reference job
+replay-safe, and any problem the suite finds is the library's.
 
 A generated suite only covers the tasks someone wrote a contract for.
-pytest-obligation can scan an application for the places it hands work off and
-fail CI when one has no contract (`pytest-obligation check`, and
-`--due-work-verify` to require that each declared contract actually ran). Be
-aware of one limit: the scan recognises a fixed set of frameworks (Django's
-`on_commit`, Celery, RQ, procrastinate, DBOS, Dramatiq and Django Tasks). For a
-new library, your users can declare your enqueue function as a `bridge` in
-their configuration, so each call to it counts as a handoff, and you can
-contribute a site kind for your library upstream.
+`pytest-obligation check` scans an application for the places it hands work
+off and fails when one has no contract. It recognises the common frameworks
+(Django's `on_commit`, Celery, RQ, procrastinate, DBOS, Dramatiq, Django
+Tasks). For a new library, users list your enqueue function under `bridges` in
+their configuration, and you can contribute support upstream. If your library
+keeps a registry of tasks, as tinyq's `queue.tasks` is, you can also check in
+CI that every registered task has a suite.
 
-A library can also check enrollment itself. Due, for example, lists every
-registered unit of work and fails unless each has exactly one collected suite
-(`assert_complete_enrollment`). If your library keeps a registry, as tinyq's
-`queue.tasks` is, the same check is a few lines.
+## 9. Integrations to learn from
 
-## 10. Real integrations to copy
+pytest-obligation has no stack of its own; its core takes plain Python
+callables. It ships integrations that do what `tinyq.testing` does for several
+libraries:
 
-| To see | Read |
+| Library | What its integration drives |
 | --- | --- |
-| A task-queue contract like `task_contract`, for a real queue | `pytest_obligation.integrations.rq.worker_contract`, `django_tasks.worker_contract`, `celery_worker.worker_contract` |
-| A host built on a client library | `pytest_obligation.integrations.redis.redis_host` |
-| A framework that runs work on its own threads or processes | `pytest_obligation.integrations.dbos` and [process histories](how-it-works.md#crash-histories): the harness kills a real child process at named points |
-| A heavier user-facing layer, where the library derives the bindings from each registered unit of work | Due's [conformance guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md): `effect_contract_suite`, `ProviderSeam` and `seam_examples` |
-| How to apply the harness to an existing project's code | The [upstream playbook](../../docs/upstream-playbook.md) |
+| RQ | A real worker pass, its maintenance and its retries, plus a `worker_contract` like `task_contract` |
+| Celery | A real worker process, its publications and its hooks, plus a `worker_contract` |
+| django-tasks-db | Its `db_worker` and its retention command, plus a `worker_contract` |
+| procrastinate | Its worker, heartbeats and stalled-job reclaim |
+| DBOS | The application's own startup, restarted after a real process death |
+| Prefect | The real body of a flow |
+
+For a heavier layer that derives most bindings from each registered unit of
+work, see Due's [conformance guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md)
+(`effect_contract_suite`). To apply the harness to an existing project's code,
+see the [upstream playbook](../../docs/upstream-playbook.md).
 
 ## What you learned
 
 | Name | Kind | Meaning |
 | --- | --- | --- |
-| `Host`, worker killer, `CommitWorker` | pytest-obligation | Tell the harness where your library commits; ship it so users never write one |
-| `FencedOwnership` | pytest-obligation | Profile B: exclusive claims, rotating tokens, fenced writes and renewals, lease expiry |
-| `assert_claim_is_exclusive_across_connections` | pytest-obligation | Two workers racing for one job, on two threads |
-| `BoundedRetry` | pytest-obligation | Profile J: a failing job stops at its budget and stays stopped |
-| `worker_history`, `TaskOutcome` | pytest-obligation | One worker pass as a crash history: what the queue recorded and what the task did |
-| `settled_by_one_worker` and the other `task_queues` reasons | pytest-obligation | Standard answers a task queue gives for profiles it does not own |
-| `task_contract` | Your library | The contract you ship: users supply enqueue, effect and expected outcome |
-| `handoff_gaps`, `Adoption.LEGACY` | pytest-obligation | A user's finding, recorded as a strict expected failure until fixed |
+| Host, worker killer, `CommitWorker` | pytest-obligation | Tell the harness when your library saves something; ship it so users never write one |
+| `worker_history`, `CallableDelivery` | pytest-obligation | Promise 1: one worker pass under every death, then recovery |
+| `BoundedRetry` | pytest-obligation | Promise 2: a failing job stops at its limit, and stays stopped |
+| `FencedOwnership` | pytest-obligation | Promise 3: leases and tokens keep a late worker from changing anything |
+| `ObligationContract`, profiles | pytest-obligation | One declaration with an answer to each standard question |
+| `task_contract` | Your library | What you ship: users supply enqueue, effect and expected outcome |
+| `handoff_gaps` | pytest-obligation | A user's known finding, kept as a strict expected failure until fixed |
