@@ -117,6 +117,11 @@ from the reply:
   only checks convergence after recovery when replay-safe, and reports a
   limitation when it is not. Only opted-in declarations get that limitation.
 
+A domain that applies no delayed result back to its rows has no in-flight
+convergence declaration to opt into. Its acknowledging effects belong in profile C's
+`acknowledged_effects=` binding instead, with a provider fake built on
+[`AsyncTasks`](faithful-fakes.md).
+
 A declaration without `acknowledgement_only_seams` generates exactly the catalog,
 limitations and diagnostics it generated before this option existed, and not
 opting in produces no warning, gap or required explanation. Revision exploration

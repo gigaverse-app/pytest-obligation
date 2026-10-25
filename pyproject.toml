@@ -27,14 +27,14 @@ pythonpath = ["package", ".", "examples/adopter"]
 addopts = "-p no:cacheprovider"
 
 [tool.pyrefly]
-project-includes = ["package/src", "package/shims", "package/tests", "package/tests_support", "integration_tests", "demos", "scripts", "examples/adopter", "examples/shopify_billing"]
+project-includes = ["package/src", "package/shims", "package/tests", "package/tests_support", "integration_tests", "demos", "scripts", "examples/adopter", "examples/shopify_billing", "examples/checkout_tutorial", "examples/rq_tutorial"]
 # The Saleor demo runs in Saleor's own environment and is type-checked there (see its pyproject.toml).
 project-excludes = ["demos/.upstream/**", "demos/saleor_checkout/**", "**/__pycache__/**", ".venv*/**"]
 python-version = "3.11"
 python-platform = "linux"
 # tests_support holds the sample production package the binding self-tests import;
 # the DBOS demo imports the upstream demo module from its pinned checkout.
-search-path = ["package/src", "package/shims", "package", ".", "package/tests_support", "examples/adopter", "demos/.upstream/dbos-demo-apps/python/transactional-outbox"]
+search-path = ["package/src", "package/shims", "package", ".", "package/tests_support", "examples/adopter", "examples/checkout_tutorial", "examples/checkout_tutorial/tests", "examples/rq_tutorial", "examples/rq_tutorial/tests", "demos/.upstream/dbos-demo-apps/python/transactional-outbox"]
 
 [tool.uv.workspace]
 members = ["package"]

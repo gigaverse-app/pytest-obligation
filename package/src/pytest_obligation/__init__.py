@@ -99,6 +99,11 @@ from pytest_obligation.host import (
     current_host,
     hosted,
 )
+from pytest_obligation.profiles.acknowledged_effects import (
+    ACKNOWLEDGED_EFFECT_PROOFS,
+    AcknowledgedEffect,
+    assert_acknowledged_effect_contract,
+)
 from pytest_obligation.profiles.automatic_recovery import (
     DUE_WORK_PROOFS,
     SELECTION_PROOFS,
@@ -268,6 +273,9 @@ __all__ = [
     "assert_state_derived_contract",
     # Execution safety.
     "BOUNDED_RETRY_PROOFS",
+    "ACKNOWLEDGED_EFFECT_PROOFS",
+    "AcknowledgedEffect",
+    "assert_acknowledged_effect_contract",
     "CLASSIFIED_FAILURE_PROOFS",
     "PERSISTENT_RETRY_PROOFS",
     "REPLAY_SAFETY_PROOFS",
