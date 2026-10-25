@@ -20,6 +20,12 @@ sees the child lost):
   was not stored yet;
 * ``task_postrun`` — the result was stored as SUCCESS; the parent has not heard.
 
+The same three stages are available with the pool child killed by the kernel
+instead, ``task_prerun (SIGKILL)`` and so on (:data:`SIGKILL_DEATH_POINTS`), as
+the OOM killer or ``kill -9`` would. Billiard reports a signal death through its
+own path ("signal 9 (SIGKILL)" rather than "exitcode 1"). They are opt-in: pass
+``death_points=DEATH_POINTS + SIGKILL_DEATH_POINTS``.
+
 Failures the worker survives:
 
 * ``the task's on_success hook raised`` — the ``Task.on_success`` hook raises
@@ -27,6 +33,17 @@ Failures the worker survives:
 * ``the broker refused the task's link`` — the first signature the task's
   execution publishes (a link, a chain's next step) is refused with kombu's
   ``OperationalError``, as a broker that is down would.
+
+And one real refusal, opt-in because it needs a Redis server of its own:
+
+* ``the Redis broker was full`` (:data:`BROKER_FULL`) — once the task's body
+  has run on its first execution, the broker's Redis server is set to
+  ``maxmemory 1`` with ``noeviction``, so Redis itself refuses the writes that
+  follow (the link's publish among them) and kombu raises its
+  ``OperationalError``. ``maxmemory`` is server-wide, so the broker must not
+  share its server with the result backend or anything the test reads. The
+  test process restores the server once the run settles, or fails, before
+  recovery starts. It needs ``broker_url`` and a server that allows ``CONFIG``.
 
 :func:`worker_history` builds the process history; its observation is the
 adopter's, typically the task's result state with what its links and errbacks
@@ -40,11 +57,11 @@ import subprocess
 import sys
 import tempfile
 import time
-import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, TypeVar
+from urllib.parse import urlsplit
 
 from pytest_obligation.contract import (
     Adoption,
@@ -70,10 +87,15 @@ from pytest_obligation.process_histories import (
     fault_happened,
 )
 
-#: Where the pool child dies.
+#: Where the pool child dies, exiting with ``os._exit(1)``: what every history runs by default.
 DEATH_POINTS = ("task_prerun", "mark_as_done", "task_postrun")
+_SIGKILL = " (SIGKILL)"
+#: The same stages, the pool child killed by the kernel with SIGKILL, as the OOM killer would. Opt-in.
+SIGKILL_DEATH_POINTS = tuple(f"{point}{_SIGKILL}" for point in DEATH_POINTS)
 #: What fails while the worker lives on.
 FAILURE_POINTS = ("the task's on_success hook raised", "the broker refused the task's link")
+#: Opt-in: the broker's own Redis server refuses writes after the task's body ran. Needs ``broker_url``.
+BROKER_FULL = "the Redis broker was full"
 
 #: Which task the child fails; the fault itself travels in process_histories' protocol.
 _TASK = "DUE_WORK_CELERY_TASK"
@@ -144,6 +166,7 @@ def worker_history(
     env: Mapping[str, str] | None = None,
     log: Path | None = None,
     findings: Findings | None = None,
+    broker_url: str | None = None,
 ) -> ProcessHistory[HandleT, ObservationT]:
     """
     One task through the application's real worker, failing at each of Celery's stages, recovered by a restart.
@@ -152,20 +175,28 @@ def worker_history(
     what ``observe`` reads. ``settled`` says when the work it started is done;
     each run then waits ``quiet`` seconds more for anything it published late.
     A run reports status 1 when its fault happened, so a stage the task never
-    reached is caught as a history that was never interrupted.
+    reached is caught as a history that was never interrupted. ``broker_url``
+    is the worker's Redis broker, which :data:`BROKER_FULL` fills and the test
+    process restores.
     """
-    unknown = set(death_points) - set(DEATH_POINTS) | set(failure_points) - set(FAILURE_POINTS)
-    assert not unknown, (
-        f"{name}: no such Celery fault {sorted(unknown)}; the faults are {DEATH_POINTS + FAILURE_POINTS}"
-    )
+    deaths, failures = DEATH_POINTS + SIGKILL_DEATH_POINTS, (*FAILURE_POINTS, BROKER_FULL)
+    unknown = set(death_points) - set(deaths) | set(failure_points) - set(failures)
+    assert not unknown, f"{name}: no such Celery fault {sorted(unknown)}; the faults are {deaths + failures}"
+    if BROKER_FULL in failure_points:
+        assert broker_url is not None and urlsplit(broker_url).scheme in ("redis", "rediss"), (
+            f"{name}: {BROKER_FULL!r} fills the broker's own Redis server, so it needs broker_url= naming a Redis "
+            f"broker the test process can restore, on a server shared with nothing else; got {broker_url!r}"
+        )
 
     def run(fault: str | None) -> tuple[HandleT, int]:
         with tempfile.TemporaryDirectory() as scratch:
             marker = Path(scratch) / "fault"
             with running_worker(app, fault=fault, task=task, marker=marker, env=env, log=log):
-                handle = send()
-                wait_until(lambda: settled(handle), timeout=timeout, what=f"{name}: the task did not settle")
-                time.sleep(quiet)
+                # The broker is restored before the worker stops, whether the run settles or not.
+                with broker_restored(broker_url) if fault == BROKER_FULL and broker_url else nullcontext():
+                    handle = send()
+                    wait_until(lambda: settled(handle), timeout=timeout, what=f"{name}: the task did not settle")
+                    time.sleep(quiet)
             happened = fault_happened(marker)
         return handle, 0 if fault is None else int(happened)
 
@@ -188,6 +219,34 @@ def worker_history(
     )
 
 
+def broker_restored(broker_url: str) -> AbstractContextManager[None]:
+    """
+    TEST PROCESS: the broker's Redis server put back as it was when the block exits, however it exits.
+
+    Reads ``maxmemory`` and ``maxmemory-policy`` before the block and sets them
+    back after it, so the :data:`BROKER_FULL` fault never outlives its run.
+    """
+    import redis
+
+    @contextmanager
+    def restoring() -> Iterator[None]:
+        server = redis.Redis.from_url(broker_url, decode_responses=True)
+        try:
+            saved = {key: str(server.config_get(key)[key]) for key in ("maxmemory", "maxmemory-policy")}
+        except redis.ResponseError as error:
+            raise AssertionError(
+                f"{BROKER_FULL!r} sets maxmemory on the broker's Redis server, which refused CONFIG ({error}); "
+                "run it against a Redis server you administer"
+            ) from error
+        try:
+            yield
+        finally:
+            for key, value in saved.items():
+                server.config_set(key, value)
+
+    return restoring()
+
+
 #: What Celery's worker does not promise, for any adopter's contract.
 BROKER_REDELIVERS = (
     "Celery keeps no owed state of its own to sweep: a message the worker did not acknowledge is the broker's to "
@@ -203,44 +262,38 @@ RESULTS_ARE_NOT_OWED = "stored results are the record of settled work, not work 
 def worker_contract(
     *,
     name: str,
-    process_handoffs: Sequence[ProcessHistory[Any, Any]] = (),
-    handoff_gaps: Mapping[str, str] | None = None,
     history: ProcessHistory[Any, Any] | None = None,
     gap: str | None = None,
+    histories: Sequence[ProcessHistory[Any, Any]] = (),
+    handoff_gaps: Mapping[str, str] | None = None,
     fixtures: tuple[str, ...] = (),
 ) -> ObligationContract:
     """
     Celery's contract with its worker: the adopter's work through the real worker, failing at each of Celery's stages.
 
-    ``process_handoffs`` are :func:`worker_history` histories for the
-    adopter's work (a task, a chain, a chord), and ``handoff_gaps`` declares
-    what each one finds by history name, a strict xfail: the same fields, with
-    the same meaning, as :class:`ObligationContract`'s. When a history carries
-    its ``findings``, they are pinned history by history in the same run. The
+    ``history`` is :func:`worker_history` for one of the adopter's tasks, a
+    process handoff of the contract, and what it finds is declared as ``gap``,
+    a strict xfail. To bind several (a task, a chain, a chord), pass them as
+    ``histories`` instead, with ``handoff_gaps`` declaring each one's gap by
+    history name, as RQ's ``worker_contract`` does. When a history carries its
+    ``findings``, they are pinned history by history in the same run. The
     profiles Celery leaves to the broker or to the task are declined with the
     reason.
-
-    ``history=`` and ``gap=`` are the deprecated one-history form; they still
-    work, and warn. Pass ``process_handoffs=(history,)`` and
-    ``handoff_gaps={history.name: gap}`` instead.
     """
     if history is not None:
-        warnings.warn(
-            "worker_contract(history=..., gap=...) is deprecated; pass process_handoffs=(history,) and "
-            "handoff_gaps={history.name: gap}",
-            DeprecationWarning,
-            stacklevel=2,
+        assert not histories and handoff_gaps is None, (
+            f"{name}: bind one history with history= and gap=, or several with histories= and handoff_gaps=, not both"
         )
-        assert not process_handoffs and handoff_gaps is None, (
-            f"{name}: bind histories with process_handoffs= and handoff_gaps=, or one with the deprecated "
-            "history= and gap=, not both"
-        )
-        process_handoffs = (history,)
+        histories = (history,)
         handoff_gaps = {history.name: gap} if gap is not None else {}
     else:
-        assert gap is None, f"{name}: gap= belongs to the deprecated history=; declare gaps in handoff_gaps="
-    assert process_handoffs, f"{name}: a Celery worker contract binds at least one history"
-    # Unique history names and gaps that name a bound history are ObligationContract's own design checks.
+        assert gap is None, f"{name}: gap= declares history='s gap; with histories=, declare each in handoff_gaps="
+    assert histories, f"{name}: a Celery worker contract binds at least one history"
+    names = [each.name for each in histories]
+    assert len(set(names)) == len(names), f"{name}: two histories share a name: {sorted(names)}"
+    handoff_gaps = dict(handoff_gaps or {})
+    unknown = handoff_gaps.keys() - set(names)
+    assert not unknown, f"{name}: handoff_gaps name no bound history: {sorted(unknown)}; the histories are {names}"
     return ObligationContract(
         name=name,
         adoption=Adoption.LEGACY,
@@ -261,8 +314,8 @@ def worker_contract(
             Profile.G: application_gate("Celery"),
             Profile.I: application_admission("Celery"),
         },
-        process_handoffs=tuple(process_handoffs),
-        handoff_gaps=dict(handoff_gaps or {}),
+        process_handoffs=tuple(histories),
+        handoff_gaps=handoff_gaps,
         fixtures=fixtures,
     )
 
@@ -278,21 +331,29 @@ def _install(app: Any, fault: str, task: str) -> None:
     def ours(name: str | None) -> bool:
         return name == task and fault_fires(fault)
 
-    if fault == "task_prerun":
+    stage = fault.removesuffix(_SIGKILL)
+
+    def die() -> None:
+        if stage != fault:
+            # The kernel kills the child, as the OOM killer would: billiard sees signal 9, not an exit status.
+            os.kill(os.getpid(), signal.SIGKILL)
+        os._exit(1)
+
+    if stage == "task_prerun":
 
         def die_at_start(sender: Any = None, **_kwargs: Any) -> None:
             if ours(getattr(sender, "name", None)):
-                os._exit(1)
+                die()
 
         signals.task_prerun.connect(die_at_start, weak=False)
-    elif fault == "task_postrun":
+    elif stage == "task_postrun":
 
         def die_after_store(sender: Any = None, **_kwargs: Any) -> None:
             if ours(getattr(sender, "name", None)):
-                os._exit(1)
+                die()
 
         signals.task_postrun.connect(die_after_store, weak=False)
-    elif fault == "mark_as_done":
+    elif stage == "mark_as_done":
         backend_class = type(app.backend)
         store = backend_class.mark_as_done
 
@@ -300,7 +361,7 @@ def _install(app: Any, fault: str, task: str) -> None:
             self: Any, task_id: str, result: Any, request: Any = None, *args: Any, **kwargs: Any
         ) -> Any:
             if ours(getattr(request, "task", None)):
-                os._exit(1)
+                die()
             return store(self, task_id, result, request, *args, **kwargs)
 
         backend_class.mark_as_done = die_before_store
@@ -321,6 +382,27 @@ def _install(app: Any, fault: str, task: str) -> None:
             return publish(self, *args, **kwargs)
 
         Signature.apply_async = refusing
+    elif fault == BROKER_FULL:
+        import redis
+
+        broker = app.connection_for_write().as_uri(include_password=True)
+        assert urlsplit(broker).scheme in ("redis", "rediss"), (
+            f"{BROKER_FULL!r} needs a Redis broker; this worker's broker is {urlsplit(broker).scheme}://"
+        )
+        target = app.tasks[task]
+        body = target.run
+
+        def run_then_fill_the_broker(*args: Any, **kwargs: Any) -> Any:
+            result = body(*args, **kwargs)
+            if fault_fires(fault):
+                # REAL FAILURE: from here Redis itself refuses the broker's writes, the link's publish among them.
+                server = redis.Redis.from_url(broker)
+                server.config_set("maxmemory-policy", "noeviction")
+                server.config_set("maxmemory", 1)
+            return result
+
+        # The tracer calls task.run; an instance attribute shadows the task class's own.
+        target.run = run_then_fill_the_broker
     else:
         raise AssertionError(f"no such Celery fault {fault!r}")
 
@@ -352,11 +434,14 @@ if __name__ == "__main__":
 
 __all__ = [
     "AT_LEAST_ONCE",
+    "BROKER_FULL",
     "BROKER_OWNS_LEASES",
     "BROKER_REDELIVERS",
     "DEATH_POINTS",
     "FAILURE_POINTS",
     "RESULTS_ARE_NOT_OWED",
+    "SIGKILL_DEATH_POINTS",
+    "broker_restored",
     "running_worker",
     "wait_until",
     "worker_contract",
