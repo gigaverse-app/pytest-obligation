@@ -3,7 +3,8 @@
 Add `pytest-obligation/report` after the tests that generate your contract evidence.
 It updates one comment per PR and report key, writes a job summary, and uploads the
 full JSON and Markdown. A failed pytest step still fails the job. Reporting does
-not change your validation policy.
+not change your validation policy. Fork PRs get the same comment from a separate,
+trusted job: see [Fork PRs](#fork-prs-publish-from-a-workflow_run-job).
 
 The banner and compact headline follow CI-esta's sticky layout. Expand an application
 to see its guarantees, missing evidence, failed checks and recovery state.
@@ -35,8 +36,9 @@ The first digit's alt text contains the complete count and category. Other digit
 and spacers have empty alt text. `graphics: 'false'` selects plain text. Large
 reports automatically switch to plain text before graphical markup would force
 application details out of the comment budget. The full JSON and rendered
-Markdown are retained as workflow artifacts. Fork PRs still retain the summary
-and artifact without posting a comment.
+Markdown are retained as workflow artifacts. A fork PR's run keeps the summary
+and artifact; [the `publish` action](#fork-prs-publish-from-a-workflow_run-job)
+posts its comment.
 
 ## What the counts measure
 
@@ -311,9 +313,12 @@ certify contracts absent from the selected tests. Workflow concurrency should
 serialize writers for the same PR/key. The publisher also checks the current PR
 head and refuses older run IDs/attempts; GitHub comments have no atomic update API.
 
-Fork PRs receive a summary and artifact without a comment. `post-comment: 'false'`
-also disables publication; remove the write permission in that case. Missing
-comment permission preserves the summary/artifact. Missing or invalid reports
+A fork PR's token is read-only, so its run cannot comment: the report step keeps
+the summary and artifact and says, in its log and summary, that a `workflow_run`
+publisher posts the sticky. Add one as described in
+[Fork PRs](#fork-prs-publish-from-a-workflow_run-job). `post-comment: 'false'`
+disables publication from the test run; remove the write permission in that case.
+Missing comment permission preserves the summary/artifact. Missing or invalid reports
 produce **Evidence unavailable**, never a green verdict. Valid empty objects report
 that no application contract checks ran. Do not run
 untrusted PR code with a write token under `pull_request_target` to bypass this.
@@ -321,6 +326,112 @@ untrusted PR code with a write token under `pull_request_target` to bypass this.
 Pass `test-outcome` so a collection error or a failure outside the generated
 contracts remains visible even when the recorded contract checks passed. Without
 it, overall test-step status is explicitly **unknown**.
+
+## Fork PRs: publish from a `workflow_run` job
+
+A pull request from a fork runs with a read-only `GITHUB_TOKEN`, so its test job
+cannot comment. Keep the test job unchanged and add a second workflow that GitHub
+starts when the first completes. That workflow runs from your default branch with
+the permissions you give it, never with the PR's code. The `publish` action finds
+the run's PR, downloads its `obligation-<sticky-key>-<attempt>` artifact,
+re-renders the evidence and updates the same sticky the `report` action would.
+
+The PR workflow is the one above. Its `report` step uploads the artifact the
+publisher reads; it needs no extra permission:
+
+```yaml
+name: Application contracts
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  contracts:
+    permissions:
+      contents: read
+      pull-requests: write # Same-repository PRs still comment directly.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - name: Test application contracts
+        id: tests
+        run: uv run --no-sync pytest tests/contracts --due-work-profile-report=obligation-profiles.json
+      - name: Explain the evidence
+        if: always()
+        uses: gigaverse-app/pytest-obligation/report@v1
+        with:
+          report-path: obligation-profiles.json
+          sticky-key: application-contracts
+          test-outcome: ${{ steps.tests.outcome }}
+```
+
+The trusted publisher lives in its own file. `workflows` names the PR workflow
+above, and `sticky-key` matches its `report` step:
+
+```yaml
+name: Application contracts sticky
+on:
+  workflow_run:
+    workflows: [Application contracts]
+    types: [completed]
+permissions: {}
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # Read the triggering run and download its artifact.
+      pull-requests: write # Create or update the sticky.
+    concurrency:
+      group: application-contracts-sticky-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      # No checkout: the publisher reads only the API and the artifact.
+      - uses: gigaverse-app/pytest-obligation/publish@v1
+        with:
+          sticky-key: application-contracts
+```
+
+Add one `publish` step per `sticky-key` when several lanes report. The publisher
+runs for completed runs of every conclusion, because failed evidence is the point.
+It skips with an informational message, and succeeds, when the run was not a
+`pull_request` event, no open PR matches, or the artifact is absent or expired.
+For same-repository PRs it rewrites the sticky the test run already posted, with
+the same run and attempt. Concurrency serializes writers per head branch, since the
+PR number is only known after the lookup. A release pin must contain
+`publish/action.yml`; older releases cannot provide this action.
+
+To republish an older run by hand, call the action from `workflow_dispatch` with
+`run-id`, and optionally `run-attempt`; otherwise both come from the
+`workflow_run` event. Outputs: `pull-request`, `published` and `markdown-path`.
+
+### Why this is safe
+
+- **No PR code runs with the write token.** The workflow file, the action and the
+  reporter all come from your default branch and this action's revision. Nothing is
+  checked out; the reporter runs with `python -I` and never imports the evidence.
+- **The PR is resolved by head SHA, never from the artifact.** The action lists open
+  PRs whose head is `<head owner>:<head branch>`, then accepts exactly one whose
+  head SHA equals the run's `head_sha`, whose head repository is the run's, and
+  whose base is this repository. Before writing it checks the PR head again, so a
+  newer push is never overwritten by older evidence; newer runs and attempts win.
+- **The comment is re-rendered from data.** The artifact's report JSON, JUnit and
+  inventory are validated as data, and its uploaded Markdown is ignored, so all
+  escaping comes from this action's reporter. Run identity, the head SHA and links
+  come from the API. A damaged or foreign artifact renders **Evidence unavailable**.
+- **No untrusted string reaches a shell.** Only API values and your workflow's own
+  inputs are passed to the shell step; artifact files are read under fixed names.
+
+This does not make a fork's evidence trustworthy: the fork's code produced it, as
+it does in any PR. The publisher guarantees only that publishing it cannot run that
+code with your write token, and that the comment lands on the PR it was tested for.
+
+The artifact layout is the contract between the two actions: `manifest.json`
+(validated render settings), `reports/*.json`, `junit/*.xml`, `inventory.json` when
+an inventory was used, and `report.md` for people. `python -m
+pytest_obligation.reporting.republish` re-renders a downloaded artifact locally,
+given the run's head SHA, ID and attempt.
 
 ## Which words belong to whom?
 
