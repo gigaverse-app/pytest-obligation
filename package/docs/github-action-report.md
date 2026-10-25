@@ -416,10 +416,22 @@ To republish an older run by hand, call the action from `workflow_dispatch` with
   head SHA equals the run's `head_sha`, whose head repository is the run's, and
   whose base is this repository. Before writing it checks the PR head again, so a
   newer push is never overwritten by older evidence; newer runs and attempts win.
+  One head opened against two base branches matches two PRs, and a run does not say
+  which one it tested, so neither gets a sticky; the job warns, naming both.
 - **The comment is re-rendered from data.** The artifact's report JSON, JUnit and
   inventory are validated as data, and its uploaded Markdown is ignored, so all
   escaping comes from this action's reporter. Run identity, the head SHA and links
   come from the API. A damaged or foreign artifact renders **Evidence unavailable**.
+- **Application text cannot ping, link or cross-reference.** GitHub decodes HTML
+  entities before it finds `@mentions`, `#123` and `owner/repo/issues/123`
+  references and bare URLs, so escaping alone does not stop them. The reporter puts
+  a zero-width space after `@` and `#`, inside `://`, after `www` and between `/`
+  and a number in every piece of application text, so a fork's contract cannot make
+  the bot notify a user or team, post on another issue's timeline, or carry a
+  clickable link. A ticket URL from your debt baseline stays a link.
+- **The sticky is identified by its trailer only.** The publisher ends every
+  sticky with its run snapshot and key marker, and reads only that trailer, so
+  text inside a report can never stand in for either.
 - **No untrusted string reaches a shell.** Only API values and your workflow's own
   inputs are passed to the shell step; artifact files are read under fixed names.
 
@@ -475,8 +487,8 @@ using the older strict JSON model must be upgraded to read the new fields.
 On recovery failures, the comment shows fault counts, still-owed/progress
 observations and application diagnostic state. Only provide safe metadata in
 `diagnose`: never customer content, tokens, or credentials. Exception messages and
-contract reasons also enter the artifact/comment. The renderer escapes HTML,
-Markdown and mentions; escaping is not secret redaction. Review your report before
+contract reasons also enter the artifact/comment. The renderer escapes HTML and
+Markdown and breaks mentions and references; that is not secret redaction. Review your report before
 publishing it to a public repository. Large comments explicitly omit details and
 point to the retained JSON artifact.
 

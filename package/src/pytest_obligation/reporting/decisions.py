@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from pytest_obligation.profiles.coverage import SuiteCoverage
 
-from .evidence import GUARANTEES, _failure_details, all_cases, assessment_status, case_status, cell, code
+from .evidence import GUARANTEES, _failure_details, all_cases, assessment_status, case_status, cell, code, link_text
 
 
 def ticket_link(ticket: str | None) -> str:
@@ -20,7 +20,7 @@ def ticket_link(ticket: str | None) -> str:
         and not parsed.username
         and not any(c.isspace() or c in '()<>"\\' for c in ticket)
     ):
-        return f"[{cell(ticket)}]({ticket})"
+        return f"[{link_text(ticket)}]({ticket})"
     # Issue keys have no universal tracker URL. Adopters can put a full URL in
     # the baseline; never guess a private tracker from an application name.
     return code(ticket)
