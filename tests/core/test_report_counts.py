@@ -65,7 +65,7 @@ def test_application_rows_keep_counts_visible_and_flatten_small_reports(number: 
     suites = {f"app{i}": SuiteCoverage(name=f"application {i}", profiles={}) for i in range(number)}
     body = render(suites, graphics=True)
     assert ("most actionable first" in body) == (number > 3)
-    summaries = re.findall(r"<summary><samp.*?</summary>", body)
+    summaries = re.findall(r'<summary><strong>.*?<div align="right">.*?</summary>', body)
     assert len(summaries) == (number if number <= 3 else 0)
     if number > 3:
         assert all(f"| application {i} |" in body for i in range(number))

@@ -95,7 +95,7 @@ def test_shards_reach_one_report(contract_project: pytest.Pytester, damage: str)
     assert "Owed work is discovered from stored facts" in body
     if damage == "none":
         assert "Evidence unavailable" not in body
-        assert "0 blocked checks" in body and "0 failures" in body and "0 rejected bindings" in body
+        assert "0 blocked checks" in body and "0 contract failures" in body and "0 rejected bindings" in body
         assert "1 supported guarantees" in body
     else:
         assert "Evidence unavailable" in body

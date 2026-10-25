@@ -30,7 +30,7 @@ def test_uncollected_applications_keep_numeric_design_without_inventing_test_cou
     )
     body = render({}, inventory=discover(tmp_path, ["test_orders.py"]), graphics=True)
     assert 'alt="1 applications"' in body
-    assert 'alt="0 checks passed"' in body
+    assert 'alt="0 contract checks passed"' in body
     assert 'alt="skipped tests: unknown"' in body
     assert "**1** applications not run" in body
     assert "Checks skipped: **unknown**" in body
@@ -81,7 +81,7 @@ def test_unexecuted_applications_are_named_without_fabricating_results(tmp_path:
     body = unescape(output.read_text())
     assert "Order delivery" in body
     assert "1 applications" in body
-    assert "0 checks passed" in body
+    assert "0 contract checks passed" in body
     if evidence == "missing":
         assert "Evidence unavailable" in body
         assert "Unknown: reports incomplete" in body
@@ -226,4 +226,4 @@ def test_short_runtime_identity_uses_source_to_resolve_unreadable_display_name(t
     assert f"**{expected} applications" in body
     assert f"**{expected}** applications not run" in body
     assert "1 blocked checks" in body
-    assert "0 checks passed" in body
+    assert "0 contract checks passed" in body

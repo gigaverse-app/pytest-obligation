@@ -98,8 +98,8 @@ def _execution_summary(
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
 LABELS = {
     "applications": "Applications",
-    "passed": "Checks passed",
-    "failed": "Failures",
+    "passed": "Contract checks passed",
+    "failed": "Contract failures",
     "blocked": "Blocked checks",
     "gaps": "Coverage gaps",
     "rejected": "Rejected bindings",
@@ -247,7 +247,7 @@ def _suite(
     description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
     if compact:
-        summary = f"<strong>{cell(suite.name, 100)}</strong> · evidence and decisions"
+        summary = f"<strong>{application_name(suite.name)}</strong> · evidence and decisions"
     elif glyph_base:
         summary = application_html(suite.name, values, glyph_base)
     lines = [
@@ -259,8 +259,6 @@ def _suite(
     ]
     if timing:
         lines += [f"<sub>Test time: {_time([suite], compact=True).removeprefix('Test time: ')}</sub>", ""]
-    if not compact and glyph_base and application_name(suite.name)[1]:
-        lines += [f"Application: {code(suite.name)}", ""]
     if "selection" in suite.profiles:
         lines += [
             "Scope: **Scheduled selection and loop**. Covers the declared query and loop checks; does not establish full automatic recovery (profile A).",
@@ -361,11 +359,7 @@ def _overview(reports: dict[str, SuiteCoverage]) -> list[str]:
             ]
             folded = True
         values = counts(suite)
-        name = " ".join(suite.name.split())
-        name = name if len(name) <= 70 else name[:70] + "…"
-        # Long identifiers must wrap before squeezing the final metric offscreen.
-        # Escape each chunk before adding trusted zero-width break opportunities.
-        cells = ["&#8203;".join(cell(name[start : start + 24]) for start in range(0, len(name), 24))]
+        cells = [application_name(suite.name)]
         for metric in METRICS:
             value = values[metric]
             # Color is supplementary: the column name and exact count carry
@@ -448,10 +442,23 @@ def _render(
         f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
         "",
     ]
+    if test_outcome == "failure":
+        head = [
+            "## 🔴 Test step failed",
+            "",
+            "> [!CAUTION]",
+            "> The reported test step failed. Contract counts cover only obligation checks; inspect the run for other failures.",
+            "",
+            *head,
+        ]
     skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
     if collected_skips is not None:
         skipped, incomplete = collected_skips, False
     head += [
+        "### Obligation contract checks",
+        "",
+        "Other pytest tests and workflow steps are not included in these counts.",
+        "",
         _totals(
             dict(totals), glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped
         ),
@@ -486,6 +493,8 @@ def _render(
     compact = len(reports) > 3
     if compact:
         head += _overview(reports)
+    attempt = re.search(r"/attempts/([1-9][0-9]*)/?$", urlparse(run_url).path)
+    run_label = f"run {attempt[1]}" if attempt and attempt[1] != "1" else "run"
     footer = [
         "",
         "<details>",
@@ -497,7 +506,7 @@ def _render(
         "- **Coverage gaps:** guarantees not assessed, missing scenarios, or with declared gaps. Each affected guarantee counts once. Deliberate exclusions are shown separately.",
         "",
         "Pass/fail/blocked/rejected counts partition unique checks. Gaps count guarantees, not extra tests. "
-        "Declined and not-applicable declarations remain separate and do not establish passing coverage. Graphics show zero issues in green; missing reports never show green zeroes.",
+        "Declined and not-applicable declarations remain separate and do not establish passing coverage. Graphics color contract results: passing checks and zero issues are green, failures and rejected bindings are red, blocked checks and gaps are amber. Missing reports never show green zeroes. The workflow status above is separate from these contract counts.",
         "",
         "Elapsed time covers the pytest session. Summed check time includes setup, execution and cleanup; parallel work overlaps.",
         "Application totals include discovered declarations and reported suites. Skipped checks count known deselections and explicit pytest skips; incomplete selected checks are not skips. Uncollected applications have unknown check counts. Zero recorded outcomes do not certify passing coverage.",
@@ -510,7 +519,7 @@ def _render(
         "",
         "</details>",
         "",
-        (f"[Workflow run]({run_url}) · " if run_url else "")
+        (f"[{run_label}]({run_url}) · " if run_url else "")
         + f"[Report guide]({PROJECT}/blob/{ref}/package/docs/github-action-report.md)",
     ]
     sections = []

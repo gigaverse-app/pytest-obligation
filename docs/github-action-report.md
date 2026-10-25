@@ -9,12 +9,25 @@ trusted job: see [Fork PRs](#fork-prs-publish-from-a-workflow_run-job).
 The banner and compact headline follow CI-esta's sticky layout. Expand an application
 to see its guarantees, missing evidence, failed checks and recovery state.
 
-The header counts applications and passing checks on the left, with failures,
-blocked checks, coverage gaps and rejected bindings after a divider. Zero issues
-are green. Missing evidence produces an unavailable message instead of green zeroes.
-Each application has an aligned row with its counts visible while closed.
-Names wider than 20 monospace columns are abbreviated in the row; their full value
-remains in the tooltip and expanded application details.
+Read the workflow status first. A failed workflow starts with a red heading and a
+warning above the report, even if the uploaded evidence claims success. That status
+comes from GitHub for the exact run attempt. A report published inside the test job
+uses the test-step outcome supplied to the action instead.
+The workflow link sits at the bottom: `run` for the first attempt, then `run 2`,
+`run 3`, and so on. Successful workflows need no extra status heading.
+
+The graphics count **obligation contract checks**. Other pytest tests and workflow
+steps are outside these counts. Green means a contract check passed or an issue
+count is zero; red means contract failures or rejected bindings; amber means blocked
+checks, coverage gaps or an unknown count (`?`). A failed workflow keeps these colors:
+it can contain both passing and failing contracts. For example, 17 green contract
+checks and zero contract failures can coexist with a red workflow because an ordinary
+pytest test failed. Missing evidence is marked unavailable and never gets green zeroes.
+
+The header counts applications and passing contract checks on the left, with contract
+failures, blocked checks, coverage gaps and rejected bindings after a divider.
+Application names use the full available width and wrap when needed. Their colored
+counts align to the right underneath, and stay visible while the details are closed.
 One to three applications appear directly; larger reports use an outer disclosure.
 Applications sort by failed assertions, rejected bindings, blocked execution, then
 coverage gaps, with the largest count in the first applicable category first.
@@ -24,7 +37,7 @@ labels and spacers around native application names, expanders, source links and
 text. For example, `251` references the existing `2`, `5` and `1` images. Wider
 counts keep the same column positions. Zero issues use green digits.
 
-The 95 reusable assets in `docs/assets/report-glyphs/` total about 22 KB. They ship
+The reusable assets in `docs/assets/report-glyphs/` total about 25 KB. They ship
 with the library, just like the fixed banner, and are served from the action
 revision in this public repository. Changing a report only changes its Markdown.
 The action generates no SVG files, uploads no images, creates no asset branch,
@@ -163,7 +176,7 @@ list uncollected applications.
 
 The graphical summary counts the union of discovered and reported applications,
 even when none ran. Its **Skipped tests** counter uses known deselections and
-explicit pytest skips. It shows **?** when uncollected applications or incomplete
+explicit pytest skips. It shows an amber **?** when uncollected applications or incomplete
 reports prevent an exact total. Application lists and skip explanations stay
 collapsed; zero recorded checks use neutral colors when no execution was reported.
 
@@ -450,8 +463,10 @@ the permissions shown above.
 
 ### What the report proves
 
-The **GitHub workflow** line comes from GitHub's API for the exact run attempt. A
-failed workflow stays visibly failed even if the uploaded evidence says "success".
+The **GitHub workflow** status comes from GitHub's API for the exact run attempt. A
+failed workflow gets a red heading and warning above the graphics, even if the
+uploaded evidence says "success". Contract graphics keep their own colors: a green
+passing count does not mean the whole workflow passed.
 Source links point to the API-verified PR head.
 
 The check results, application names and test-step outcome come from the PR's evidence.
@@ -512,9 +527,9 @@ kept separate from the adopter's checkout. Do not run a copy supplied by the ado
 There is no npm installation or adopter package installation in this step.
 
 The tested preview implementation is commit
-[`69585150a5550f2ccdb18a9f5fedfaaf189a446d`](https://github.com/gigaverse-app/pytest-obligation/tree/69585150a5550f2ccdb18a9f5fedfaaf189a446d).
+[`ebf3d216e14e5220fa32f8e555d578853127f10c`](https://github.com/gigaverse-app/pytest-obligation/tree/ebf3d216e14e5220fa32f8e555d578853127f10c).
 For a new installation, clone pytest-obligation into a separate directory, review
-that commit, and check it out with `git checkout --detach 69585150a5550f2ccdb18a9f5fedfaaf189a446d`.
+that commit, and check it out with `git checkout --detach ebf3d216e14e5220fa32f8e555d578853127f10c`.
 To update later, review and select a newer commit; the command does not update itself.
 
 ```bash
@@ -593,6 +608,15 @@ Contents read and Metadata read permissions.
   planted Markdown, a Python file, a false success claim and a forged revision. The
   command updated the same comment, retained the API's failure status, labelled the
   reported claim and excluded the planted Markdown, Python and revision.
+- A [run with a broken obligation contract](https://github.com/aviadr1/pytest-obligation-preview-rehearsal/actions/runs/40187568413)
+  produced **30 passing contract checks, 4 failing contract checks and 0 rejected
+  bindings**. The binding passes the ownership guard, but its deriver never discovers
+  owed work. A separate ordinary pytest test also fails, so pytest reports 5 failures
+  while the contract report correctly counts 4. The same comment now starts with
+  **Fork workflow failed**, followed by green passing counts, red contract failures
+  and an amber `?` for the unknown skipped count. The graphical captions explicitly
+  say **Contract checks passed** and **Contract failures**. This was checked in
+  GitHub's rendered view and through the API, including the forged success claim.
 
 ### Limits and maintenance
 
@@ -632,7 +656,7 @@ Use one `publish` step per `sticky-key` for multiple reports. Outputs are
 pass `run-id` and optionally `run-attempt` to republish an existing run. The same PR
 identity and sandbox checks still apply.
 
-The publisher uses a digest-pinned Python 3.11 image and installs only hash-verified
+The publisher uses a digest-pinned Python image and installs only hash-verified
 wheels from `publish/requirements.txt`. The image build receives only publisher source
 and its locked requirements; it never receives the PR archive. Dependabot proposes
 updates to the action, image and Python requirements. The publisher's Python version
