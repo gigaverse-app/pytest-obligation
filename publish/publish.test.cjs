@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const {downloadArchive, publishedBody} = require('./publish.cjs');
+const {downloadArchive, publishedBody, rendererArgs} = require('./publish.cjs');
 
 const bytes = Buffer.from('a bounded artifact');
 const digest = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
@@ -77,3 +77,10 @@ for (const conclusion of ['timed_out', 'startup_failure', 'cancelled', 'neutral'
     assert.match(body, new RegExp(`GitHub reports: ${conclusion}`));
   });
 }
+
+test('only a PR from a branch of this repository renders its contract text live', () => {
+  const resolved = {headSha:'f'.repeat(40), runId:200, runAttempt:2};
+  const argsFor = sameRepository => rendererArgs({...resolved, sameRepository}, 'https://github.com/owner/app', 'v1');
+  assert.ok(argsFor(true).includes('--own-text'));
+  for (const fork of [false, undefined, 'true']) assert.ok(!argsFor(fork).includes('--own-text'), `${fork} must stay inert`);
+});

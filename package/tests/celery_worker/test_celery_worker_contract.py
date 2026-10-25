@@ -8,7 +8,7 @@ suite red until the table is updated.
 """
 
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -23,7 +23,14 @@ from packaging.version import Version
 
 from pytest_obligation import Claim, Findings, Profile, ReplaySafeEffect, due_work_contract_suite
 from pytest_obligation.host import Host, hosted
-from pytest_obligation.integrations.celery_worker import worker_contract, worker_history
+from pytest_obligation.integrations.celery_worker import (
+    BROKER_FULL,
+    DEATH_POINTS,
+    FAILURE_POINTS,
+    SIGKILL_DEATH_POINTS,
+    worker_contract,
+    worker_history,
+)
 from pytest_obligation.process_histories import ProcessHistory
 from tests.celery_worker import app as reference
 
@@ -48,6 +55,19 @@ def send() -> str:
     return reference.send_message.apply_async(
         (MESSAGE,), link=reference.announce.s(), link_error=reference.report_failure.s()
     ).id
+
+
+def send_on_own_broker() -> str:
+    # The same task, published to a broker on a Redis server of its own, which BROKER_FULL fills.
+    empty()
+    redis.Redis.from_url(reference.OWN_BROKER).flushdb()
+    with reference.app.connection_for_write(reference.OWN_BROKER) as connection:
+        return reference.send_message.apply_async(
+            (MESSAGE,),
+            link=reference.announce.s(),
+            link_error=reference.report_failure.s(),
+            producer=reference.app.amqp.Producer(connection),
+        ).id
 
 
 def send_chord() -> str:
@@ -80,8 +100,20 @@ def before_the_10724_fixes(rows: dict[str, Any]) -> dict[str, Any]:
     return {} if SUCCESS_STORED_STAYS_SUCCESS else rows
 
 
-def reference_history(name: str, send: Callable[[], str], findings: Findings) -> ProcessHistory[str, Any]:
+def reference_history(
+    name: str,
+    send: Callable[[], str],
+    findings: Findings,
+    *,
+    death_points: Sequence[str] = DEATH_POINTS,
+    failure_points: Sequence[str] = FAILURE_POINTS,
+    broker_url: str | None = None,
+) -> ProcessHistory[str, Any]:
     """Work the reference worker runs, observed the same way: the result's state, messages sent, announcements."""
+    env = {"PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+    if broker_url is not None:
+        # Celery takes CELERY_BROKER_URL from the environment over the application's own broker setting.
+        env["CELERY_BROKER_URL"] = broker_url
     return worker_history(
         name=name,
         app="tests.celery_worker.app:app",
@@ -91,8 +123,11 @@ def reference_history(name: str, send: Callable[[], str], findings: Findings) ->
         initial=("PENDING", 0, ()),
         expected=findings.delivered,
         settled=lambda task_id: AsyncResult(task_id, app=reference.app).ready(),
+        death_points=death_points,
+        failure_points=failure_points,
         findings=findings,
-        env={"PYTHONPATH": str(Path(__file__).resolve().parents[2])},
+        env=env,
+        broker_url=broker_url,
     )
 
 
@@ -103,15 +138,28 @@ FINDINGS = Findings(
         "died at task_prerun": ("FAILURE", 0, ("failed: WorkerLostError",)),
         # https://github.com/celery/celery/issues/10949
         "died at mark_as_done": ("FAILURE", 1, ("failed: WorkerLostError", SENT)),
+        # The kernel's SIGKILL reaches the parent through billiard's signal path, and leaves the same.
+        "died at task_prerun (SIGKILL)": ("FAILURE", 0, ("failed: WorkerLostError",)),
+        "died at mark_as_done (SIGKILL)": ("FAILURE", 1, ("failed: WorkerLostError", SENT)),
         # https://github.com/celery/celery/issues/10725
         "the broker refused the task's link": ("FAILURE", 1, ("failed: OperationalError",)),
     }
     | before_the_10724_fixes(
         {
             "died at task_postrun": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
+            "died at task_postrun (SIGKILL)": ("SUCCESS", 1, ("failed: WorkerLostError", SENT)),
             "the task's on_success hook raised": ("SUCCESS", 1, ("failed: ReceiverFailed", SENT)),
         }
     ),
+)
+
+# Redis itself refuses the link's publish, and kombu raises the OperationalError the injected refusal does.
+FULL_BROKER_FINDINGS = Findings(
+    ("SUCCESS", 1, (SENT,)),
+    {
+        # https://github.com/celery/celery/issues/10725
+        BROKER_FULL: ("FAILURE", 1, ("failed: OperationalError",)),
+    },
 )
 
 # The chord's state is its body's; its faults hit the first execution of a header task, and the refused
@@ -134,7 +182,17 @@ CHORD_FINDINGS = Findings(
     ),
 )
 
-SEND_MESSAGE = reference_history("the reference worker runs send_message", send, FINDINGS)
+SEND_MESSAGE = reference_history(
+    "the reference worker runs send_message", send, FINDINGS, death_points=DEATH_POINTS + SIGKILL_DEATH_POINTS
+)
+FULL_BROKER = reference_history(
+    "the reference worker runs send_message on a broker of its own",
+    send_on_own_broker,
+    FULL_BROKER_FINDINGS,
+    death_points=(),
+    failure_points=(BROKER_FULL,),
+    broker_url=reference.OWN_BROKER,
+)
 CHORD = reference_history("the reference worker runs a chord of two send_message tasks", send_chord, CHORD_FINDINGS)
 
 
@@ -158,9 +216,10 @@ def message_replay() -> Iterator[ReplaySafeEffect]:
 
 CONTRACT = worker_contract(
     name="celery reference worker",
-    process_handoffs=(SEND_MESSAGE, CHORD),
+    process_handoffs=(SEND_MESSAGE, FULL_BROKER, CHORD),
     handoff_gaps={
         SEND_MESSAGE.name: "a failure after the link is published, or a refused link, still runs the failure path",
+        FULL_BROKER.name: "a broker that refuses the link's publish records FAILURE and acknowledges the message",
         CHORD.name: "a header lost after its effect, or a refused body publish, fails the chord for good",
     },
 )
