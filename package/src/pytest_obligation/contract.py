@@ -181,6 +181,11 @@ from pytest_obligation.interleavings.bindings import EvidenceConfluence, InFligh
 from pytest_obligation.models import MISSING, HarnessModel, ObligationContractDesignError, with_positional
 from pytest_obligation.poison import poison_gap, poison_gap_names, stop_gap, stop_gap_names
 from pytest_obligation.process_histories import ProcessHistory, assert_process_deaths_converge
+from pytest_obligation.profiles.acknowledged_effects import (
+    ACKNOWLEDGED_EFFECT_PROOFS,
+    AcknowledgedEffect,
+    assert_acknowledgement_bindings_are_production_bound,
+)
 from pytest_obligation.profiles.automatic_recovery import (
     DUE_WORK_PROOFS,
     RECOVERY_POISON_PROOF_NAMES,
@@ -488,7 +493,7 @@ class ExtraProof(HarnessModel):
 _PROFILE_BINDINGS: dict[Profile, tuple[str, ...]] = {
     Profile.AUTOMATIC_RECOVERY: ("sweep",),
     Profile.BOUNDED_OWNERSHIP: ("ownership",),
-    Profile.CRASH_AMBIGUITY: ("ambiguity",),
+    Profile.CRASH_AMBIGUITY: ("ambiguity", "acknowledged_effects"),
     Profile.DURABLE_RETENTION: ("retention",),
     Profile.EVENTUAL_CONVERGENCE: ("convergence", "snapshot", "in_flight", "evidence_confluence"),
     Profile.FACT_DERIVED_OBLIGATIONS: ("derivation", "fixed_effect_derivation"),
@@ -510,6 +515,7 @@ _BINDING_PROOFS: dict[str, tuple[Callable[[Any], None], ...]] = {
         assert_claim_is_exclusive_across_connections,
     ),
     "ambiguity": (assert_ambiguity_bindings_are_production_bound, *AMBIGUITY_PROOFS),
+    "acknowledged_effects": (assert_acknowledgement_bindings_are_production_bound, *ACKNOWLEDGED_EFFECT_PROOFS),
     "retention": RETENTION_PROOFS,
     "convergence": (assert_convergence_bindings_are_production_bound, *CONVERGENT_WRITE_PROOFS),
     "snapshot": SNAPSHOT_PROOFS,
@@ -573,6 +579,7 @@ UNWAIVABLE_PROOFS = frozenset(
         "assert_ambiguity_transitions_are_production_bound",
         "assert_ordinary_due_work_is_production_bound",
         "assert_ambiguity_bindings_are_production_bound",
+        "assert_acknowledgement_bindings_are_production_bound",
         # Profile D.
         "assert_retention_transition_is_production_bound",
         # Profile E.
@@ -654,6 +661,8 @@ class ObligationContract(HarnessModel):
 
     #: Profile C: the domain's ambiguity handling.
     ambiguity: Binding[AmbiguityAware] | None = None
+    #: Profile C: effects the provider acknowledges before applying; a reply must not discharge the obligation.
+    acknowledged_effects: Mapping[str, Binding[AcknowledgedEffect]] = Field(default_factory=dict)
 
     #: Profile D: the domain's retention pass.
     retention: Binding[Retention] | None = None
@@ -870,6 +879,8 @@ def _profile_design_errors(contract: ObligationContract | SafetyContract, scope:
         )
     if any(not name.strip() for name in contract.classified_failures):
         errors.append("classified_failures name each provider outcome; an empty name identifies nothing")
+    if isinstance(contract, ObligationContract) and any(not name.strip() for name in contract.acknowledged_effects):
+        errors.append("acknowledged_effects name each acknowledging effect; an empty name identifies nothing")
 
     for profile in scope:
         disposition = contract.profiles.get(profile)

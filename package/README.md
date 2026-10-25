@@ -9,6 +9,7 @@ Executable contracts for durable work: bind real selection, execution and indepe
 - [Pytest plugin](docs/pytest-plugin.md)
 - [Writing bindings](docs/harness-guide.md)
 - [Interpreting a green result](docs/what-a-green-result-means.md)
+- [Faithful provider fakes](docs/faithful-fakes.md)
 - [GitHub Action: evidence, gaps and failures in one PR comment](docs/github-action-report.md)
 - [Public applications and demos](https://github.com/gigaverse-app/pytest-obligation#readme)
 

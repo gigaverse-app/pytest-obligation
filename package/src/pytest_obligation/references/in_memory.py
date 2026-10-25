@@ -30,7 +30,9 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
+from pytest_obligation.fakes import AsyncTasks, TaskStatus
 from pytest_obligation.models import MutableHarnessModel
+from pytest_obligation.profiles.acknowledged_effects import AcknowledgedEffect
 from pytest_obligation.profiles.durable_retention import Retention
 from pytest_obligation.profiles.eventual_convergence import (
     ConvergentWrite,
@@ -415,6 +417,77 @@ class InMemoryMachine:
 
     def due_work_ids(self) -> set[int]:
         return {row_id for row_id, row in self.rows.items() if row.state == "READY"}
+
+
+# --- Profile C: acknowledged effects ----------------------------------------------
+
+
+class InMemoryAcknowledgingTeardown:
+    """
+    A conforming teardown over an acknowledging provider: it discharges only once the task applied.
+
+    Each run accepts a deletion task (or re-accepts a failed one) and forgets the
+    operation only after the provider reports the task completed.
+    """
+
+    def __init__(self) -> None:
+        self.tasks = AsyncTasks(id_prefix="delete")
+        self.remote: set[int] = set()
+        self.owed: dict[int, str | None] = {}
+        self.acknowledgements: dict[int, int] = {}
+        self._ids = itertools.count(1)
+
+    def make_owed(self) -> int:
+        operation_id = next(self._ids)
+        self.remote.add(operation_id)
+        self.owed[operation_id] = None
+        self.acknowledgements[operation_id] = 0
+        return operation_id
+
+    def owed_work(self) -> list[int]:
+        return list(self.owed)
+
+    def request_deletion(self, operation_id: int) -> str:
+        self.acknowledgements[operation_id] += 1
+        return self.tasks.accept("delete", lambda: self.remote.discard(operation_id))
+
+    def run_once(self, operation_id: int) -> None:
+        if operation_id not in self.owed:
+            return
+        task_id = self.owed[operation_id]
+        if task_id is None or self.tasks.status(task_id) is TaskStatus.FAILED:
+            task_id = self.owed[operation_id] = self.request_deletion(operation_id)
+        if self.tasks.status(task_id) is TaskStatus.COMPLETED:
+            del self.owed[operation_id]
+
+    def hold_acknowledgements(self, operation_id: int) -> AsyncTasks:
+        return self.tasks.held()
+
+    def acknowledgement_count(self, operation_id: int) -> int:
+        return self.acknowledgements[operation_id]
+
+    def applied(self, operation_id: int) -> bool:
+        return operation_id not in self.remote
+
+    def apply_acknowledged(self, operation_id: int) -> None:
+        self.tasks.complete_pending()
+
+
+def reference_acknowledged_effect_binding(
+    teardown: InMemoryAcknowledgingTeardown | None = None,
+) -> AcknowledgedEffect:
+    """An acknowledged-effect binding over the conforming reference or one mutant."""
+    teardown = teardown if teardown is not None else InMemoryAcknowledgingTeardown()
+    return AcknowledgedEffect(
+        name="in-memory acknowledged teardown",
+        make_owed=teardown.make_owed,
+        owed_work=teardown.owed_work,
+        run_once=teardown.run_once,
+        hold_acknowledgements=teardown.hold_acknowledgements,
+        acknowledgement_count=teardown.acknowledgement_count,
+        applied=teardown.applied,
+        apply_acknowledged=teardown.apply_acknowledged,
+    )
 
 
 # --- Profile E: convergent writes -------------------------------------------------
