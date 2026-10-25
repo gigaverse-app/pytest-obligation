@@ -476,11 +476,123 @@ GitHub requires a `workflow_run` workflow to exist on the default branch. Adding
 publisher to the first adoption PR does not activate it. This is the project's opt-in
 boundary.
 
-For an initial demonstration, paste the rendered report into the adoption PR as an
-ordinary comment and link its run/artifact, or link a demo PR with a live sticky. If
-the project wants live publishing before merging the larger integration, a maintainer
-can first merge the small publisher workflow above. Subsequent test runs can then
-publish the sticky on the still-open adoption PR.
+**Use the preview command to show the report on that first PR. The target project
+does not need to merge anything, install an app or give you a token.** You run tests
+in your public fork and publish an ordinary comment under your own GitHub account.
+Running the command again updates your preview comment.
+
+The message for the adopter is simple: **it is safe to inspect because it is a GitHub
+comment. Viewing it runs no project code and grants no repository access.** The report
+identifies the fork run and exact commit. Its results are contributor-reported evidence;
+they are not the target project's CI or approval.
+
+#### Generate evidence in your fork
+
+Use a fresh GitHub-hosted runner in a fork with no repository, organization or
+environment secrets available to its test job. Give the job only `contents: read`,
+disable checkout credential persistence, and do not grant OIDC or deployment access.
+Installing dependencies and running tests can execute the project's code, so do not
+run them on the computer that holds your maintainer credentials.
+
+Configure your fork's test workflow to run on `push` (or `workflow_dispatch`). Use the
+report step above with `post-comment: 'false'`. Choose the branch and commit used by
+your adoption PR. The preview accepts a completed run from that exact public fork,
+branch and commit. A `pull_request` merge run is not interchangeable with a fork's
+head-commit run.
+
+This setup is entirely in **your fork**. The upstream default branch needs no workflow.
+You can remove demonstration-only workflow files from the adoption diff later; rerun
+the evidence for the new commit before updating the preview.
+
+#### Publish from your trusted computer
+
+Use Node.js 22 or later, a local Docker daemon, and the GitHub CLI signed in as the
+account that opened the PR. Run the command from a reviewed pytest-obligation checkout,
+kept separate from the adopter's checkout. Do not run a copy supplied by the adopter.
+There is no npm installation or adopter package installation in this step.
+
+The tested preview implementation is commit
+[`69585150a5550f2ccdb18a9f5fedfaaf189a446d`](https://github.com/gigaverse-app/pytest-obligation/tree/69585150a5550f2ccdb18a9f5fedfaaf189a446d).
+For a new installation, clone pytest-obligation into a separate directory, review
+that commit, and check it out with `git checkout --detach 69585150a5550f2ccdb18a9f5fedfaaf189a446d`.
+To update later, review and select a newer commit; the command does not update itself.
+
+```bash
+# In your reviewed pytest-obligation checkout, outside the adopter's repository:
+gh auth login --hostname github.com  # only if you have not already signed in
+node preview/cli.cjs \
+  --pr https://github.com/UPSTREAM/PROJECT/pull/123 \
+  --run https://github.com/YOUR-ACCOUNT/PROJECT/actions/runs/456 \
+  --sticky-key application-contracts
+```
+
+Use the same `sticky-key` as the report step. For a specific retry, the run URL can
+end in `/attempts/2`; otherwise the command uses the latest attempt. Keep invocations
+for one PR and key sequential. The command prints the created or updated comment URL.
+It never prints the downloaded report, subprocess diagnostics or authentication token.
+
+The command uses your existing `gh` authentication, or `GH_TOKEN`/`GITHUB_TOKEN` if
+already set. It does not accept a token on the command line, create a token or request
+broader scopes. Your account and its authentication must already be allowed to read
+the fork artifact and comment on the public PR. Repository interaction restrictions
+still apply. Never put that credential in the fork's test job.
+
+#### Why the maintainer's credentials stay isolated
+
+```text
+Your fork -> disposable test runner, no maintainer secrets -> evidence artifact
+                                                               |
+Your trusted computer -> preview command -----------------------+
+                          |
+                          +-> offline renderer: data in, Markdown out
+                          |      no credentials, network or project checkout
+                          |
+                          +-> GitHub API: create/update your preview comment
+```
+
+- **The command never checks out the project, installs its dependencies or runs its
+  tests.** It fetches GitHub metadata and an evidence archive. Only the pinned renderer
+  container opens the archive, with the same limits as the regular publisher.
+- **The commenting credential stays in the trusted host process.** It is sent only to
+  GitHub's API. The signed artifact-storage request receives no token. Docker subprocesses
+  receive an allowlisted operating-system environment; the container receives no host
+  environment, credential files, Docker socket or writable host directory.
+- **You choose the destination.** GitHub must confirm an open PR authored by your signed-in
+  account, a public source fork, and a matching completed run. Artifact contents cannot
+  choose the PR, commit, source repository or comment author.
+- **Updates preserve ownership and freshness.** Only your numeric GitHub author ID and
+  the preview's final marker can identify an existing comment. Other people's comments
+  and the regular Actions sticky are separate. Older runs cannot replace newer evidence,
+  and the PR head is checked again immediately before writing. Each comment records its
+  commit so later PR changes remain visible; there is no automatic background watcher.
+- **Bad evidence has a useful, safe result.** Oversized, invalid or unrenderable evidence
+  produces an **Evidence unavailable** preview with the real fork workflow status. The
+  command never retries parsing outside the sandbox. A mismatched PR or run is not posted.
+
+The operator still trusts the reviewed preview code and their local Docker installation,
+as with any authenticated tool. The adopter grants neither of them any new access.
+This command supports public github.com repositories; it will not copy a private
+repository's evidence into a public comment.
+
+After adoption, the project's default-branch publisher can maintain its own Actions
+sticky. The preview remains clearly attributed to its contributor.
+
+#### Verified without target setup
+
+The [first-adoption rehearsal](https://github.com/gigaverse-app/pytest-obligation-preview-rehearsal/pull/1)
+ran on October 25, 2026. The target default branch stayed at
+`57946fd7632297d427599dbb79f7d7ac43938418`, containing only a README and **zero workflows**.
+The source fork had no repository secrets or environments; its test job received only
+Contents read and Metadata read permissions.
+
+- A [successful fork run](https://github.com/aviadr1/pytest-obligation-preview-rehearsal/actions/runs/40183439411)
+  created [one contributor preview](https://github.com/gigaverse-app/pytest-obligation-preview-rehearsal/pull/1#issuecomment-6396323316).
+- After advancing the PR, attempting to publish the old run was rejected without
+  changing the comment.
+- A [deliberately failed fork run](https://github.com/aviadr1/pytest-obligation-preview-rehearsal/actions/runs/40183633504)
+  planted Markdown, a Python file, a false success claim and a forged revision. The
+  command updated the same comment, retained the API's failure status, labelled the
+  reported claim and excluded the planted Markdown, Python and revision.
 
 ### Limits and maintenance
 
