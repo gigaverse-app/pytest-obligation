@@ -225,8 +225,15 @@ jobs:
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+      # The Celery broker-full fault sets maxmemory on its broker's whole server, so that broker gets its own.
+      redis-own-broker:
+        image: redis:7
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       REDIS_URL: redis://localhost:6379/14
+      CELERY_OWN_BROKER_URL: redis://localhost:6380/0
     steps:
       - uses: actions/checkout@v7
       - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
