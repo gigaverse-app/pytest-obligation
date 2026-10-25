@@ -527,9 +527,9 @@ kept separate from the adopter's checkout. Do not run a copy supplied by the ado
 There is no npm installation or adopter package installation in this step.
 
 The tested preview implementation is commit
-[`2ea1185fce02fd909b80a86228bfa2a4184d5e74`](https://github.com/gigaverse-app/pytest-obligation/tree/2ea1185fce02fd909b80a86228bfa2a4184d5e74).
+[`ebf3d216e14e5220fa32f8e555d578853127f10c`](https://github.com/gigaverse-app/pytest-obligation/tree/ebf3d216e14e5220fa32f8e555d578853127f10c).
 For a new installation, clone pytest-obligation into a separate directory, review
-that commit, and check it out with `git checkout --detach 2ea1185fce02fd909b80a86228bfa2a4184d5e74`.
+that commit, and check it out with `git checkout --detach ebf3d216e14e5220fa32f8e555d578853127f10c`.
 To update later, review and select a newer commit; the command does not update itself.
 
 ```bash

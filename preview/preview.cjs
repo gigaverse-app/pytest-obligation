@@ -8,7 +8,7 @@ const {downloadArchive, renderSandbox, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIO
 
 const API = 'https://api.github.com';
 const ACTION_PATH = path.resolve(__dirname, '../publish');
-const ASSET_REF = '6fb0cf0eb800db8078aeaa47e6706cdddcf00d36';
+const ASSET_REF = 'ebf3d216e14e5220fa32f8e555d578853127f10c';
 const TRAILER = /\n<!-- pytest-obligation-preview-snapshot:(.*?) -->\n(<!-- pytest-obligation-preview:[0-9a-f]{24} -->)\s*$/;
 class PreviewError extends Error {}
 function requireThat(condition, message) { if (!condition) throw new PreviewError(message); }

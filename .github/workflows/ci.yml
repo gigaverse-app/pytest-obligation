@@ -671,7 +671,9 @@ jobs:
           test "$PULL_REQUEST" = "$EXPECTED_PULL_REQUEST"
           # The publisher adds GitHub's actual workflow status and uses API-verified source links.
           # Equality of the underlying evidence is covered by test_report_artifact.py.
-          grep -F 'Results below were supplied by the pull request.' "$REPUBLISHED"
+          run_label=run
+          if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then run_label="run $GITHUB_RUN_ATTEMPT"; fi
+          grep -Fx "[$run_label]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT)" "$REPUBLISHED"
           grep -F 'Test step (reported):' "$REPUBLISHED"
           if grep -Fq 'Evidence unavailable' "$REPUBLISHED"; then exit 1; fi
           # A fork's read-only token degrades to a warning; the same repository must publish.
