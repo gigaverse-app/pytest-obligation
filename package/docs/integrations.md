@@ -16,7 +16,7 @@ configure(django_host(production_packages={"myapp"}))
 | Extra | Scope |
 | --- | --- |
 | `[django]` | `django_host()`: transaction and commit faults, PostgreSQL plan inspection, lifecycle-state proofs, and pytest-django marks |
-| `[celery]` | Beat-schedule evidence, held or refused publications, real worker death points (exit or SIGKILL), callback failures, a really full Redis broker, and `worker_contract()` |
+| `[celery]` | Beat-schedule evidence, held or refused publications, real worker death points (exit or SIGKILL), callback failures, a really full Redis broker, `worker_contract()`, and `task_contract()` for an application's own task |
 | `[procrastinate]` | Worker recovery, stalled-job arrangement, and periodic-task evidence |
 | `[dbos]` | Application restart through its own startup for process-level crash histories |
 | `[redis]` | `redis_host()`: Redis write/pipeline commit counting and lost write replies |
@@ -38,6 +38,40 @@ CONTRACT = worker_contract(
 ```
 
 The one-history form, `history=` with `gap=`, is deprecated: it still works and warns.
+
+### An application's own task: `task_contract()`
+
+`celery_tasks.task_contract()` is the shorter way in for an application. It supplies the worker, the
+stages and what Celery itself does at each one for the task's configuration; the application supplies
+only how its code sends the task, how to see what the task did, and what that should be after one run:
+
+```python
+from pytest_obligation.integrations.celery_tasks import task_contract
+
+WELCOME = task_contract(
+    "myapp.celery:app",
+    send_welcome_email,
+    send=lambda: sign_up(f"{uuid4()}@example.com"),
+    effect=lambda result: outbox.count(result.args[0]),
+    expected_effect=1,
+)
+```
+
+What Celery leaves at a stage by design is declared for you, from the task's `acks_late`,
+`reject_on_worker_lost` and `ignore_result`, and pinned as a strict expected failure
+(`celery_outcomes()` lists the rows). Lost as it starts, a task Celery does not requeue never runs; lost
+after its body ran, it is recorded `FAILURE` though its effect happened; a refused link is recorded
+`FAILURE` and not sent again. A second run's effect is never declared: it belongs to the task. Pass what
+the task does that you cannot fix yet as `known=` with `because=`.
+
+When the application recovers what Celery loses itself, with a sweep its beat schedule runs or a work
+table of its own, pass the sweep as `recovery=` and name it with `recovered_by=`. Nothing is then
+declared, and every history must converge: that is the claim the sweep makes. A task whose result is not
+kept is observed by its effect alone, and a run whose task was lost settles once the worker is idle
+(`worker_idle()`), not when a result arrives. For a worker that reads a database the test writes, pass
+`transactional=True`, and give the worker what only the running test knows with `env=` as a callable,
+such as the test database's name. Due ships this for its work tables as
+`due.django.testing.celery_worker_contract()`.
 
 Two opt-in Celery faults replace an injection with the real failure: `SIGKILL_DEATH_POINTS` has the
 kernel kill the pool child at the same three stages (billiard's signal path, not an exit status), and

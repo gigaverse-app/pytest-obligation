@@ -56,6 +56,7 @@ that recovery inside the run is what the verdict then sees. Helpers import Celer
 import importlib
 import os
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -66,6 +67,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from pytest_obligation.contract import (
     Adoption,
@@ -162,15 +164,17 @@ def worker_history(
     observe: Callable[[HandleT], ObservationT],
     initial: ObservationT,
     expected: ObservationT | Callable[[HandleT], ObservationT],
-    settled: Callable[[HandleT], bool],
+    settled: Callable[[HandleT], bool] | None = None,
     death_points: Sequence[str] = DEATH_POINTS,
     failure_points: Sequence[str] = FAILURE_POINTS,
     quiet: float = 1.0,
     timeout: float = 60.0,
-    env: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | Callable[[], Mapping[str, str]] | None = None,
     log: Path | None = None,
     findings: Findings | None = None,
     broker_url: str | None = None,
+    worker_args: Sequence[str] = (),
+    recovery: Callable[[HandleT], object] | None = None,
 ) -> ProcessHistory[HandleT, ObservationT]:
     """
     One task through the application's real worker, failing at each of Celery's stages, recovered by a restart.
@@ -178,10 +182,21 @@ def worker_history(
     ``send`` publishes the task (with its links and error callbacks) and returns
     what ``observe`` reads. ``settled`` says when the work it started is done;
     each run then waits ``quiet`` seconds more for anything it published late.
-    A run reports status 1 when its fault happened, so a stage the task never
-    reached is caught as a history that was never interrupted. ``broker_url``
-    is the worker's Redis broker, which :data:`BROKER_FULL` fills and the test
-    process restores.
+    Without ``settled``, a run is done when the worker is idle: nothing queued
+    for it, reserved, scheduled or running (:func:`worker_idle`). That also
+    ends a run whose task was lost without recording anything, such as a task
+    with ``ignore_result``. A run reports status 1 when its fault happened, so
+    a stage the task never reached is caught as a history that was never
+    interrupted. ``broker_url`` is the worker's Redis broker, which
+    :data:`BROKER_FULL` fills and the test process restores.
+
+    ``env`` is added to the worker's environment; pass a callable to compute it
+    each time a worker starts, for values only a running test knows, such as
+    the name of its test database. ``worker_args`` go to ``celery worker``
+    (``-Q`` for the queues it consumes, for example). ``recovery`` is what the
+    application's deployment runs besides the worker, such as the recovery
+    sweep its beat schedule publishes: it is called with the handle once the
+    worker has started again, and recovery then waits for the work to settle.
     """
     deaths, failures = DEATH_POINTS + SIGKILL_DEATH_POINTS, (*FAILURE_POINTS, BROKER_FULL)
     unknown = set(death_points) - set(deaths) | set(failure_points) - set(failures)
@@ -192,11 +207,21 @@ def worker_history(
             f"broker the test process can restore, on a server shared with nothing else; got {broker_url!r}"
         )
 
+    node = _node_name(worker_args)
+    arguments = tuple(worker_args) if node in worker_args else (*worker_args, "--hostname", node)
+    is_settled = settled if settled is not None else _idle(app, node, arguments)
+
+    def worker(fault: str | None = None, marker: Path | None = None) -> AbstractContextManager[object]:
+        environment = env() if callable(env) else env
+        return running_worker(
+            app, fault=fault, task=task, marker=marker, env=environment, log=log, worker_args=arguments
+        )
+
     def run(fault: str | None) -> tuple[HandleT, int] | tuple[HandleT, int, ObservationT]:
         at_fault: ObservationT | None = None
         with tempfile.TemporaryDirectory() as scratch:
             marker = Path(scratch) / "fault"
-            with running_worker(app, fault=fault, task=task, marker=marker, env=env, log=log):
+            with worker(fault, marker):
                 # The broker is restored before the worker stops, whether the run settles or not.
                 with broker_restored(broker_url) if fault == BROKER_FULL and broker_url else nullcontext():
                     handle = send()
@@ -204,13 +229,13 @@ def worker_history(
                         # OBSERVE the work as the fault left it, before the worker's main process can replace a
                         # lost pool child and run a requeued task again: that is recovery too, inside the run.
                         wait_until(
-                            lambda: fault_happened(marker) or settled(handle),
+                            lambda: fault_happened(marker) or is_settled(handle),
                             timeout=timeout,
                             what=f"{name}: the task did not settle",
                             poll=0.01,
                         )
                         at_fault = observe(handle) if fault_happened(marker) else None
-                    wait_until(lambda: settled(handle), timeout=timeout, what=f"{name}: the task did not settle")
+                    wait_until(lambda: is_settled(handle), timeout=timeout, what=f"{name}: the task did not settle")
                     time.sleep(quiet)
             happened = fault_happened(marker)
         if fault is None:
@@ -222,8 +247,11 @@ def worker_history(
 
     def recover(handle: HandleT) -> None:
         # REAL PRODUCTION: the worker starting again, then running until the work is settled.
-        with running_worker(app, env=env, log=log):
-            wait_until(lambda: settled(handle), timeout=timeout, what=f"{name}: recovery did not settle")
+        with worker():
+            if recovery is not None:
+                # REAL PRODUCTION: what the deployment runs besides the worker, such as its recovery sweep.
+                recovery(handle)
+            wait_until(lambda: is_settled(handle), timeout=timeout, what=f"{name}: recovery did not settle")
             time.sleep(quiet)
 
     return ProcessHistory(
@@ -237,6 +265,71 @@ def worker_history(
         failure_points=tuple(failure_points),
         findings=findings,
     )
+
+
+def _node_name(worker_args: Sequence[str]) -> str:
+    """The worker's node name: the one ``worker_args`` gives with ``--hostname``/``-n``, else a fresh one."""
+    for flag in ("--hostname", "-n"):
+        if flag in worker_args:
+            index = list(worker_args).index(flag)
+            assert index + 1 < len(worker_args), f"{flag} needs a node name"
+            given = worker_args[index + 1]
+            assert "%" not in given, f"pass {flag} a literal node name, without % expansions; got {given!r}"
+            return given
+    return f"obligation-{uuid4().hex[:12]}@{socket.gethostname()}"
+
+
+def _queues(application: Any, worker_args: Sequence[str]) -> tuple[str, ...]:
+    """The queues the worker consumes: ``-Q``/``--queues`` from ``worker_args``, else the app's default queue."""
+    for flag in ("-Q", "--queues"):
+        if flag in worker_args:
+            return tuple(worker_args[list(worker_args).index(flag) + 1].split(","))
+    return (application.conf.task_default_queue,)
+
+
+def _idle(app: str, node: str, worker_args: Sequence[str]) -> Callable[[Any], bool]:
+    """``settled`` for a history that names none: the worker idle twice in a row, a fifth of a second apart."""
+    module, _, attribute = app.partition(":")
+    application = getattr(importlib.import_module(module), attribute or "app")
+    queues = _queues(application, worker_args)
+
+    def settled(_handle: Any) -> bool:
+        if not worker_idle(application, node, queues):
+            return False
+        # A message moves from the queue to the worker's reservation in steps; one reading can fall between them.
+        time.sleep(0.2)
+        return worker_idle(application, node, queues)
+
+    return settled
+
+
+def worker_idle(application: Any, node: str, queues: Sequence[str]) -> bool:
+    """
+    TEST PROCESS: the worker ``node`` has nothing left to do.
+
+    None of ``queues`` holds a message, and the worker reports nothing reserved,
+    scheduled (a retry waiting out its countdown) or running. A worker that does
+    not answer yet, because it is still starting, is not idle. It reads the
+    broker as ``application`` is configured, so the test process must use the
+    worker's broker.
+    """
+    from kombu.exceptions import ChannelError
+
+    inspect = application.control.inspect(destination=[node], timeout=1.0)
+    for read in (inspect.active, inspect.reserved, inspect.scheduled):
+        replies = read()
+        if not replies or replies.get(node) != []:
+            return False
+    with application.connection_for_read() as connection:
+        channel = connection.default_channel
+        for queue in queues:
+            try:
+                if channel.queue_declare(queue=queue, passive=True).message_count:
+                    return False
+            except ChannelError:
+                # A queue never declared holds nothing.
+                continue
+    return True
 
 
 def broker_restored(broker_url: str) -> AbstractContextManager[None]:
@@ -279,6 +372,14 @@ AT_LEAST_ONCE = "with task_acks_late a task whose worker died may run again; whe
 RESULTS_ARE_NOT_OWED = "stored results are the record of settled work, not work still owed"
 
 
+def recovered_by_another(owner: str) -> str:
+    """Profile A's reason when the application, not Celery, recovers what the worker lost."""
+    return (
+        f"what the worker loses is recovered by {owner}, whose own contract proves its recovery; these histories "
+        "run it after the worker restarts and check that every failure converges"
+    )
+
+
 def worker_contract(
     *,
     name: str,
@@ -287,6 +388,8 @@ def worker_contract(
     history: ProcessHistory[Any, Any] | None = None,
     gap: str | None = None,
     fixtures: tuple[str, ...] = (),
+    recovered_by: str | None = None,
+    transactional: bool = False,
 ) -> ObligationContract:
     """
     Celery's contract with its worker: the adopter's work through the real worker, failing at each of Celery's stages.
@@ -297,7 +400,11 @@ def worker_contract(
     the same meaning, as :class:`ObligationContract`'s. When a history carries
     its ``findings``, they are pinned history by history in the same run. The
     profiles Celery leaves to the broker or to the task are declined with the
-    reason.
+    reason. ``recovered_by`` names what recovers the work besides the worker
+    restarting, when its histories bind a ``recovery``: Profile A is then that
+    recovery's, proven by its own contract, and not Celery's.
+    ``transactional`` runs each case with real commits, for histories whose
+    worker reads rows the test wrote, such as a Django database.
 
     ``history=`` and ``gap=`` are the deprecated one-history form; they still
     work, and warn. Pass ``process_handoffs=(history,)`` and
@@ -324,7 +431,7 @@ def worker_contract(
         name=name,
         adoption=Adoption.LEGACY,
         profiles={
-            Profile.A: Decline(BROKER_REDELIVERS),
+            Profile.A: Decline(recovered_by_another(recovered_by) if recovered_by else BROKER_REDELIVERS),
             Profile.B: Decline(BROKER_OWNS_LEASES),
             Profile.C: Decline(AT_LEAST_ONCE),
             Profile.D: NotApplicable(RESULTS_ARE_NOT_OWED),
@@ -343,6 +450,7 @@ def worker_contract(
         process_handoffs=tuple(process_handoffs),
         handoff_gaps=dict(handoff_gaps or {}),
         fixtures=fixtures,
+        transactional=transactional,
     )
 
 
@@ -392,13 +500,16 @@ def _install(app: Any, fault: str, task: str) -> None:
 
         backend_class.mark_as_done = die_before_store
     elif fault == "the task's on_success hook raised":
-        target = app.tasks[task]
 
         def on_success(*_args: Any, **_kwargs: Any) -> None:
             if fault_fires(fault):
                 raise ReceiverFailed(f"the on_success hook of {task} failed")
 
-        type(target).on_success = on_success
+        def install_on_success(**_kwargs: Any) -> None:
+            type(app.tasks[task]).on_success = on_success
+
+        # Once the worker has loaded its tasks: a task a Django app registers is not known before then.
+        signals.worker_init.connect(install_on_success, weak=False)
     elif fault == "the broker refused the task's link":
         publish = Signature.apply_async
 
@@ -415,20 +526,24 @@ def _install(app: Any, fault: str, task: str) -> None:
         assert urlsplit(broker).scheme in ("redis", "rediss"), (
             f"{BROKER_FULL!r} needs a Redis broker; this worker's broker is {urlsplit(broker).scheme}://"
         )
-        target = app.tasks[task]
-        body = target.run
 
-        def run_then_fill_the_broker(*args: Any, **kwargs: Any) -> Any:
-            result = body(*args, **kwargs)
-            if fault_fires(fault):
-                # REAL FAILURE: from here Redis itself refuses the broker's writes, the link's publish among them.
-                server = redis.Redis.from_url(broker)
-                server.config_set("maxmemory-policy", "noeviction")
-                server.config_set("maxmemory", 1)
-            return result
+        def install_run_then_fill(**_kwargs: Any) -> None:
+            target = app.tasks[task]
+            body = target.run
 
-        # The tracer calls task.run; an instance attribute shadows the task class's own.
-        target.run = run_then_fill_the_broker
+            def run_then_fill_the_broker(*args: Any, **kwargs: Any) -> Any:
+                result = body(*args, **kwargs)
+                if fault_fires(fault):
+                    # REAL FAILURE: from here Redis itself refuses the broker's writes, the link's publish among them.
+                    server = redis.Redis.from_url(broker)
+                    server.config_set("maxmemory-policy", "noeviction")
+                    server.config_set("maxmemory", 1)
+                return result
+
+            # The tracer calls task.run; an instance attribute shadows the task class's own.
+            target.run = run_then_fill_the_broker
+
+        signals.worker_init.connect(install_run_then_fill, weak=False)
     else:
         raise AssertionError(f"no such Celery fault {fault!r}")
 
@@ -468,8 +583,10 @@ __all__ = [
     "RESULTS_ARE_NOT_OWED",
     "SIGKILL_DEATH_POINTS",
     "broker_restored",
+    "recovered_by_another",
     "running_worker",
     "wait_until",
     "worker_contract",
     "worker_history",
+    "worker_idle",
 ]
