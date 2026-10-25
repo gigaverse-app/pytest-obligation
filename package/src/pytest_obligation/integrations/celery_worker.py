@@ -229,11 +229,7 @@ def worker_contract(
     else:
         assert gap is None, f"{name}: gap= declares history='s gap; with histories=, declare each in handoff_gaps="
     assert histories, f"{name}: a Celery worker contract binds at least one history"
-    names = [each.name for each in histories]
-    assert len(set(names)) == len(names), f"{name}: two histories share a name: {sorted(names)}"
-    handoff_gaps = dict(handoff_gaps or {})
-    unknown = handoff_gaps.keys() - set(names)
-    assert not unknown, f"{name}: handoff_gaps name no bound history: {sorted(unknown)}; the histories are {names}"
+    # Unique history names and gaps that name a bound history are ObligationContract's own design checks.
     return ObligationContract(
         name=name,
         adoption=Adoption.LEGACY,
@@ -255,7 +251,7 @@ def worker_contract(
             Profile.I: application_admission("Celery"),
         },
         process_handoffs=tuple(histories),
-        handoff_gaps=handoff_gaps,
+        handoff_gaps=dict(handoff_gaps or {}),
         fixtures=fixtures,
     )
 
