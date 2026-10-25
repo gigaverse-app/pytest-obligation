@@ -392,7 +392,7 @@ def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
                 f"It would be retried in a hot loop instead of after its retry delay"
             )
         if failure.provider_wait is not None and failure.advance_by is not None:
-            _assert_waits_out_the_provider(failure, operation, attempts=attempts)
+            assert_provider_wait_is_honored(failure, operation)
         _advance_after_failure(failure, operation, attempts=attempts, execution=1)
         return
 
@@ -425,8 +425,14 @@ def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
     _assert_product_outcome(failure, operation, after="after a stale runner invocation")
 
 
-def _assert_waits_out_the_provider(failure: ClassifiedFailure, operation: Any, *, attempts: int) -> None:
+def assert_provider_wait_is_honored(failure: ClassifiedFailure, operation: Any) -> None:
+    """Check a settled refusal's wait, including stale delivery, without executing a fresh refusal.
+
+    Recovery harnesses can use the same oracle after settling persisted evidence.
+    The caller must first prove the refusal happened and left the operation owed.
+    """
     assert failure.provider_wait is not None and failure.advance_by is not None
+    attempts = failure.failure_attempt_count(operation)
     short = failure.provider_wait - PROVIDER_WAIT_MARGIN
     failure.advance_by(operation, short)
     after_advance = failure.failure_attempt_count(operation)
