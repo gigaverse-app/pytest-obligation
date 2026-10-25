@@ -31,7 +31,7 @@ it. Profiles let an adopter declare what it claims and be measured only on that.
 | G, gated execution | `profiles.gated_execution` | Is blocked work preserved, prevented from running early, and recovered when eligible? |
 | H, harmless replay | `profiles.harmless_replay` | Does a real repeated execution leave one visible logical effect? |
 | I, indivisible admission | `profiles.indivisible_admission` | Does the standalone command roll back product intent and obligations after partial admission? |
-| J, job retry limits | `profiles.job_retry_limits` | Does production enforce its retry budget and stable terminal state? Without a budget (`persistent_retry=`), does a persistent failure keep the work owed, paced by its retry delay? For each named outcome (`classified_failures=`), does one execution receive its declared classification and product-visible outcome, with a terminal one never reaching the provider again? |
+| J, job retry limits | `profiles.job_retry_limits` | Does production enforce its retry budget and stable terminal state? Without a budget (`persistent_retry=`), does a persistent failure keep the work owed, paced by its retry delay? For each named outcome (`classified_failures=`), does one execution receive its declared classification and product-visible outcome, with a terminal one never reaching the provider again, and a retryable one that declares the provider's wait (`provider_wait=`, such as a `Retry-After`) not due again before that wait elapses? |
 
 All ten decisions live in `ObligationContract.profiles`. `SafetyContract` is a scoped
 H/J-only declaration for effects outside a complete due-work domain adoption.

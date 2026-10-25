@@ -1,16 +1,22 @@
 """The outcome-classification proof, exercised against lifecycle mutations in both directions."""
 
+from datetime import timedelta
+
 import pytest
 
 from pytest_obligation.profiles.job_retry_limits import (
+    PROVIDER_WAIT_MARGIN,
     ClassifiedFailure,
     FailureClass,
     assert_classified_failure_contract,
     assert_failure_takes_its_declared_class,
 )
 from pytest_obligation.references.in_memory import (
+    REFERENCE_RETRY_DELAY,
     InMemoryClassifyingLifecycle,
+    InMemoryThrottledLifecycle,
     reference_classified_failure_binding,
+    reference_throttled_failure_binding,
 )
 
 
@@ -121,3 +127,62 @@ def test_a_product_observation_without_its_expected_value_is_refused() -> None:
     binding = reference_classified_failure_binding()
     with pytest.raises(ValueError, match="product_outcome and expected_product_outcome together"):
         ClassifiedFailure.model_validate(binding.model_dump() | {"expected_product_outcome": None})
+
+
+def test_a_retry_that_waits_out_the_providers_declared_wait_passes() -> None:
+    assert_classified_failure_contract(reference_throttled_failure_binding())
+
+
+def test_a_retry_inside_the_providers_window_is_caught() -> None:
+    # The lifecycle keeps its own 2 s backoff and drops the provider's 60 s Retry-After.
+    class _IgnoresTheProvider(InMemoryThrottledLifecycle):
+        def retry_delay(self) -> timedelta:
+            return REFERENCE_RETRY_DELAY
+
+    with pytest.raises(AssertionError, match="inside the provider's window"):
+        assert_failure_takes_its_declared_class(reference_throttled_failure_binding(_IgnoresTheProvider()))
+
+
+def test_a_retry_one_second_short_of_the_providers_wait_is_caught() -> None:
+    # The boundary the margin protects: due just before the declared wait, not at it.
+    class _AlmostHonors(InMemoryThrottledLifecycle):
+        def retry_delay(self) -> timedelta:
+            return self.provider_wait - PROVIDER_WAIT_MARGIN
+
+    with pytest.raises(AssertionError, match="inside the provider's window"):
+        assert_failure_takes_its_declared_class(reference_throttled_failure_binding(_AlmostHonors()))
+
+
+def test_an_advance_by_that_manufactures_an_execution_is_caught() -> None:
+    class _ExecutesWhileWaiting(InMemoryThrottledLifecycle):
+        def advance_by(self, operation_id: int, delta: timedelta) -> None:
+            super().advance_by(operation_id, delta)
+            self.rows[operation_id].executions += 1
+
+    with pytest.raises(AssertionError, match="advance_by changed the failure-attempt count"):
+        assert_failure_takes_its_declared_class(reference_throttled_failure_binding(_ExecutesWhileWaiting()))
+
+
+def test_a_stale_delivery_cannot_bypass_the_provider_wait() -> None:
+    class _RunsEarly(InMemoryThrottledLifecycle):
+        def run_once(self, operation_id: int) -> None:
+            self.rows[operation_id].due_at = self.clock
+            super().run_once(operation_id)
+
+    with pytest.raises(AssertionError, match="stale runner.*provider's window"):
+        assert_failure_takes_its_declared_class(reference_throttled_failure_binding(_RunsEarly()))
+
+
+@pytest.mark.parametrize(
+    "update,message",
+    [
+        ({"advance_by": None}, "provider_wait and advance_by together"),
+        ({"provider_wait": None}, "provider_wait and advance_by together"),
+        ({"classification": FailureClass.TERMINAL}, "a terminal outcome never runs again"),
+        ({"provider_wait": PROVIDER_WAIT_MARGIN}, "must exceed"),
+    ],
+)
+def test_an_incoherent_provider_wait_binding_is_refused(update: dict, message: str) -> None:
+    binding = reference_throttled_failure_binding()
+    with pytest.raises(ValueError, match=message):
+        ClassifiedFailure.model_validate(binding.model_dump() | update)
