@@ -68,8 +68,9 @@ def delivery(checkout: type[NaiveCheckout | ReliableCheckout]) -> CallableDelive
     """How published events reach the consumer, how they get lost, and how production recovers."""
     return CallableDelivery(
         name=f"{checkout.__name__} queue",
-        deliver=lambda: current[-1].broker.deliver_all(),
-        lose=lambda: current[-1].broker.lose_all(),
+        deliver=lambda: current[-1].broker.deliver_all(),  # what a running consumer does
+        lose=lambda: current[-1].broker.lose_all(),  # what a broker outage does
+        # REAL PRODUCTION: the sweep the application schedules, run after every history.
         recover=lambda: checkout.recover(current[-1].app),
     )
 
@@ -77,10 +78,14 @@ def delivery(checkout: type[NaiveCheckout | ReliableCheckout]) -> CallableDelive
 def place_order_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> HandoffHistory:
     return HandoffHistory(
         name="place order",
+        # ARRANGE: a new shop per history, so no history sees another's leftovers.
         arrange=lambda: fresh_shop(checkout),
+        # REAL PRODUCTION: the web request, called exactly as the app calls it.
         transition=lambda shop: checkout.place_order(shop.app, CART, 30),
+        # OBSERVE: one snapshot across all five systems; every history must end with this same snapshot.
         observe=everything_the_customer_sees,
         expected=ONE_PAID_ORDER,
+        # EXTERNAL SEAM: the systems outside the database; the worker also dies right after each call.
         external_calls=(ExternalCall(FakePayments, "charge"), ExternalCall(FakeBroker, "publish")),
     )
 
@@ -96,9 +101,13 @@ def shop_with_an_undelivered_event(checkout: type[NaiveCheckout | ReliableChecko
 def send_receipt_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> HandoffHistory:
     return HandoffHistory(
         name="send receipt",
+        # ARRANGE: a paid order whose event has not been consumed yet.
         arrange=lambda: shop_with_an_undelivered_event(checkout),
+        # REAL PRODUCTION: the queue consumer.
         transition=lambda shop: checkout.on_order_placed(shop.app, CART),
+        # OBSERVE: the same snapshot and the same required outcome as placing the order.
         observe=everything_the_customer_sees,
         expected=ONE_PAID_ORDER,
+        # EXTERNAL SEAM: the cache write and the email.
         external_calls=(ExternalCall(FakeCache, "set"), ExternalCall(FakeMailer, "send")),
     )

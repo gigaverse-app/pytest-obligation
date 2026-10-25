@@ -58,6 +58,10 @@ validation:
     anchors: warn
 extra:
   published_sources:
+  - package/docs/tutorials.md
+  - package/docs/tutorial-many-systems.md
+  - package/docs/tutorial-framework-authors.md
+  - package/docs/vocabulary.md
   - docs/adopter-capabilities.md
   - docs/ci-toolkit.md
   - docs/ci.md
@@ -87,6 +91,11 @@ extra:
 nav:
 - Home: index.md
 - Getting started:
+  - Tutorials:
+    - Choose a tutorial: package/docs/tutorials.md
+    - Workflows across many systems: package/docs/tutorial-many-systems.md
+    - For framework authors: package/docs/tutorial-framework-authors.md
+    - Vocabulary: package/docs/vocabulary.md
   - Quickstart: package/docs/adopting.md
   - How the proofs work: package/docs/how-it-works.md
   - Harness guide: package/docs/harness-guide.md
