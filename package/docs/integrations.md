@@ -16,7 +16,7 @@ configure(django_host(production_packages={"myapp"}))
 | Extra | Scope |
 | --- | --- |
 | `[django]` | `django_host()`: transaction and commit faults, PostgreSQL plan inspection, lifecycle-state proofs, and pytest-django marks |
-| `[celery]` | Beat-schedule evidence, held or refused publications, real worker death points, callback failures, and `worker_contract()` |
+| `[celery]` | Beat-schedule evidence, held or refused publications, real worker death points (exit or SIGKILL), callback failures, a really full Redis broker, and `worker_contract()` |
 | `[procrastinate]` | Worker recovery, stalled-job arrangement, and periodic-task evidence |
 | `[dbos]` | Application restart through its own startup for process-level crash histories |
 | `[redis]` | `redis_host()`: Redis write/pipeline commit counting and lost write replies |
@@ -38,6 +38,12 @@ CONTRACT = worker_contract(
 ```
 
 The one-history form, `history=` with `gap=`, is deprecated: it still works and warns.
+
+Two opt-in Celery faults replace an injection with the real failure: `SIGKILL_DEATH_POINTS` has the
+kernel kill the pool child at the same three stages (billiard's signal path, not an exit status), and
+`BROKER_FULL` makes the broker's own Redis server refuse writes once the task's body has run
+(`maxmemory 1`, `noeviction`). The broker-full fault needs `broker_url=` and a Redis server shared with
+nothing else, which the test process restores before recovery.
 
 The harness can test a Shopify integration or any other external API through
 the application's real Python call and observed effects. The optional-import,
