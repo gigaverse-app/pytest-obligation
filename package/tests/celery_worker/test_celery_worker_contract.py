@@ -137,6 +137,7 @@ CHORD_FINDINGS = Findings(
 SEND_MESSAGE = reference_history("the reference worker runs send_message", send, FINDINGS)
 CHORD = reference_history("the reference worker runs a chord of two send_message tasks", send_chord, CHORD_FINDINGS)
 
+
 @contextmanager
 def message_replay() -> Iterator[ReplaySafeEffect]:
     # ARRANGE: a fresh customer message and a cleared external delivery ledger.
