@@ -178,6 +178,7 @@
         "test/**",
         "report/**",
         "publish/**",
+        "preview/**",
         "package/src/**",
         "package/shims/**",
         "scripts/check_adoption*.py"
@@ -204,7 +205,8 @@
         "**/*.py",
         "**/*.pyi",
         "report/**",
-        "publish/**"
+        "publish/**",
+        "preview/**"
       ]
     },
     "wheel": {

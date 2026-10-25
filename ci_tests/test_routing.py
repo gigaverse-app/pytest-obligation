@@ -129,6 +129,7 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(self.selection("test/action.yml"), {"actions"})
         self.assertEqual(self.selection("report/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("publish/action.yml"), {"actions", "contracts"})
+        self.assertEqual(self.selection("preview/preview.cjs"), {"actions", "contracts"})
 
     def test_python_changes_still_typecheck(self):
         self.assertIn("typecheck", self.selection("package/src/pytest_obligation/host.py"))

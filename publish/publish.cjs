@@ -12,6 +12,13 @@ const MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
 const UNAVAILABLE = '**🟠 Evidence unavailable.** The evidence could not be processed within the publisher’s safety limits. See the original workflow artifacts and logs.';
 const CONCLUSIONS = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out', 'action_required', 'stale', 'startup_failure', 'in_progress', 'queued']);
 
+function dockerEnvironment(env = process.env) {
+  // Docker needs the user's daemon configuration, not their GitHub/cloud credentials or interpreter hooks.
+  const allowed = new Set(['PATH', 'HOME', 'USERPROFILE', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP',
+    'APPDATA', 'LOCALAPPDATA', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_CERT_PATH', 'DOCKER_TLS_VERIFY']);
+  return Object.fromEntries(Object.entries(env).filter(([key]) => allowed.has(key.toUpperCase())));
+}
+
 async function downloadArchive({apiUrl, repository, artifactId, token, digest, destination, maxBytes = MAX_ARCHIVE_BYTES, fetcher = fetch}) {
   if (!/^sha256:[a-f0-9]{64}$/.test(digest || '')) throw new Error('Artifact digest is missing or invalid.');
   const signal = AbortSignal.timeout(60_000);
@@ -64,7 +71,7 @@ function containerArgs(image, archive, name) {
 
 async function buildImage(actionPath) {
   const {stdout} = await execute('docker', ['build', '--quiet', '--file', path.join(actionPath, 'Dockerfile'), path.dirname(actionPath)],
-    {timeout: 300_000, maxBuffer: 2 * 1024 * 1024});
+    {timeout: 300_000, maxBuffer: 2 * 1024 * 1024, env:dockerEnvironment(), cwd:path.dirname(actionPath)});
   const image = stdout.trim();
   if (!/^sha256:[a-f0-9]{64}$/.test(image)) throw new Error('Renderer image was not built.');
   return image;
@@ -78,12 +85,12 @@ async function renderSandbox(actionPath, archive, resolved, repositoryUrl, asset
       '--head-sha', resolved.headSha, '--run-id', String(resolved.runId), '--run-attempt', String(resolved.runAttempt),
       '--run-url', `${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt}`,
       '--repository-url', repositoryUrl, '--asset-ref', assetRef],
-    {timeout: 120_000, maxBuffer: 256 * 1024, encoding: 'utf8'});
+    {timeout: 120_000, maxBuffer: 256 * 1024, encoding: 'utf8', env:dockerEnvironment(), cwd:actionPath});
     // Captured output never reaches the Actions command parser and is never interpreted as code.
     return stdout;
   } finally {
     // A timed-out Docker client leaves its container alive. Remove it explicitly, including on failure.
-    await execute('docker', ['rm', '--force', name], {timeout: 15_000, maxBuffer: 16_384}).catch(() => {});
+    await execute('docker', ['rm', '--force', name], {timeout: 15_000, maxBuffer: 16_384, env:dockerEnvironment(), cwd:actionPath}).catch(() => {});
   }
 }
 
@@ -126,4 +133,5 @@ async function run({github, context, core}, env = process.env) {
   })));
 }
 
-module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, renderSandbox};
+module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, renderSandbox,
+  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS};
