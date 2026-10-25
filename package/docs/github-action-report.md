@@ -36,7 +36,7 @@ labels and spacers around native application names, expanders, source links and
 text. For example, `251` references the existing `2`, `5` and `1` images. Wider
 counts keep the same column positions. Zero issues use green digits.
 
-The reusable assets in `docs/assets/report-glyphs/` total about 23 KB. They ship
+The reusable assets in `docs/assets/report-glyphs/` total about 25 KB. They ship
 with the library, just like the fixed banner, and are served from the action
 revision in this public repository. Changing a report only changes its Markdown.
 The action generates no SVG files, uploads no images, creates no asset branch,
