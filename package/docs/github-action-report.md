@@ -329,15 +329,24 @@ it, overall test-step status is explicitly **unknown**.
 
 ## Fork PRs: publish from a `workflow_run` job
 
-A pull request from a fork runs with a read-only `GITHUB_TOKEN`, so its test job
-cannot comment. Keep the test job unchanged and add a second workflow that GitHub
-starts when the first completes. That workflow runs from your default branch with
-the permissions you give it, never with the PR's code. The `publish` action finds
-the run's PR, downloads its `obligation-<sticky-key>-<attempt>` artifact,
-re-renders the evidence and updates the same sticky the `report` action would.
+**The publisher is safe to enable for fork PRs because the contributor never receives
+its commenting token.** Tests run with a read-only token. A separate publisher reads
+their evidence in an offline container with no credentials, then updates the matching
+PR. It never checks out or runs the contributor's code.
 
-The PR workflow is the one above. Its `report` step uploads the artifact the
-publisher reads; it needs no extra permission:
+You choose the publisher version by pinning a reviewed commit. Its GitHub action,
+container image and Python dependencies are pinned too. An update requires changing
+that pin in your workflow, where you can review it like any other dependency update.
+
+### Set it up
+
+Use a fresh GitHub-hosted Linux runner (`ubuntu-latest`) for the publisher. Docker is
+already available there. Give this job only `actions: read` and `pull-requests: write`;
+use its default `GITHUB_TOKEN`. It needs no personal access token, repository secret,
+checkout, application installation or connection to a pytest-obligation service.
+
+The test workflow generates the report and artifact. With a publisher installed, the
+test job can use read-only permissions for both fork and same-repository PRs:
 
 ```yaml
 name: Application contracts
@@ -346,9 +355,6 @@ permissions:
   contents: read
 jobs:
   contracts:
-    permissions:
-      contents: read
-      pull-requests: write # Same-repository PRs still comment directly.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -359,15 +365,16 @@ jobs:
         run: uv run --no-sync pytest tests/contracts --due-work-profile-report=obligation-profiles.json
       - name: Explain the evidence
         if: always()
-        uses: gigaverse-app/pytest-obligation/report@v1
+        uses: gigaverse-app/pytest-obligation/report@03273d99b1dec050aeeab8175ade23e8927d7c1a
         with:
           report-path: obligation-profiles.json
           sticky-key: application-contracts
           test-outcome: ${{ steps.tests.outcome }}
+          post-comment: 'false'
 ```
 
-The trusted publisher lives in its own file. `workflows` names the PR workflow
-above, and `sticky-key` matches its `report` step:
+Put the publisher in a **separate workflow file on your default branch**. The name
+under `workflows` matches the test workflow, and `sticky-key` matches its report step:
 
 ```yaml
 name: Application contracts sticky
@@ -380,70 +387,150 @@ jobs:
   publish:
     if: ${{ github.event.workflow_run.event == 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      actions: read # Read the triggering run and download its artifact.
-      pull-requests: write # Create or update the sticky.
+      actions: read
+      pull-requests: write
     concurrency:
       group: application-contracts-sticky-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
     steps:
-      # No checkout: the publisher reads only the API and the artifact.
-      - uses: gigaverse-app/pytest-obligation/publish@v1
+      - uses: gigaverse-app/pytest-obligation/publish@03273d99b1dec050aeeab8175ade23e8927d7c1a
         with:
           sticky-key: application-contracts
 ```
 
-Add one `publish` step per `sticky-key` when several lanes report. The publisher
-runs for completed runs of every conclusion, because failed evidence is the point.
-It skips with an informational message, and succeeds, when the run was not a
-`pull_request` event, no open PR matches, or the artifact is absent or expired.
-For same-repository PRs it rewrites the sticky the test run already posted, with
-the same run and attempt. Concurrency serializes writers per head branch, since the
-PR number is only known after the lookup. A release pin must contain
-`publish/action.yml`; older releases cannot provide this action.
+The commit above includes the publisher and its tested dependencies. Review it before
+adopting it. To update later, review a newer release and replace the full commit SHA.
+Floating `@v1` tags remain available for projects that choose automatic action updates.
+A version predating `publish/action.yml` cannot publish fork reports.
 
-To republish an older run by hand, call the action from `workflow_dispatch` with
-`run-id`, and optionally `run-attempt`; otherwise both come from the
-`workflow_run` event. Outputs: `pull-request`, `published` and `markdown-path`.
+### Why a fork cannot use the publisher's token
 
-### Why this is safe
+The two jobs have different responsibilities:
 
-- **No PR code runs with the write token.** The workflow file, the action and the
-  reporter all come from your default branch and this action's revision. Nothing is
-  checked out; the reporter runs with `python -I` and never imports the evidence.
-- **The PR is resolved by head SHA, never from the artifact.** The action lists open
-  PRs whose head is `<head owner>:<head branch>`, then accepts exactly one whose
-  head SHA equals the run's `head_sha`, whose head repository is the run's, and
-  whose base is this repository. Before writing it checks the PR head again, so a
-  newer push is never overwritten by older evidence; newer runs and attempts win.
-  One head opened against two base branches matches two PRs, and a run does not say
-  which one it tested, so neither gets a sticky; the job warns, naming both.
-- **The comment is re-rendered from data.** The artifact's report JSON, JUnit and
-  inventory are validated as data, and its uploaded Markdown is ignored, so all
-  escaping comes from this action's reporter. Run identity, the head SHA and links
-  come from the API. A damaged or foreign artifact renders **Evidence unavailable**.
-- **Application text cannot ping, link or cross-reference.** GitHub decodes HTML
-  entities before it finds `@mentions`, `#123` and `owner/repo/issues/123`
-  references and bare URLs, so escaping alone does not stop them. The reporter puts
-  a zero-width space after `@` and `#`, inside `://`, after `www` and between `/`
-  and a number in every piece of application text, so a fork's contract cannot make
-  the bot notify a user or team, post on another issue's timeline, or carry a
-  clickable link. A ticket URL from your debt baseline stays a link.
-- **The sticky is identified by its trailer only.** The publisher ends every
-  sticky with its run snapshot and key marker, and reads only that trailer, so
-  text inside a report can never stand in for either.
-- **No untrusted string reaches a shell.** Only API values and your workflow's own
-  inputs are passed to the shell step; artifact files are read under fixed names.
+```text
+Contributor's PR -> tests, read-only token -> evidence archive
+                                                   |
+Your default branch -> pinned publisher ------------+
+                          |
+                          +-> offline container: read data, render text
+                          |      no token, no network, no checkout
+                          |      no writable host directory
+                          |
+                          +-> GitHub API: update the matching PR comment
+```
 
-This does not make a fork's evidence trustworthy: the fork's code produced it, as
-it does in any PR. The publisher guarantees only that publishing it cannot run that
-code with your write token, and that the comment lands on the PR it was tested for.
+1. **The contributor cannot change the running publisher.** GitHub reads its workflow
+   from your default branch. The commit pin selects the publisher's code; the archive
+   cannot replace it or any of its dependencies.
+2. **Evidence is opened without credentials.** The container reads JSON and JUnit as
+   data. It ignores uploaded Markdown and Python files. It has no network access,
+   runs as an unprivileged user and cannot write to the host. Only a bounded text
+   result comes back. That text is never executed or interpreted as workflow commands.
+3. **The archive cannot choose where to comment.** GitHub's API supplies the run and
+   PR identity. The publisher requires one open PR with the matching head repository
+   and commit in your repository, and checks the head again before writing. Artifact
+   IDs and hashes come from GitHub; the download must match that hash.
+4. **Oversized or malformed input has a safe result.** Download, extraction and rendering
+   have explicit limits. Invalid paths, links, duplicate entries and excessive input
+   are rejected. The sticky says **Evidence unavailable** and links the original run.
+   It does not silently turn a failed render into a passing result.
+5. **Application text cannot impersonate the publisher.** The reporter escapes markup
+   and breaks automatic mentions, issue references and bare links. Explicit debt-ticket
+   URLs remain labelled links. The publisher identifies its sticky only by the trailer
+   it appends, so a marker inside application text cannot select another comment or
+   prevent a newer report from replacing it.
 
-The artifact layout is the contract between the two actions: `manifest.json`
-(validated render settings), `reports/*.json`, `junit/*.xml`, `inventory.json` when
-an inventory was used, and `report.md` for people. `python -m
-pytest_obligation.reporting.republish` re-renders a downloaded artifact locally,
-given the run's head SHA, ID and attempt.
+The token is only sent to GitHub's API. It is not passed to artifact storage or the
+container. The job requests no source-write, release, package-write or OIDC permission.
+GitHub's `pull-requests: write` permission covers more than one comment; the reviewed
+publisher code narrows its use to the matched PR. Keep this as a dedicated job with
+the permissions shown above.
+
+### What the report proves
+
+The **GitHub workflow** line comes from GitHub's API for the exact run attempt. A
+failed workflow stays visibly failed even if the uploaded evidence says "success".
+Source links point to the API-verified PR head.
+
+The check results, application names and test-step outcome come from the PR's evidence.
+They are labelled as reported values. As with any contributor-controlled test, a PR
+can change a test or fabricate its output. The sticky helps you inspect that evidence;
+it does not approve the PR, change required checks or certify that the contributor's
+code is honest. Review the code and test changes as usual.
+
+### Does using it give the pytest-obligation maintainer access to my repository?
+
+There is no hosted service or maintainer token. The publisher runs on **your runner
+with your repository's short-lived token**, using the code you pinned. Nothing sends
+that token to the pytest-obligation project. Someone using the action in another
+repository receives no access to yours, or to the action maintainer's repository.
+
+Running it in pytest-obligation itself has the same rules: outside contributors can
+supply evidence, and that evidence goes through the same sandbox and limits.
+
+### Showing it before a project adopts it
+
+GitHub requires a `workflow_run` workflow to exist on the default branch. Adding the
+publisher to the first adoption PR does not activate it. This is the project's opt-in
+boundary.
+
+For an initial demonstration, paste the rendered report into the adoption PR as an
+ordinary comment and link its run/artifact, or link a demo PR with a live sticky. If
+the project wants live publishing before merging the larger integration, a maintainer
+can first merge the small publisher workflow above. Subsequent test runs can then
+publish the sticky on the still-open adoption PR.
+
+### Limits and maintenance
+
+The [public fork rehearsal](https://github.com/gigaverse-app/pytest-obligation-publisher-rehearsal/pull/1)
+tested the pinned version above on October 25, 2026. The test job had only Contents
+read permission. The separate publisher had Actions read and PullRequests write.
+
+| Real fork scenario | Result |
+| --- | --- |
+| [Passing test run](https://github.com/gigaverse-app/pytest-obligation-publisher-rehearsal/actions/runs/40180897969) | [The publisher](https://github.com/gigaverse-app/pytest-obligation-publisher-rehearsal/actions/runs/40180924850) created one sticky with the generated contract results. |
+| [Failed run with a forged success claim, revision and Markdown](https://github.com/gigaverse-app/pytest-obligation-publisher-rehearsal/actions/runs/40181008839) | [The publisher](https://github.com/gigaverse-app/pytest-obligation-publisher-rehearsal/actions/runs/40181037997) updated that same sticky. GitHub failure remained visible; forged Markdown and revision were absent. |
+
+The container integration tests also exercise the actual sandbox: no token, external
+network, Docker socket or checkout, read-only input and image, unprivileged UID, zero
+capabilities, and enforced memory/process limits. Archive and transport tests cover
+the bounds below and safe recovery when evidence is rejected.
+
+| Resource | Enforced limit |
+| --- | --- |
+| Downloaded ZIP | 32 MiB, checked against actual streamed bytes; 60 seconds |
+| ZIP entries | 256, including ignored files and directories |
+| Expanded archive | 64 MiB total |
+| Individual JSON report or JUnit file | 10 MB |
+| Manifest / inventory | 64 KB / 50 MB |
+| Renderer | 512 MiB memory, 1 CPU, 32 processes, 120 seconds |
+| Writable container scratch space | 96 MiB; no writable host mount |
+| Captured renderer output | 256 KiB; final comment body at most 55,000 characters |
+| Publisher workflow | 10 minutes in the example above |
+
+The publisher skips runs unrelated to a PR, ambiguous/stale PR matches, and absent or
+expired artifacts. It runs after both successful and failed workflows. A rejected
+archive or failed renderer produces an unavailable report while preserving the
+original evidence artifact. It never retries rendering outside the sandbox.
+
+Use one `publish` step per `sticky-key` for multiple reports. Outputs are
+`pull-request`, `published` and `markdown-path`. A trusted `workflow_dispatch` job can
+pass `run-id` and optionally `run-attempt` to republish an existing run. The same PR
+identity and sandbox checks still apply.
+
+The publisher uses a digest-pinned Python 3.11 image and installs only hash-verified
+wheels from `publish/requirements.txt`. The image build receives only publisher source
+and its locked requirements; it never receives the PR archive. Dependabot proposes
+updates to the action, image and Python requirements. The publisher's Python version
+is fixed independently of the Python version used to run the project's tests.
+
+For local inspection, `python -m pytest_obligation.reporting.republish` accepts the
+ZIP or an already staged directory plus the run's head SHA, ID and attempt. The
+GitHub action always uses the container, including for a manual republish. The layout
+is `manifest.json`, `reports/*.json`, `junit/*.xml`, optional `inventory.json`, and
+`report.md` for people. The publisher never reads that uploaded Markdown.
 
 ## Which words belong to whom?
 
