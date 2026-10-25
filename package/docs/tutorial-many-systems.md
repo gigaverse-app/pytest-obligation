@@ -23,6 +23,13 @@ with. It finds the commit boundaries and external calls itself, kills the
 worker at each one, loses each message, runs your recovery, and checks that
 every one of those histories ends exactly like the normal run.
 
+pytest-obligation has no stack of its own. Its core works with plain Python
+callables, so the same approach applies whether your work moves through a
+message broker, a job table, a workflow engine or a chain of database
+transactions. Integrations for tools such as Django, Celery, RQ, procrastinate,
+django-tasks-db, DBOS, Prefect, Kafka, MongoDB and Redis save you some wiring;
+none of them is required.
+
 In this tutorial you will:
 
 1. write the happy-path test most teams write, and see it pass;
@@ -32,8 +39,8 @@ In this tutorial you will:
 4. fix both, and watch the tests grow on their own;
 5. turn the description into a generated test suite with a report;
 6. see why you can trust the green result;
-7. map the example's fakes to your real PostgreSQL, MongoDB, Redis, Kafka,
-   Celery, Prefect and email providers.
+7. map the example's stand-ins to your own databases, brokers, queues and
+   workflow engines.
 
 You need Python 3.12+, Git and [uv](https://docs.astral.sh/uv/). Everything runs
 in memory: SQLite stands in for the database and small Python classes stand in
@@ -629,7 +636,9 @@ the application correct in general. Two limits matter for multi-system work:
 
 ## 8. Your real systems
 
-The example's stand-ins map to your stack like this:
+The example's stand-ins map to the systems you run like this. The integrations
+named here are shortcuts; anything not listed takes part the way this
+tutorial's stand-ins did, through an `ExternalCall` and a delivery you write.
 
 | In the example | In your application | How pytest-obligation takes part |
 | --- | --- | --- |
@@ -639,7 +648,9 @@ The example's stand-ins map to your stack like this:
 | `FakeCache` | Redis as a cache | An `ExternalCall` on your cache client's write method. |
 | `FakeBroker` | Kafka | An `ExternalCall` on the producer's `send_and_wait` (the coroutine that does the work). For consumers, the `[aiokafka]` extra injects deaths and lost replies at offset commits. [aiokafka](aiokafka.md) |
 | `FakeBroker` + `recover` | Celery or RQ | The real worker as the delivery; the `[celery]` and `[rq]` extras run real workers, refuse publications and fail callbacks. |
+| `FakeBroker` + `recover` | procrastinate or django-tasks-db | The job table is the queue, so nothing is lost in transit; the integration runs the library's real worker as the delivery. |
 | `recover()` | A Prefect flow | `prefect_flow_call` runs the real flow body as the step or the recovery; `prefect_host` composes with your database's host. [Prefect](prefect.md) |
+| `recover()` | A DBOS workflow | [Process histories](how-it-works.md#crash-histories) kill a real child process at named points and restart the application through its own startup. |
 | `FakePayments`, `FakeMailer` | Payment and email APIs | An `ExternalCall` on your client method, with a fake that records every effect. For a provider that may reply without applying (an HTTP 202 event API), see `ProviderControl` and the [Shopify billing simulator](shopify.md). |
 
 The pattern stays the same: one host for the database that records what is

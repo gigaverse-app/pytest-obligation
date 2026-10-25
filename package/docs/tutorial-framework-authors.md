@@ -18,15 +18,22 @@ settlement, in two workers racing for the same row, in a worker that dies after
 a task's effect but before its record. Unit tests rarely reach there, and the
 bugs that live there are found by users in production.
 
-They are not hypothetical. Pointed at real libraries,
-[pytest-obligation found](../../demos/README.md):
+These questions are the same for every library, whatever its design.
+pytest-obligation already ships integrations that bind its proofs to several
+libraries' own workers and recovery:
 
-| Library | Finding |
+| Library | What its integration drives |
 | --- | --- |
-| procrastinate | `finish_job` does not check which worker is finishing, so a worker presumed dead can finish a job another worker has since taken |
-| RQ | a lost reply from Redis, or a raising `on_success` callback, runs a finished job again |
-| django-tasks-db | a `task_finished` receiver that raises rewrites a task that ran as FAILED; a task whose worker died stays RUNNING forever |
-| DBOS | a death after a step's notification is sent, before DBOS records the step, sends the notification twice |
+| RQ | A real worker pass, its maintenance and its retries |
+| Celery | A real worker process, its publications and its hooks |
+| procrastinate | Its worker, heartbeats and stalled-job reclaim |
+| django-tasks-db | Its `db_worker` and its retention command |
+| DBOS | The application's own startup, restarted after a real process death |
+| Prefect | The real body of a flow |
+
+None of them is required. pytest-obligation has no stack of its own: its core
+takes plain Python callables, and an integration is a shortcut for wiring one
+library. This tutorial builds that wiring for a library of your own.
 
 This tutorial has two halves:
 
@@ -242,9 +249,9 @@ tinyq job ownership: fenced_write, other_fenced_writes['fail'] carrying a supers
 accepted. A slow worker that wakes up after its claim was reaped would corrupt the new owner's state
 ```
 
-That is the procrastinate `finish_job` finding from the table above, in your
-own library, caught before release. The fix is the `AND token = ?` you saw in
-`complete`. [`tests/test_draft_finding.py`](../../examples/task_queue_tutorial/tests/test_draft_finding.py)
+This is exactly the gap fencing exists to close, and it only shows when two
+workers overlap, so a single-threaded unit test never sees it. The proof caught
+it before release. The fix is the `AND token = ?` you saw in `complete`. [`tests/test_draft_finding.py`](../../examples/task_queue_tutorial/tests/test_draft_finding.py)
 keeps the draft's finding as a test that passes only while the harness still
 detects it.
 
@@ -599,9 +606,9 @@ registered unit of work and fails unless each has exactly one collected suite
 | --- | --- |
 | A task-queue contract like `task_contract`, for a real queue | `pytest_obligation.integrations.rq.worker_contract`, `django_tasks.worker_contract`, `celery_worker.worker_contract` |
 | A host built on a client library | `pytest_obligation.integrations.redis.redis_host` |
-| A framework with no in-process worker to kill | `pytest_obligation.integrations.dbos` and [process histories](how-it-works.md#crash-histories): the harness kills a real child process at named points |
+| A framework that runs work on its own threads or processes | `pytest_obligation.integrations.dbos` and [process histories](how-it-works.md#crash-histories): the harness kills a real child process at named points |
 | A heavier user-facing layer, where the library derives the bindings from each registered unit of work | Due's [conformance guide](https://github.com/gigaverse-app/due/blob/main/package/docs/conformance.md): `effect_contract_suite`, `ProviderSeam` and `seam_examples` |
-| How to probe someone else's framework and report what you find | The [upstream playbook](../../docs/upstream-playbook.md) |
+| How to apply the harness to an existing project's code | The [upstream playbook](../../docs/upstream-playbook.md) |
 
 ## What you learned
 
