@@ -2,145 +2,113 @@
 
 [Overview](tutorial-framework-authors.md) · [All chapters](tutorial-framework-authors.md#chapters) · [Vocabulary](vocabulary.md)
 
-Start with tinyq's first promise: **a job survives its worker dying.** It is
-also the easiest one to bind, and the binding you write here is reused by
-every later chapter.
+Start with the promise every task queue makes: **a job survives its worker
+dying.** The binding for it is the foundation everything else reuses, and it
+answers three questions only your library can answer.
 
 ## The test, in plain words
 
 Take one job and run one worker pass on it, many times over. The first time,
-let it finish normally and note the outcome: the job is `done`, and its task's
-effect happened once. Then repeat it, killing the worker at a different point
-each time: right after each moment tinyq saves something, and right after each
-call the task makes to an outside system. After each death, run what a real
-deployment would run (time passes, the sweep returns the job, workers pick it
-up) and look again. Every version must end like the normal one.
+let it finish and note the outcome: RQ records the job `finished`, and the
+welcome email went out once. Then repeat it, killing the worker at a different
+point each time: right after each write RQ makes to Redis, and right after the
+job's own call to the email provider. After each death, run what a real
+deployment runs (time passes, workers start, RQ's maintenance finds the dead
+worker's job and gives it back) and look again. Every version must end like
+the normal one.
 
-pytest-obligation calls each of these runs a **history**, and a step tested
-this way a [handoff](vocabulary.md#handoff). It needs three things from you:
-where your library commits, how it recovers, and the step itself.
+pytest-obligation calls each run a **history**, and a step tested this way a
+[handoff](vocabulary.md#handoff).
 
-## Where your library commits
+## Question 1: when does your library write?
 
-To kill a worker "right after tinyq saves something", the harness must know
-when tinyq commits. It never guesses; a **host** tells it. Your library is the
-right place to answer that once, so that your users never have to. tinyq sends
-every SQL statement through `_execute` and every commit through
-`_transaction`, so [`tinyq/testing.py`](../../examples/task_queue_tutorial/tinyq/testing.py)
-watches those two:
+To kill a worker "right after RQ writes to Redis", the harness must know when
+that happens. It never guesses; a **host** tells it. For RQ, the integration
+supplies `redis_host`, and an application configures it in one line of its
+`conftest.py`:
 
 ```python
-# The worker the harness is currently counting, while a history's transition runs.
-_current: CommitWorker | None = None
-_execute, _transaction = Queue._execute, Queue._transaction
-
-
-def _counted_execute(queue: Queue, sql: str, parameters: tuple[Any, ...] = ()) -> Any:
-    if _current is not None:
-        _current.refuse_if_dead()
-    return _execute(queue, sql, parameters)
-
-
-@contextmanager
-def _counted_transaction(queue: Queue) -> Iterator[None]:
-    if _current is not None:
-        _current.refuse_if_dead()
-    with _transaction(queue):
-        yield
-    if _current is not None:
-        _current.committed()
-
-
-@contextmanager
-def tinyq_worker_killer(kill_after: int | None) -> Iterator[CommitWorker]:
-    """Count every commit tinyq makes, and kill the worker right after commit `kill_after` (None: only count)."""
-    global _current
-    _current = CommitWorker(kill_after)
-    with patch.object(Queue, "_execute", _counted_execute), patch.object(Queue, "_transaction", _counted_transaction):
-        try:
-            yield _current
-        finally:
-            _current = None
-
-
-def tinyq_host(production_packages: set[str]) -> Host:
-    """The host a tinyq user configures once in conftest.py: their packages, plus tinyq itself."""
-    return Host(production_packages=frozenset({"tinyq", *production_packages}), worker_killer=tinyq_worker_killer)
+# The host: Redis writes are the commits a worker can die after, and their replies can be lost.
+configure(redis_host(welcome_rq.connection, {"welcome_rq"}))
 ```
 
 | Name | Comes from | What it does |
 | --- | --- | --- |
-| `CommitWorker` | pytest-obligation | Counts commits. Asked to die after commit *k*, it raises `WorkerDied` there and refuses every later statement, because a dead process runs nothing more. |
-| `tinyq_worker_killer` | tinyq | Installs a `CommitWorker` on tinyq's two methods while one history runs |
-| `Host` | pytest-obligation | What only your library knows. `production_packages` names the code under test. |
+| `redis_host(client, packages)` | pytest-obligation's Redis integration | Watches every command on the client's connections. Each write (a command Redis flags as a write, a pipeline holding one, a script) counts as a commit the harness can kill the worker after. It can also lose the *reply* to a write after the write has landed. |
+| `configure(...)` | pytest-obligation | Installs the host for the test session |
+| `{"welcome_rq"}` | The application | Its production package: the harness checks that bindings call this code rather than a copy of it |
 
-The integrations that ship with pytest-obligation do the same at their own
-level: `redis_host` watches the Redis client's commands, and `django_host`
-watches the database connection's commit.
+For your library, this is a context manager that counts your library's own
+commits and can kill the worker after the chosen one. If your library writes
+through one client or one connection, hook that; pytest-obligation's
+`CommitWorker` does the counting.
 
-## How your library recovers
+## Question 2: what does one worker pass look like?
 
-After a death, the harness runs what a deployment would run. For tinyq: wait
-out the lease, run the sweep, run the workers.
-
-```python
-def recover(queue: Queue, *, rounds: int = 3) -> None:
-    """What a deployment runs: the expired-lease sweep and the workers, after enough time for leases and retries."""
-    for _round in range(rounds):
-        _clock(queue).advance(queue.lease_seconds + queue.retry_delay + 1)
-        queue.reclaim_expired()
-        queue.run_until_idle()
-```
-
-tinyq's clock is injectable, so in tests "wait 30 seconds" is a call to
-`advance`, and every history runs in milliseconds.
-
-## The step itself
-
-`worker_history`, from pytest-obligation's task-queue helpers, turns one worker
-pass into a handoff. It enqueues a job, runs `work_once`, and observes two
-things: the status tinyq recorded, and what the task actually did.
+The integration's `worker_pass` runs RQ's real worker, in process, for one
+burst over the given queues:
 
 <!-- fmt:off -->
 ```python
-        handoffs=(
-            worker_history(
-                name="a worker runs the task",
-                enqueue=enqueue,
-                effect=effect,
-                expected=TaskOutcome(status="done", effect=expected),
-                status_of=queue.status,
-                run_worker=lambda _job_id: queue.work_once(),
-                external_calls=external_calls,
-            ),
-        ),
-        handoff_delivery=CallableDelivery(name=f"{name}: tinyq worker", recover=partial(recover, queue)),
+    def run(*_handle: object) -> None:
+        from rq import Queue, SimpleWorker
+        from rq.utils import now
+
+        worker = (worker_class or SimpleWorker)(
+            [Queue(name, connection=connection) for name in queues], connection=connection
+        )
+        if not starting:
+            worker.last_cleaned_at = now()
+        try:
+            with keeping_signal_handlers():
+                worker.work(burst=True, max_jobs=max_jobs, logging_level="WARNING")
+        finally:
+            thread = worker.pubsub_thread
+            if thread is not None and thread.is_alive():
+                thread.stop()
+                thread.join(timeout=1)
 ```
 <!-- fmt:on -->
 
-`CallableDelivery` tells the harness how the job reaches a worker and how
-production recovers. tinyq's queue is a table its workers poll, so there is no
-message that could be lost on the way, and the delivery declares none. (These
-lines are part of `task_contract`, which chapter 5 assembles.)
+Nothing here imitates RQ: it is RQ's `SimpleWorker`, doing what it does in
+production. That matters, because a test that drives a copy of the worker
+keeps passing after the real worker changes.
+
+## Question 3: how does your library recover?
+
+After a death, the harness runs what a deployment would run. In RQ, a newly
+started worker's maintenance cleans up the registry of started jobs, and a job
+whose worker stopped sending heartbeats is given back if it has retries left.
+The integration's `maintenance_passes` runs three such workers, an hour apart
+on a frozen clock, so every lease has expired by the time they look. A frozen
+clock is part of what `redis_host` supplies.
+
+## The handoff
+
+The integration puts these together with `worker_history`, from
+pytest-obligation's task-queue helpers. It enqueues one of the application's
+jobs, runs `worker_pass` as the step, and observes two things: the status RQ
+recorded, and what the job actually did. The application supplies the last
+two (chapter 5 shows how).
 
 ## What the harness ran
 
-For a job whose task sends one welcome email, these are the histories, and
-what each ended with:
+For the welcome job, the harness counted **25 writes to Redis** in one worker
+pass, plus one call to the email provider. From that it built 52 histories:
 
-| History | What happened | Status, emails |
+| Histories | What happened | Status, emails |
 | --- | --- | --- |
-| normal operation | Nothing failed | `done`, 1 |
-| worker died after commit 1 | Died right after taking the job; the sweep gave it back and another pass ran it | `done`, 1 |
-| worker died after commit 2 | Died right after recording `done`; nothing left to do | `done`, 1 |
-| worker died after external call 1 | Died right after the email left, before recording `done`; the job ran again | `done`, 1 with a task that sends a deduplication key, **2** with one that does not |
+| normal operation | Nothing failed | `finished`, 1 |
+| worker died after commit 1 to 25 | One history per Redis write; recovery found the job and finished it | `finished`, 1 in every history |
+| worker died after external call 1 | Died right after the email left, before RQ recorded the job finished | `finished`, 1 |
+| the reply to commit 1 to 25 was lost | The write landed, but the worker was told it failed | `finished`, 1 in every history |
 
-The promise holds: every history ends `done`. The last row is its price: the
-task ran twice. That is not tinyq's to fix. It is the property of the user's
-task that chapter 5 hands back to users as a test of their own.
+Every history ends `finished` with exactly one email, because the welcome job
+sends with a deduplication key, so a rerun is harmless. Chapter 5 shows the
+same 52 histories for a version of the job without the key.
 
-Notice what you did not write: the list of points to kill the worker at. The
-harness counted tinyq's commits itself. Add a commit to `work_once` and the
-next run has one more history.
+Notice what nobody wrote: the list of 25 points to kill the worker at. The
+host counted RQ's writes itself. If an RQ release adds a write to its worker,
+the next run has one more history, and no test changes.
 
 [Next: 2. Test your hardest problems](framework-2-hard-problems.md)

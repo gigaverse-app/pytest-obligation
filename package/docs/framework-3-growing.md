@@ -23,7 +23,7 @@ are a flag or one more callback on the same binding. Two recent examples, one ad
 The workflow is the one you already use for any dependency: bump the version,
 run the suite, read what is new. A new case that passes is coverage you did
 not write. A new case that fails is a finding: fix it, or record it as a
-strict expected failure (chapter 5 shows how) so it stays visible.
+strict expected failure (chapters 4 and 5 show how) so it stays visible.
 
 ## Searching for orderings nobody wrote down
 
@@ -52,9 +52,9 @@ found a defect that every fixed history missed: a broken implementation that
 only went wrong at the sixth revision of the same record.
 
 Exploration applies to the ordering families of profile E (in-flight requests,
-and evidence arriving in pieces). tinyq does not claim E, because one worker
-settles each job and no two results race. A library that keeps external views
-in sync, merges receipts or projects state does. The repository's
+and evidence arriving in pieces). RQ's contract does not claim E, because one
+worker settles each job and no two results race. A library that keeps external
+views in sync, merges receipts or projects state does. The repository's
 [SQLite adopter example](../../examples/adopter) binds both families; with
 `--due-work-explore=smoke` its suite runs in about ten seconds.
 
@@ -68,4 +68,4 @@ profile report (`--due-work-profile-report=profiles.json`) keeps proven
 guarantees, declined ones and known gaps apart, so a growing suite does not
 blur what is actually guaranteed.
 
-[Next: 4. First-party tests for your users: how Due does it](framework-4-due.md)
+[Next: 4. The module you ship](framework-4-module.md)
