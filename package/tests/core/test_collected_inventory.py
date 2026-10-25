@@ -1,6 +1,7 @@
 """Count real generated tests without executing fixture setup or test bodies."""
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,9 @@ import pytest
 from pytest_obligation.reporting.collected import skipped_tests
 from pytest_obligation.reporting.inventory import ApplicationInventory
 from tests.core.test_profile_summary import contract_project  # noqa: F401
+
+# --pytest-command is parsed with POSIX shell rules; quoting keeps a Windows interpreter path intact.
+PYTEST_COMMAND = shlex.join([sys.executable, "-m", "pytest"])
 
 
 @pytest.mark.parametrize("options_source", ["ini", "environment"])
@@ -47,7 +51,7 @@ def test_collect_missing_once_then_reuse_inventory(
         "revision-one",
     ]
     result = subprocess.run(
-        command + ["--pytest-command", f"{sys.executable} -m pytest"],
+        command + ["--pytest-command", PYTEST_COMMAND],
         cwd=contract_project.path,
         capture_output=True,
         text=True,
@@ -165,7 +169,7 @@ def test_content_key_reuses_collection_across_revisions_and_rejects_changed_inpu
         "--collection-key",
         "same-inputs",
         "--pytest-command",
-        f"{sys.executable} -m pytest",
+        PYTEST_COMMAND,
     ]
     first = subprocess.run(command, cwd=contract_project.path, capture_output=True, text=True)
     assert first.returncode == 0, first.stderr
@@ -206,7 +210,7 @@ def test_collection_then_partial_execution_counts_remaining_tests(
         "--revision",
         "current",
         "--pytest-command",
-        f"{sys.executable} -m pytest",
+        PYTEST_COMMAND,
     ]
     first = subprocess.run(command, cwd=contract_project.path, capture_output=True, text=True)
     assert first.returncode == 0, first.stderr
