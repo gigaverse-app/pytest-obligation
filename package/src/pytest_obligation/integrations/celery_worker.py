@@ -86,6 +86,7 @@ from pytest_obligation.integrations.task_queues import (
     the_obligation_is_the,
 )
 from pytest_obligation.process_histories import (
+    FAULT_MARKER_VARIABLE,
     FAULT_VARIABLE,
     ProcessHistory,
     fault_environment,
@@ -228,8 +229,15 @@ def worker_history(
                     if fault is not None:
                         # OBSERVE the work as the fault left it, before the worker's main process can replace a
                         # lost pool child and run a requeued task again: that is recovery too, inside the run.
+                        # The worker marks the fault, or the task's first execution finishing without it. The
+                        # default settled check asks the worker over the broker and can block for a second, long
+                        # enough to miss that moment, so only a settled the history gives is read here as well.
                         wait_until(
-                            lambda: fault_happened(marker) or is_settled(handle),
+                            lambda: (
+                                fault_happened(marker)
+                                or _ran(marker).exists()
+                                or (settled is not None and settled(handle))
+                            ),
                             timeout=timeout,
                             what=f"{name}: the task did not settle",
                             poll=0.01,
@@ -265,6 +273,11 @@ def worker_history(
         failure_points=tuple(failure_points),
         findings=findings,
     )
+
+
+def _ran(marker: Path) -> Path:
+    """Created by the worker when the task's first execution finished without reaching its fault."""
+    return marker.with_name(f"{marker.name}.ran")
 
 
 def _node_name(worker_args: Sequence[str]) -> str:
@@ -464,6 +477,16 @@ def _install(app: Any, fault: str, task: str) -> None:
 
     def ours(name: str | None) -> bool:
         return name == task and fault_fires(fault)
+
+    marker = os.environ.get(FAULT_MARKER_VARIABLE)
+    if marker:
+
+        def record_ran(sender: Any = None, **_kwargs: Any) -> None:
+            # A fault the task never reaches would otherwise leave the parent waiting for the slower settled check.
+            if getattr(sender, "name", None) == task:
+                _ran(Path(marker)).touch()
+
+        signals.task_postrun.connect(record_ran, weak=False)
 
     stage = fault.removesuffix(_SIGKILL)
 

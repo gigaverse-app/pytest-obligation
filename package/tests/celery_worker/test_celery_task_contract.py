@@ -6,6 +6,7 @@ Each suite is generated from one ``task_contract`` call, through a real ``celery
 * the default configuration, which declares Celery's rows: a task lost as it starts never runs, and one lost after
   its body ran is recorded FAILURE though its message left;
 * a task that keeps no result, observed by its message alone, settled when the worker is idle;
+* a task requeued and safe to repeat, which declares nothing and is recovered by the worker inside the run;
 * a task the application recovers with a sweep of what it still owes, which declares nothing: every failure must
   converge;
 * the same task without its sweep bound, whose lost message fails the history, so a missing recovery is caught.
@@ -62,6 +63,15 @@ FORGOTTEN = task_contract(
     env=ENV,
 )
 
+REQUEUED_ONCE = task_contract(
+    APP,
+    reference.send_message_once,
+    send=lambda: reference.send_message_once.delay(a_message()),
+    effect=messages_sent,
+    expected_effect=1,
+    env=ENV,
+)
+
 OWED = task_contract(
     APP,
     reference.deliver_owed,
@@ -85,6 +95,16 @@ class TestTaskWithoutResult:
     Celery records nothing for this task, so only a delivery lost as it starts differs: its message never leaves.
 
     A run whose delivery was lost settles when the worker is idle, not when a result arrives, since none will.
+    """
+
+
+@due_work_contract_suite(REQUEUED_ONCE)
+class TestRequeuedTaskSafeToRepeat:
+    """
+    Requeued and sent with a key: Celery declares nothing, and the worker recovers the task inside the run.
+
+    The run is observed the moment its fault happens, before the worker runs the requeued task again, so that
+    recovery is what the verdict sees; the slower check that the worker is idle must not delay that observation.
     """
 
 
