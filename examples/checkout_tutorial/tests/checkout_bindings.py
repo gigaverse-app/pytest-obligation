@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any, Generic, TypeVar
 
 from checkout.naive import NaiveCheckout
 from checkout.reliable import ReliableCheckout
@@ -14,10 +15,13 @@ from pytest_obligation import CallableDelivery, ExternalCall, HandoffHistory
 
 CART = "cart-1"
 
+# Every function below works with either checkout class.
+CheckoutT = TypeVar("CheckoutT", NaiveCheckout, ReliableCheckout)
+
 
 @dataclass
-class Shop:
-    app: NaiveCheckout | ReliableCheckout
+class Shop(Generic[CheckoutT]):
+    app: CheckoutT
     payments: FakePayments
     broker: FakeBroker
     cache: FakeCache
@@ -25,10 +29,10 @@ class Shop:
 
 
 # The shop the current history is running; the delivery below reaches it through here.
-current: list[Shop] = []
+current: list[Shop[Any]] = []
 
 
-def new_shop(checkout: type[NaiveCheckout | ReliableCheckout]) -> Shop:
+def new_shop(checkout: type[CheckoutT]) -> Shop[CheckoutT]:
     """A checkout on an empty in-memory database, wired to fresh fake providers."""
     payments, broker, cache, mailer = FakePayments(), FakeBroker(), FakeCache(), FakeMailer()
     db = sqlite3.connect(":memory:", factory=CountedConnection)
@@ -38,7 +42,7 @@ def new_shop(checkout: type[NaiveCheckout | ReliableCheckout]) -> Shop:
 
 
 @contextmanager
-def fresh_shop(checkout: type[NaiveCheckout | ReliableCheckout]) -> Iterator[Shop]:
+def fresh_shop(checkout: type[CheckoutT]) -> Iterator[Shop[CheckoutT]]:
     """A new shop for one history, reachable by the delivery while the history runs."""
     shop = new_shop(checkout)
     current.append(shop)
@@ -49,7 +53,7 @@ def fresh_shop(checkout: type[NaiveCheckout | ReliableCheckout]) -> Iterator[Sho
         shop.app.db.close()
 
 
-def everything_the_customer_sees(shop: Shop) -> tuple[str | None, int, int, str | None]:
+def everything_the_customer_sees(shop: Shop[Any]) -> tuple[str | None, int, int, str | None]:
     """Order status, charges made, receipts delivered, cached status: one snapshot across all five systems."""
     row = shop.app.db.execute("SELECT status FROM orders WHERE cart = ?", (CART,)).fetchone()
     return (
@@ -64,7 +68,7 @@ def everything_the_customer_sees(shop: Shop) -> tuple[str | None, int, int, str 
 ONE_PAID_ORDER = ("paid", 1, 1, "paid")
 
 
-def delivery(checkout: type[NaiveCheckout | ReliableCheckout]) -> CallableDelivery:
+def delivery(checkout: type[CheckoutT]) -> CallableDelivery:
     """How published events reach the consumer, how they get lost, and how production recovers."""
     return CallableDelivery(
         name=f"{checkout.__name__} queue",
@@ -75,7 +79,7 @@ def delivery(checkout: type[NaiveCheckout | ReliableCheckout]) -> CallableDelive
     )
 
 
-def place_order_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> HandoffHistory:
+def place_order_history(checkout: type[CheckoutT]) -> HandoffHistory:
     return HandoffHistory(
         name="place order",
         # ARRANGE: a new shop per history, so no history sees another's leftovers.
@@ -91,14 +95,14 @@ def place_order_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> Han
 
 
 @contextmanager
-def shop_with_an_undelivered_event(checkout: type[NaiveCheckout | ReliableCheckout]) -> Iterator[Shop]:
+def shop_with_an_undelivered_event(checkout: type[CheckoutT]) -> Iterator[Shop[CheckoutT]]:
     with fresh_shop(checkout) as shop:
         shop.app.place_order(CART, 30)
         shop.broker.lose_all()
         yield shop
 
 
-def send_receipt_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> HandoffHistory:
+def send_receipt_history(checkout: type[CheckoutT]) -> HandoffHistory:
     return HandoffHistory(
         name="send receipt",
         # ARRANGE: a paid order whose event has not been consumed yet.

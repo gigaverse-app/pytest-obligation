@@ -9,6 +9,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from types import TracebackType
+from typing import Literal
 
 from pytest_obligation.worker_death import CommitWorker
 
@@ -32,8 +33,8 @@ class CountedConnection(sqlite3.Connection):
             _current.committed()
 
     def __exit__(
-        self, kind: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None
-    ) -> bool:
+        self, kind: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None, /
+    ) -> Literal[False]:
         # `with connection:` commits in C, bypassing commit() above; route it through commit().
         if kind is None:
             self.commit()

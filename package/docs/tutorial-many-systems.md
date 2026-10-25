@@ -125,9 +125,9 @@ places an order, delivers the event, and checks every system:
 
 ```python
 @pytest.mark.parametrize("checkout", [NaiveCheckout, ReliableCheckout])
-def test_an_order_is_charged_cached_and_receipted(checkout: type[NaiveCheckout | ReliableCheckout]) -> None:
+def test_an_order_is_charged_cached_and_receipted(checkout) -> None:  # noqa: ANN001 - either checkout class
     with fresh_shop(checkout) as shop:
-        checkout.place_order(shop.app, CART, 30)
+        shop.app.place_order(CART, 30)
         shop.broker.deliver_all()
 
         assert everything_the_customer_sees(shop) == ("paid", 1, 1, "paid")
@@ -225,7 +225,7 @@ observation across all five systems:
 
 ```python
 @contextmanager
-def fresh_shop(checkout: type[NaiveCheckout | ReliableCheckout]) -> Iterator[Shop]:
+def fresh_shop(checkout: type[CheckoutT]) -> Iterator[Shop[CheckoutT]]:
     """A new shop for one history, reachable by the delivery while the history runs."""
     shop = new_shop(checkout)
     current.append(shop)
@@ -236,7 +236,7 @@ def fresh_shop(checkout: type[NaiveCheckout | ReliableCheckout]) -> Iterator[Sho
         shop.app.db.close()
 
 
-def everything_the_customer_sees(shop: Shop) -> tuple[str | None, int, int, str | None]:
+def everything_the_customer_sees(shop: Shop[Any]) -> tuple[str | None, int, int, str | None]:
     """Order status, charges made, receipts delivered, cached status: one snapshot across all five systems."""
     row = shop.app.db.execute("SELECT status FROM orders WHERE cart = ?", (CART,)).fetchone()
     return (
@@ -252,7 +252,8 @@ ONE_PAID_ORDER = ("paid", 1, 1, "paid")
 ```
 
 `new_shop()` (in the same file) wires an in-memory SQLite database with
-`CountedConnection` to fresh stand-ins. `current` lets the delivery below reach
+`CountedConnection` to fresh stand-ins. `CheckoutT` stands for either checkout
+class, so the same bindings test both. `current` lets the delivery below reach
 whichever shop the current run created.
 
 Next, how events travel in this system. A **delivery** tells the harness how
@@ -260,7 +261,7 @@ published work reaches its consumer, how it is lost, and how production
 recovers:
 
 ```python
-def delivery(checkout: type[NaiveCheckout | ReliableCheckout]) -> CallableDelivery:
+def delivery(checkout: type[CheckoutT]) -> CallableDelivery:
     """How published events reach the consumer, how they get lost, and how production recovers."""
     return CallableDelivery(
         name=f"{checkout.__name__} queue",
@@ -275,7 +276,7 @@ Finally, the step itself. A **`HandoffHistory`** names one step that commits
 state and passes work on, a [handoff](vocabulary.md#handoff):
 
 ```python
-def place_order_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> HandoffHistory:
+def place_order_history(checkout: type[CheckoutT]) -> HandoffHistory:
     return HandoffHistory(
         name="place order",
         # ARRANGE: a new shop per history, so no history sees another's leftovers.
@@ -348,7 +349,7 @@ The consumer is a handoff too: it emails, then records that it emailed. Its
 history starts from a paid order whose event has not been consumed:
 
 ```python
-def send_receipt_history(checkout: type[NaiveCheckout | ReliableCheckout]) -> HandoffHistory:
+def send_receipt_history(checkout: type[CheckoutT]) -> HandoffHistory:
     return HandoffHistory(
         name="send receipt",
         # ARRANGE: a paid order whose event has not been consumed yet.

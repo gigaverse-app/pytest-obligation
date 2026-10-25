@@ -459,10 +459,10 @@ def welcome_contract(
         # REAL PRODUCTION: the app's sign-up command, which enqueues the task in its own transaction.
         enqueue=lambda: sign_up_someone(task),
         # OBSERVE: how many welcome emails this user received; one successful run sends exactly one.
-        effect=lambda job_id: welcome.mailer.delivered.count(addresses[job_id]),
+        effect=lambda job_id: MAILER.delivered.count(addresses[job_id]),
         expected=1,
         enqueue_failing=a_failing_welcome,
-        failures=lambda _job_id: welcome.mailer.failed_calls,
+        failures=lambda _job_id: MAILER.failed_calls,
         max_attempts=3,
         # EXTERNAL SEAM: the email provider; the worker also dies right after each send.
         external_calls=(ExternalCall(FakeMailer, "send"),),
@@ -476,6 +476,7 @@ class TestWelcomeEmail:
     pass
 ```
 
+`MAILER` is the test's email-provider stand-in, from `tests/email_provider.py`.
 `sign_up_someone` signs up a new address for each history and remembers it, so
 each history observes only its own user. That detail matters: an early version
 of this file signed up the same address every time, and the harness refused

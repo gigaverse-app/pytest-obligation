@@ -4,7 +4,7 @@ from collections.abc import Callable
 from itertools import count
 
 import welcome
-from providers import FakeMailer
+from email_provider import MAILER, FakeMailer
 from tinyq.testing import task_contract
 
 from pytest_obligation import ExternalCall, ObligationContract, due_work_contract_suite
@@ -24,7 +24,7 @@ def sign_up_someone(task: Callable[[str], None]) -> int:
 
 def a_failing_welcome() -> int:
     """ARRANGE: a sign-up while the email provider is down."""
-    welcome.mailer.down = True
+    MAILER.down = True
     return sign_up_someone(welcome.send_welcome_email_once)
 
 
@@ -37,10 +37,10 @@ def welcome_contract(
         # REAL PRODUCTION: the app's sign-up command, which enqueues the task in its own transaction.
         enqueue=lambda: sign_up_someone(task),
         # OBSERVE: how many welcome emails this user received; one successful run sends exactly one.
-        effect=lambda job_id: welcome.mailer.delivered.count(addresses[job_id]),
+        effect=lambda job_id: MAILER.delivered.count(addresses[job_id]),
         expected=1,
         enqueue_failing=a_failing_welcome,
-        failures=lambda _job_id: welcome.mailer.failed_calls,
+        failures=lambda _job_id: MAILER.failed_calls,
         max_attempts=3,
         # EXTERNAL SEAM: the email provider; the worker also dies right after each send.
         external_calls=(ExternalCall(FakeMailer, "send"),),

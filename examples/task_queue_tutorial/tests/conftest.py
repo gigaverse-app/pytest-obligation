@@ -3,7 +3,7 @@ from collections.abc import Iterator
 import pytest
 import reference_jobs
 import welcome
-from providers import FakeMailer
+from email_provider import MAILER
 from tinyq.testing import ManualClock, empty, tinyq_host
 
 from pytest_obligation import configure
@@ -13,7 +13,7 @@ configure(tinyq_host({"reference_jobs", "welcome"}))
 reference_jobs.queue.clock = ManualClock()
 reference_jobs.draft_queue.clock = ManualClock()
 welcome.queue.clock = ManualClock()
-welcome.mailer = FakeMailer()
+welcome.mailer = MAILER
 
 
 @pytest.fixture
@@ -26,5 +26,5 @@ def fresh_reference_jobs() -> Iterator[None]:
 @pytest.fixture
 def fresh_welcome() -> Iterator[None]:
     empty(welcome.queue)
-    welcome.mailer.__init__()
+    MAILER.__init__()
     yield

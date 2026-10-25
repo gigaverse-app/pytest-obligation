@@ -19,3 +19,7 @@ class FakeMailer:
                 return
             self._keys.add(key)
         self.delivered.append(to)
+
+
+# The one email provider the welcome app talks to in the tests.
+MAILER = FakeMailer()
