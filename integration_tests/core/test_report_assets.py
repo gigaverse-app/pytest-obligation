@@ -26,7 +26,7 @@ def test_every_rendered_glyph_exists_in_the_hosted_asset_set() -> None:
 
 def test_fixed_assets_are_small_passive_images_with_both_themes() -> None:
     files = list(ASSETS.glob("*.svg"))
-    assert len(files) == 99 and sum(p.stat().st_size for p in files) < 28_000
+    assert len(files) == 101 and sum(p.stat().st_size for p in files) < 28_000
     for path in files:
         root = ElementTree.fromstring(path.read_text(encoding="utf-8"))
         assert all(n.tag.rsplit("}")[-1] in {"svg", "text", "path"} for n in root.iter())

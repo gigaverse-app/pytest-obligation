@@ -50,8 +50,9 @@ test('a changed archive is discarded', async t => {
 
 test('workflow failure from the API stays visible above producer success claims', () => {
   const body = publishedBody('Test step (reported): **success**', {conclusion: 'failure', runId: 7, runAttempt: 2}, 'https://github.com/owner/project');
-  assert.match(body, /^\*\*GitHub workflow: failure\*\*/);
-  assert.match(body, /Results below were supplied by the pull request/);
+  assert.match(body, /^## 🔴 GitHub workflow failed/);
+  assert.match(body, /> \[!CAUTION\]/);
+  assert.match(body, /Other tests or workflow steps can fail/);
   assert.match(body, /attempts\/2/);
 });
 
@@ -59,8 +60,23 @@ test('oversized renderer output recovers to an unavailable report with API statu
   const body = publishedBody('x'.repeat(55001), {conclusion: 'success', runId: 7, runAttempt: 1}, 'https://github.com/owner/project');
   assert.ok(body.length < 55000);
   assert.match(body, /Evidence unavailable/);
-  assert.match(body, /GitHub workflow: success/);
+  assert.match(body, /\[run\]\(https:\/\/github.com\/owner\/project\/actions\/runs\/7\/attempts\/1\)$/);
 });
+
+for (const attempt of [1, 2, 3]) test(`successful attempt ${attempt} has only a concise footer link`, () => {
+  const body = publishedBody('The report', {conclusion:'success', runId:7, runAttempt:attempt}, 'https://github.com/owner/project');
+  const label = attempt === 1 ? 'run' : `run ${attempt}`;
+  assert.equal(body, `The report\n\n[${label}](https://github.com/owner/project/actions/runs/7/attempts/${attempt})`);
+});
+
+for (const conclusion of ['timed_out', 'startup_failure', 'cancelled', 'neutral', 'skipped', 'unknown']) {
+  test(`${conclusion} cannot be presented as a successful workflow`, () => {
+    const body = publishedBody('Test step (reported): **success**', {conclusion, runId:7, runAttempt:1}, 'https://github.com/owner/project');
+    const failed = ['timed_out', 'startup_failure'].includes(conclusion);
+    assert.ok(body.startsWith(failed ? '## 🔴 GitHub workflow failed' : '## 🟠 GitHub workflow did not succeed'));
+    assert.match(body, new RegExp(`GitHub reports: ${conclusion}`));
+  });
+}
 
 test('only a PR from a branch of this repository renders its contract text live', () => {
   const resolved = {headSha:'f'.repeat(40), runId:200, runAttempt:2};

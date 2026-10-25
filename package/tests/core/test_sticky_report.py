@@ -181,7 +181,7 @@ def test_failure_state_roundtrips_and_survives_worker_merge() -> None:
     }
     merge_reports(merged, restored)
     body = render(merged)
-    assert "1 failures" in body
+    assert "1 contract failures" in body
     assert "resumed" in body and "**7**" in body and "order-17" in body and "status=pending" in body
     assert not merged["tests.Orders"].verified
 
@@ -303,7 +303,7 @@ def test_report_accepts_prior_version_without_optional_failure_metadata() -> Non
         }
     }
     body = render(TypeAdapter(dict[str, SuiteCoverage]).validate_json(json.dumps(data)))
-    assert "1 failures" in body
+    assert "1 contract failures" in body
 
 
 def test_failed_test_step_remains_red_when_no_contract_failure_was_recorded() -> None:

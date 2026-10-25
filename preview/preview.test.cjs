@@ -23,7 +23,8 @@ test('explicit fork evidence creates then updates one author-owned preview with 
   assert.deepEqual(f.state.writes.map(c => c.method), ['POST', 'PATCH']);
   const body = f.state.comments[0].body;
   assert.match(body, /Preview from the PR contributor/);
-  assert.match(body, /Fork workflow: failure/);
+  assert.match(body, /^## 🔴 Fork workflow failed/);
+  assert.match(body, /> \[!CAUTION\]/);
   assert.match(body, /No installation, repository access or credentials were requested/);
   assert.match(body, /Test step \(reported\): \*\*success\*\*/);
   assert.ok(body.includes(HEAD));
@@ -62,7 +63,7 @@ test('an explicitly selected older attempt keeps its own GitHub conclusion', asy
   f.state.run.run_attempt = 2;
   f.options.run += '/attempts/1';
   await f.publish();
-  assert.match(f.state.comments[0].body, /Fork workflow: failure/);
+  assert.match(f.state.comments[0].body, /^## 🔴 Fork workflow failed/);
   assert.match(f.state.comments[0].body, /"attempt":1/);
 });
 

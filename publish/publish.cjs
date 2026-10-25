@@ -79,7 +79,6 @@ async function buildImage(actionPath) {
 
 function rendererArgs(resolved, repositoryUrl, assetRef) {
   return ['--head-sha', resolved.headSha, '--run-id', String(resolved.runId), '--run-attempt', String(resolved.runAttempt),
-    '--run-url', `${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt}`,
     '--repository-url', repositoryUrl, '--asset-ref', assetRef,
     // Only a PR from a branch of this repository keeps its contract's mentions, references and links live.
     ...(resolved.sameRepository === true ? ['--own-text'] : [])];
@@ -100,12 +99,24 @@ async function renderSandbox(actionPath, archive, resolved, repositoryUrl, asset
   }
 }
 
-function publishedBody(markdown, resolved, repositoryUrl) {
+function workflowStatus(resolved, label = 'GitHub workflow') {
   const conclusion = CONCLUSIONS.has(resolved.conclusion) ? resolved.conclusion : 'unknown';
-  const prefix = `**GitHub workflow: ${conclusion}** · [run ${resolved.runId}, attempt ${resolved.runAttempt}](${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt})\n\n`
-    + 'Results below were supplied by the pull request. Publishing them does not approve the code or change required checks.\n\n';
-  const body = prefix + markdown;
-  return body.length <= 55_000 ? body : prefix + UNAVAILABLE;
+  if (conclusion === 'success') return '';
+  const failed = ['failure', 'timed_out', 'startup_failure'].includes(conclusion);
+  // API status is always the first visual verdict. Contributor evidence cannot replace this warning.
+  return `## ${failed ? '🔴' : '🟠'} ${label} ${failed ? 'failed' : 'did not succeed'}\n\n`
+    + `> [!${failed ? 'CAUTION' : 'WARNING'}]\n`
+    + `> **GitHub reports: ${conclusion}.**\n>\n`
+    + '> Contract counts below cover only obligation checks. Other tests or workflow steps can fail even with zero contract failures. '
+    + 'Contributor-reported success does not override this workflow status.\n\n';
+}
+
+function publishedBody(markdown, resolved, repositoryUrl, {label = 'GitHub workflow', intro = ''} = {}) {
+  const prefix = workflowStatus(resolved, label) + intro;
+  const runLabel = resolved.runAttempt > 1 ? `run ${resolved.runAttempt}` : 'run';
+  const footer = `\n\n[${runLabel}](${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt})`;
+  const body = prefix + markdown + footer;
+  return body.length <= 55_000 ? body : prefix + UNAVAILABLE + footer;
 }
 
 async function run({github, context, core}, env = process.env) {
@@ -140,4 +151,4 @@ async function run({github, context, core}, env = process.env) {
 }
 
 module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, rendererArgs, renderSandbox,
-  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS};
+  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, workflowStatus};
