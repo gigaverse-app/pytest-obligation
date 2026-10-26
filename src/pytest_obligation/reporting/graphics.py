@@ -5,15 +5,18 @@ from html import escape
 
 from .evidence import cell
 
+#: The contract-check categories, in display order; each check counts in exactly one of the first four.
 METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
-LABELS = (
-    "applications",
-    "contract checks passed",
-    "contract failures",
-    "blocked checks",
-    "coverage gaps",
-    "rejected bindings",
-)
+#: Every headline count's name, as alt text and plain text say it.
+LABELS = {
+    "applications": "applications",
+    "passed": "contract checks passed",
+    "failed": "contract failures",
+    "blocked": "blocked checks",
+    "gaps": "coverage gaps",
+    "rejected": "rejected bindings",
+    "skipped": "skipped tests",
+}
 
 
 def _picture(base: str, name: str, width: int, height: int, alt: str = "") -> str:
@@ -49,52 +52,50 @@ def _unknown(base: str, width: int, height: int, label: str) -> str:
 
 
 def _color(kind: str, value: int) -> str:
-    if kind == "applications":
+    if kind in ("applications", "skipped"):
         return "neutral"
     if kind == "passed" or value == 0:
         return "good"
     return "warning" if kind in ("blocked", "gaps") else "bad"
 
 
+def _count(base: str, key: str, value: int | None, width: int, label: str, *, neutral: bool = False) -> str:
+    """One count's glyphs, digits ``width`` wide: the amber ``?`` when unknown, else colored by category."""
+    if value is None:
+        return _unknown(base, width, width * 2, label)
+    return _number(base, value, "neutral" if neutral and value == 0 else _color(key, value), width, width * 2, label)
+
+
 def summary_html(values: Mapping[str, int | None], base: str, *, neutral: bool = False) -> str:
-    keys = ("applications", *METRICS)
-    labels = LABELS
-    positions = (0, 107, 235, 339, 442, 546, 640)
-    captions = "captions"
-    if "skipped" in values:
-        keys = (*keys, "skipped")
-        labels = (*labels, "skipped tests")
-        positions = (0, 87, 193, 279, 372, 462, 553, 640)
-        captions = "captions-with-skips"
+    """The headline counts; ``skipped`` joins them when present. ``neutral`` shows zeros without green."""
+    keys = ("applications", *METRICS, *(("skipped",) if "skipped" in values else ()))
+    positions, captions = (
+        ((0, 87, 193, 279, 372, 462, 553, 640), "captions-with-skips")
+        if "skipped" in values
+        else ((0, 107, 235, 339, 442, 546, 640), "captions")
+    )
     parts = []
-    for i, (key, label) in enumerate(zip(keys, labels, strict=True)):
+    for i, key in enumerate(keys):
         value = values[key]
-        if value is None:
-            parts += [
-                _unknown(base, 18, 36, label),
-                _space(base, positions[i + 1] - positions[i] - 18),
-            ]
-            continue
+        digits = len(count_text(value))
+        # The passed column gives up room for the divider that follows it.
         available = positions[i + 1] - positions[i] - (13 if i == 1 else 0)
-        width = min(18, available // len(str(value)))
+        width = min(18, available // digits)
         if width < 1:
-            return escape(" · ".join(f"{count_text(values[k])} {label}" for k, label in zip(keys, labels, strict=True)))
-        parts.append(
-            _number(
-                base,
-                value,
-                "neutral" if key == "skipped" or neutral and value == 0 else _color(key, value),
-                width,
-                width * 2,
-                label,
-            )
-        )
-        end = positions[i] + len(str(value)) * width
+            return escape(" · ".join(f"{count_text(values[k])} {LABELS[k]}" for k in keys))
+        parts.append(_count(base, key, value, width, LABELS[key], neutral=neutral))
+        end = positions[i] + digits * width
         if i == 1:
             parts += [_space(base, positions[2] - 13 - end), _picture(base, "divider", 1, 36), _space(base, 12)]
         else:
             parts.append(_space(base, positions[i + 1] - end))
-    return "<p>" + "".join(parts) + "<br>" + _picture(base, captions, 640, 34, " · ".join(labels)) + "</p>"
+    return (
+        "<p>"
+        + "".join(parts)
+        + "<br>"
+        + _picture(base, captions, 640, 34, " · ".join(LABELS[k] for k in keys))
+        + "</p>"
+    )
 
 
 def application_name(name: str) -> str:
@@ -111,16 +112,11 @@ def application_html(name: str, values: Mapping[str, int | None], base: str) -> 
     for i, key in enumerate(METRICS):
         value = values[key]
         digits = len(count_text(value))
-        width = 8 if value is None else min(8, (columns[i] - label_widths[i]) // digits)
+        width = min(8, (columns[i] - label_widths[i]) // digits)
         if width < 1:
             return native_name + " · " + escape(" · ".join(f"{count_text(values[k])} {k}" for k in METRICS))
-        number = (
-            _unknown(base, width, width * 2, key)
-            if value is None
-            else _number(base, value, _color(key, value), width, width * 2, key)
-        )
         parts += [
-            number,
+            _count(base, key, value, width, key),
             _picture(base, f"label-{key}", label_widths[i], 18),
             _space(base, columns[i] - digits * width - label_widths[i], 18),
         ]

@@ -22,11 +22,17 @@ def safe_run_url(url: str) -> bool:
 
 @dataclass(frozen=True)
 class Evidence:
-    """One run's merged evidence: the reports, why any of it is unavailable, and JUnit-classified skips."""
+    """
+    One run's merged evidence: the reports, why any of them is unavailable, and JUnit-classified skips.
+
+    ``skips_unknown`` says why JUnit, when it was requested, could not give the exact skip count. It
+    concerns that one count only: the reports themselves stay available.
+    """
 
     reports: dict[str, SuiteCoverage]
     unavailable: str
     collected_skips: int | None
+    skips_unknown: str = ""
 
 
 def merge_evidence(
@@ -83,6 +89,7 @@ def merge_evidence(
             problems.append(f"A report could not be read or combined ({type(error).__name__}).")
     unavailable = " ".join(problems)
     collected_skips = None
+    skips_unknown = ""
     if junit is not None and inventory is not None and not unavailable:
         from xml.etree.ElementTree import ParseError
 
@@ -92,19 +99,21 @@ def merge_evidence(
 
         junit_paths = list(junit)
         if len(junit_paths) < expected_reports or (not junit_paths and test_outcome != "skipped"):
-            unavailable = "Expected JUnit reports are missing; skipped-test count is unknown."
+            skips_unknown = "Expected JUnit reports are missing."
         elif test_outcome in ("failure", "cancelled"):
-            unavailable = "Test execution did not complete; unreported tests cannot be classified as skips."
+            skips_unknown = "The test step did not complete, so unreported tests cannot be classified as skips."
         else:
             try:
                 collected_skips = skipped_tests(inventory, junit_paths)
             except (OSError, ParseError, DefusedXmlException):
-                unavailable = "JUnit evidence could not be read; skipped-test count is unknown."
+                skips_unknown = "JUnit evidence could not be read."
     if unavailable:
         unavailable += " Check the JSON artifacts and pytest logs" + (
             "; available evidence is shown below." if reports else "."
         )
-    return Evidence(reports=reports, unavailable=unavailable, collected_skips=collected_skips)
+    return Evidence(
+        reports=reports, unavailable=unavailable, collected_skips=collected_skips, skips_unknown=skips_unknown
+    )
 
 
 def render_merged(
@@ -135,6 +144,7 @@ def render_merged(
         graphics=graphics,
         inventory=inventory,
         collected_skips=evidence.collected_skips,
+        skips_unknown=evidence.skips_unknown,
         timing=timing,
         own_text=own_text,
         title=title,
