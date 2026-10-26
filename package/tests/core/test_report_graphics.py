@@ -275,3 +275,19 @@ def test_the_title_names_the_report_as_text() -> None:
     first = failed.splitlines()[0]
     assert "<img" not in first and "**Celery**" not in first
     assert failed.splitlines()[2] == "## 🔴 Test step failed"
+
+
+def test_a_workflow_still_running_shows_its_passes_and_no_final_zero() -> None:
+    ran = CaseEvidence(
+        family="replay",
+        collected=True,
+        selected=True,
+        outcomes={"setup": ["passed"], "call": ["passed"], "teardown": ["passed"]},
+    )
+    suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": ran})
+    body = render({"tests.Orders": suite}, graphics=True, test_outcome="success", running=True)
+    assert 'alt="1 contract checks passed"' in body
+    for label in ("contract failures", "blocked checks", "coverage gaps", "rejected bindings"):
+        assert f'alt="{label}: unknown"' in body
+    assert 'alt="failed: unknown"' in body
+    assert "/good-0-" not in body

@@ -430,9 +430,10 @@ def render(
     timing: bool = True,
     own_text: bool = False,
     title: str = "",
+    running: bool = False,
 ) -> str:
     """
-    The report's Markdown. ``title`` names the lane or session, so two reports on one pull request can be
+    The report's Markdown. ``running`` says the workflow has not finished, so no zero count is final yet. ``title`` names the lane or session, so two reports on one pull request can be
     told apart; it is shown as text, never as Markdown. ``timing=False`` leaves out elapsed and summed check times, so a copy kept
     in a document (see :mod:`pytest_obligation.reporting.readme`) changes only when the evidence does.
     ``own_text=True`` keeps the application's mentions, issue references and links live: only for
@@ -453,6 +454,7 @@ def render(
             collected_skips=collected_skips,
             timing=timing,
             title=title,
+            running=running,
         )
 
 
@@ -471,6 +473,7 @@ def _render(
     collected_skips: int | None,
     timing: bool,
     title: str,
+    running: bool,
 ) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
@@ -499,7 +502,7 @@ def _render(
     if collected_skips is not None:
         skipped, incomplete = collected_skips, False
     missing = bool(inventory and set(inventory.applications) - set(reports))
-    unknowable = _unknowable(
+    unknowable = running or _unknowable(
         test_outcome, recorded=_recorded(reports.values()), unavailable=unavailable, missing=missing
     )
     head += [
@@ -583,7 +586,8 @@ def _render(
             glyph_base,
             compact=compact,
             timing=timing,
-            unknowable=_unknowable(test_outcome, recorded=_recorded([suite]), unavailable=unavailable, missing=False),
+            unknowable=running
+            or _unknowable(test_outcome, recorded=_recorded([suite]), unavailable=unavailable, missing=False),
         )
         # Include disclosure separators and the overflow notice in the budget.
         if len("\n\n".join([*head, *sections, section, *footer])) > MAX_BODY - 300:

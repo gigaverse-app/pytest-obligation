@@ -30,7 +30,9 @@ unavailable, an application has no report or the run was cancelled, each zero co
 an amber `?` instead, in the totals and in each application's row: a collection error
 that stopped every check proves nothing about failures. Non-zero counts are what was
 recorded and stay. A step that succeeded, or was skipped because nothing was selected,
-keeps its zeroes.
+keeps its zeroes. A sticky the publish action posts while the source workflow is still
+running is headed **still running**, shows every zero as `?`, and is updated when the run
+finishes.
 
 The header counts applications and passing contract checks on the left, with contract
 failures, blocked checks, coverage gaps and rejected bindings after a divider.

@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--repository-url", default="")
     parser.add_argument("--asset-ref", default="main")
     parser.add_argument(
+        "--workflow-running",
+        action="store_true",
+        help="The triggering run has not finished, from the API: no zero count is final yet",
+    )
+    parser.add_argument(
         "--own-text",
         action="store_true",
         help="The API shows the PR's head is this repository, not another's fork: keep the contract's mentions, "
@@ -79,6 +84,7 @@ def _render(args: argparse.Namespace, evidence: StagedEvidence) -> None:
         graphics=manifest.graphics if manifest else False,
         own_text=args.own_text,
         title=manifest.title if manifest else "",
+        running=args.workflow_running,
     )
     write_report(args.output, body, evidence.inventory)
 
