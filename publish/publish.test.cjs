@@ -69,6 +69,28 @@ for (const attempt of [1, 2, 3]) test(`successful attempt ${attempt} has only a 
   assert.equal(body, `The report\n\n[${label}](https://github.com/owner/project/actions/runs/7/attempts/${attempt})`);
 });
 
+for (const conclusion of ['in_progress', 'queued', 'requested', 'waiting', 'pending']) {
+  test(`${conclusion} reads as still running, not as a failed run`, () => {
+    const body = publishedBody('The report', {conclusion, runId:7, runAttempt:1}, 'https://github.com/owner/project');
+    assert.ok(body.startsWith('> [!WARNING]\n'), 'only the warning, no heading repeating it');
+    assert.match(body, new RegExp(`GitHub reports: ${conclusion}`));
+    assert.match(body, /recorded so far/);
+    assert.doesNotMatch(body, /^## /m);
+    assert.doesNotMatch(body, /did not succeed/);
+  });
+  test(`${conclusion} tells the renderer no zero is final yet`, () => {
+    const args = rendererArgs({headSha:'f'.repeat(40), runId:7, runAttempt:1, conclusion}, 'https://github.com/owner/app', 'v1');
+    assert.ok(args.includes('--workflow-running'));
+  });
+}
+
+test('a finished run does not ask the renderer to hide its zeros', () => {
+  for (const conclusion of ['success', 'failure', 'cancelled']) {
+    const args = rendererArgs({headSha:'f'.repeat(40), runId:7, runAttempt:1, conclusion}, 'https://github.com/owner/app', 'v1');
+    assert.ok(!args.includes('--workflow-running'), conclusion);
+  }
+});
+
 for (const conclusion of ['timed_out', 'startup_failure', 'cancelled', 'neutral', 'skipped', 'unknown']) {
   test(`${conclusion} cannot be presented as a successful workflow`, () => {
     const body = publishedBody('Test step (reported): **success**', {conclusion, runId:7, runAttempt:1}, 'https://github.com/owner/project');

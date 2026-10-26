@@ -34,6 +34,11 @@ inputs:
   sticky-key:
     description: Stable key for this workflow or test lane; use distinct keys for separate sessions.
     default: obligation
+  title:
+    description: >-
+      Names this lane or session at the top of its report, so separate stickies on one pull request can be told
+      apart (for example "Celery main" and "This fork"). Plain text, at most 120 characters.
+    default: ''
   test-outcome:
     description: Outcome of the test step (steps.tests.outcome), so collection or unrelated failures remain visible.
     default: unknown
@@ -80,6 +85,7 @@ runs:
         REPORT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         REPORT_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
         TEST_OUTCOME: ${{ inputs.test-outcome }}
+        REPORT_TITLE: ${{ inputs.title }}
         REPORT_ASSET_REF: ${{ github.action_ref || github.sha }}
         REPORT_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
         REPORT_GRAPHICS: ${{ inputs.graphics }}
@@ -118,7 +124,7 @@ runs:
         uvx --python "$INVENTORY_PYTHON" --from "$REPORTER_PACKAGE[report]" python -I -m pytest_obligation.reporting \
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
-          --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --asset-ref "$REPORT_ASSET_REF" \
+          --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --title "$REPORT_TITLE" --asset-ref "$REPORT_ASSET_REF" \
           --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}" "${inventory_args[@]}" \
           "${document_args[@]}" --stage-artifact "$workspace/artifact"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"

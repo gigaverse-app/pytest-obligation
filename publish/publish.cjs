@@ -10,7 +10,9 @@ const {resolveTriggeringRun, publishSticky} = require('../report/publish.cjs');
 const execute = promisify(execFile);
 const MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
 const UNAVAILABLE = '**🟠 Evidence unavailable.** The evidence could not be processed within the publisher’s safety limits. See the original workflow artifacts and logs.';
-const CONCLUSIONS = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out', 'action_required', 'stale', 'startup_failure', 'in_progress', 'queued']);
+const CONCLUSIONS = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out', 'action_required', 'stale', 'startup_failure', 'in_progress', 'queued', 'requested', 'waiting', 'pending']);
+// Statuses of a run that has not finished: its sticky is updated again when it does.
+const RUNNING = new Set(['in_progress', 'queued', 'requested', 'waiting', 'pending']);
 
 function dockerEnvironment(env = process.env) {
   // Docker needs the user's daemon configuration, not their GitHub/cloud credentials or interpreter hooks.
@@ -80,6 +82,8 @@ async function buildImage(actionPath) {
 function rendererArgs(resolved, repositoryUrl, assetRef) {
   return ['--head-sha', resolved.headSha, '--run-id', String(resolved.runId), '--run-attempt', String(resolved.runAttempt),
     '--repository-url', repositoryUrl, '--asset-ref', assetRef,
+    // A run still going has recorded what it recorded so far; no zero is final yet.
+    ...(RUNNING.has(resolved.conclusion) ? ['--workflow-running'] : []),
     // Only a PR from a branch of this repository keeps its contract's mentions, references and links live.
     ...(resolved.sameRepository === true ? ['--own-text'] : [])];
 }
@@ -102,6 +106,12 @@ async function renderSandbox(actionPath, archive, resolved, repositoryUrl, asset
 function workflowStatus(resolved, label = 'GitHub workflow') {
   const conclusion = CONCLUSIONS.has(resolved.conclusion) ? resolved.conclusion : 'unknown';
   if (conclusion === 'success') return '';
+  if (RUNNING.has(conclusion)) {
+    // The warning alone says it: a heading above it would repeat "still running".
+    return '> [!WARNING]\n'
+      + `> **GitHub reports: ${conclusion}.**\n>\n`
+      + '> These are the contract counts recorded so far; a count shown as ? is not known until the run finishes.\n\n';
+  }
   const failed = ['failure', 'timed_out', 'startup_failure'].includes(conclusion);
   // API status is always the first visual verdict. Contributor evidence cannot replace this warning.
   return `## ${failed ? '🔴' : '🟠'} ${label} ${failed ? 'failed' : 'did not succeed'}\n\n`
@@ -151,4 +161,4 @@ async function run({github, context, core}, env = process.env) {
 }
 
 module.exports = {run, downloadArchive, publishedBody, buildImage, containerArgs, rendererArgs, renderSandbox,
-  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, workflowStatus};
+  dockerEnvironment, MAX_ARCHIVE_BYTES, UNAVAILABLE, CONCLUSIONS, RUNNING, workflowStatus};

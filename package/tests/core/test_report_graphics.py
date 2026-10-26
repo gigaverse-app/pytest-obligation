@@ -220,3 +220,74 @@ def test_large_overview_folds_clean_apps_and_safely_wraps_long_names() -> None:
     assert "&#8203;" in overview and "<script>" not in overview
     assert unescape(overview).index("long_application_name_") < unescape(overview).index("3 applications · zero")
     assert all(f"| application {i} |" in overview for i in range(1, 4))
+
+
+def _blocked_suite() -> SuiteCoverage:
+    """An application whose checks were declared but never ran: collection stopped first."""
+    return SuiteCoverage(name="orders", profiles={}, additional_cases={"crash": CaseEvidence(family="process")})
+
+
+@pytest.mark.parametrize("outcome", ["failure", "cancelled", "unknown"])
+def test_counts_a_run_did_not_record_show_an_amber_question_mark_not_a_green_zero(outcome: str) -> None:
+    body = render({"tests.Orders": _blocked_suite()}, graphics=True, test_outcome=outcome)
+    headline = body.split("<details>")[0]
+    assert 'alt="1 applications"' in headline
+    for label in ("contract checks passed", "contract failures", "coverage gaps", "rejected bindings"):
+        assert f'alt="{label}: unknown"' in headline
+    assert "/good-0-" not in body
+    # The application's own row says the same.
+    assert 'alt="passed: unknown"' in body and 'alt="failed: unknown"' in body
+
+
+def test_a_cancelled_run_shows_its_recorded_counts_and_no_zero_it_did_not_earn() -> None:
+    ran = CaseEvidence(
+        family="replay",
+        collected=True,
+        selected=True,
+        outcomes={"setup": ["passed"], "call": ["passed"], "teardown": ["passed"]},
+    )
+    suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": ran})
+    body = render({"tests.Orders": suite}, graphics=True, test_outcome="cancelled")
+    assert 'alt="1 contract checks passed"' in body
+    assert 'alt="contract failures: unknown"' in body
+
+
+@pytest.mark.parametrize("outcome", ["success", "skipped"])
+def test_a_finished_run_keeps_its_zeros(outcome: str) -> None:
+    body = render({"tests.Orders": _blocked_suite()}, graphics=True, test_outcome=outcome)
+    assert 'alt="0 contract failures"' in body
+    assert 'alt="contract failures: unknown"' not in body
+
+
+def test_a_failed_run_that_recorded_its_checks_shows_them() -> None:
+    failed = CaseEvidence(family="replay", collected=True, selected=True, outcomes={"call": ["failed"]})
+    suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": failed})
+    body = render({"tests.Orders": suite}, graphics=True, test_outcome="failure")
+    assert 'alt="1 contract failures"' in body
+    assert 'alt="0 contract checks passed"' in body
+
+
+def test_the_title_names_the_report_as_text() -> None:
+    body = render({}, test_outcome="success", title="Celery main")
+    assert body.startswith("### Celery main\n")
+    failed = render({}, test_outcome="failure", title="**Celery** <img src=x>")
+    assert failed.startswith("### ")
+    first = failed.splitlines()[0]
+    assert "<img" not in first and "**Celery**" not in first
+    assert failed.splitlines()[2] == "## 🔴 Test step failed"
+
+
+def test_a_workflow_still_running_shows_its_passes_and_no_final_zero() -> None:
+    ran = CaseEvidence(
+        family="replay",
+        collected=True,
+        selected=True,
+        outcomes={"setup": ["passed"], "call": ["passed"], "teardown": ["passed"]},
+    )
+    suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": ran})
+    body = render({"tests.Orders": suite}, graphics=True, test_outcome="success", running=True)
+    assert 'alt="1 contract checks passed"' in body
+    for label in ("contract failures", "blocked checks", "coverage gaps", "rejected bindings"):
+        assert f'alt="{label}: unknown"' in body
+    assert 'alt="failed: unknown"' in body
+    assert "/good-0-" not in body
