@@ -23,7 +23,7 @@ from .evidence import (
 from .evidence import (
     MAX_BODY as MAX_BODY,
 )
-from .graphics import application_html, application_name, summary_html
+from .graphics import application_html, application_name, count_text, summary_html
 from .inventory import ApplicationInventory
 
 
@@ -61,11 +61,14 @@ def _execution_summary(
     if collected_skips is not None:
         skipped, incomplete = collected_skips, False
     skip_count = f"**{skipped} known**" if skipped and incomplete else "**unknown**" if incomplete else f"**{skipped}**"
+    nothing_known = _applications_unknown(reports, inventory, unavailable)
     lines = [
         "<details>",
         "<summary>Application inventory and skipped tests</summary>",
         "",
-        f"**{len(observed)}** applications with results · **{len(not_run)}** applications not run"
+        "Applications: **unknown**; no report or inventory could be read."
+        if nothing_known
+        else f"**{len(observed)}** applications with results · **{len(not_run)}** applications not run"
         + (f" · **{len(unknown)}** unknown" if unknown else ""),
         f"Checks skipped: {skip_count}."
         + (
@@ -75,7 +78,7 @@ def _execution_summary(
         ),
         "",
     ]
-    if not reports:
+    if not reports and not nothing_known:
         lines += ["No application contract checks ran.", ""]
     if absent or inventory is None or inventory.limitations:
         used = 0
@@ -171,20 +174,29 @@ def _recorded(suites: Iterable[SuiteCoverage]) -> bool:
     return any(case.outcomes for suite in suites for case in all_cases(suite).values())
 
 
-def _unknowable(test_outcome: str, *, recorded: bool, unavailable: str, missing: bool) -> bool:
+def _unknowable(test_outcome: str, *, running: bool, recorded: bool, unavailable: str, missing: bool) -> bool:
     """
     Whether a zero count proves nothing, so it reads as unknown.
 
-    A test step that succeeded recorded what ran, and one that was skipped ran
-    nothing on purpose. One that failed, was cancelled or reported no outcome
-    (it may still be running) may have stopped before a check ran, so its zeros
-    are unknown when nothing was recorded, evidence is unavailable, an
-    application has no report or the run was cancelled. Non-zero counts are what
-    was recorded, and stay.
+    A workflow still running has no final zero. Otherwise, a test step that
+    succeeded recorded what ran, and one that was skipped ran nothing on
+    purpose. One that failed, was cancelled or reported no outcome may have
+    stopped before a check ran, so its zeros are unknown when nothing was
+    recorded, evidence is unavailable, an application has no report or the run
+    was cancelled. Non-zero counts are what was recorded, and stay.
     """
+    if running:
+        return True
     if test_outcome in ("success", "skipped"):
         return False
     return test_outcome == "cancelled" or not recorded or bool(unavailable) or missing
+
+
+def _applications_unknown(
+    reports: Mapping[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
+) -> bool:
+    """Evidence is unavailable and nothing names an application, so even their number is unknown."""
+    return bool(unavailable) and not reports and inventory is None
 
 
 def _known(values: Mapping[str, int], unknowable: bool) -> dict[str, int | None]:
@@ -192,17 +204,58 @@ def _known(values: Mapping[str, int], unknowable: bool) -> dict[str, int | None]
     return {kind: None if unknowable and kind in METRICS and value == 0 else value for kind, value in values.items()}
 
 
-def _count(value: int | None) -> str:
-    return "?" if value is None else str(value)
-
-
 def _totals(
     values: Mapping[str, int | None], glyph_base: str, *, neutral: bool = False, skipped: int | None = None
 ) -> str:
-    alt = " · ".join(f"{_count(values[kind])} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
+    alt = " · ".join(f"{count_text(values[kind])} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
     if not glyph_base:
-        return f"**{alt} · {_count(skipped)} skipped tests**"
+        return f"**{alt} · {count_text(skipped)} skipped tests**"
     return summary_html({**values, "skipped": skipped}, glyph_base, neutral=neutral)
+
+
+def _notice(kind: str, headline: str, *details: str) -> list[str]:
+    """One GitHub alert: the status in bold, then what it means. Every run status is stated this way, once."""
+    lines = [f"> [!{kind}]", f"> **{headline}**"]
+    for detail in details:
+        lines += [">", f"> {detail}"]
+    return [*lines, ""]
+
+
+def _status_notices(
+    test_outcome: str, *, recorded: bool, recorded_failures: int, unavailable: str, unknowable: bool
+) -> list[str]:
+    """
+    What the test step's outcome and the evidence say about the counts, before the counts.
+
+    Each status gets one box, and the first box says once what a ? count means.
+    """
+    unknown = ["A count shown as ? is not known."] if unknowable else []
+    step: list[str] = []
+    if test_outcome == "failure":
+        if recorded_failures:
+            recorded_what = [f"{recorded_failures} failed contract checks recorded."]
+        elif recorded:
+            recorded_what = ["No contract check failed, so the failure is elsewhere in the run."]
+        elif unavailable:
+            recorded_what = []  # The evidence box below says why nothing was read.
+        else:
+            recorded_what = ["No contract check was recorded: the step stopped before any ran."]
+        step = _notice(
+            "CAUTION",
+            "The test step failed.",
+            *recorded_what,
+            *unknown,
+            "Contract counts cover only obligation checks; inspect the run log for other failures.",
+        )
+    elif test_outcome == "cancelled":
+        step = _notice("WARNING", "The test step did not complete.", *unknown)
+    elif test_outcome not in ("success", "skipped") and unknown and not unavailable:
+        step = _notice("WARNING", "The test step's outcome was not reported.", *unknown)
+    # Without a test-step box, the evidence box is the one that explains ?.
+    evidence = (
+        _notice("WARNING", "Evidence unavailable.", unavailable, *([] if step else unknown)) if unavailable else []
+    )
+    return step + evidence
 
 
 def _source_link(suite: SuiteCoverage, repository_url: str, revision: str) -> str:
@@ -281,7 +334,7 @@ def _suite(
     unknowable: bool = False,
 ) -> str:
     values = _known(counts(suite), unknowable)
-    description = " · ".join(f"{_count(values[k])} {LABELS[k].lower()}" for k in METRICS)
+    description = " · ".join(f"{count_text(values[k])} {LABELS[k].lower()}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
     if compact:
         summary = f"<strong>{application_name(suite.name)}</strong> · evidence and decisions"
@@ -356,7 +409,7 @@ def _suite(
         "---",
         "",
         "<details>",
-        f"<summary><strong>🟢 {len(supported)} supported guarantees</strong></summary>",
+        f"<summary><strong>{'🟢' if supported else '⚪'} {len(supported)} supported guarantees</strong></summary>",
         "",
     ]
     for letter, profile in supported:
@@ -481,41 +534,34 @@ def _render(
     totals = report_totals(reports)
     # Discovery widens the application denominator, never the passing evidence.
     totals["applications"] = len(set(reports) | (set(inventory.applications) if inventory else set()))
-    head = [
-        f'<a href="{PROJECT}"><picture><source media="(prefers-color-scheme: dark)" srcset="{banner_assets}/sticky-banner-dark.svg">'
-        f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
-        "",
-    ]
-    if test_outcome == "failure":
-        head = [
-            *([f"### {cell(title, TITLE_LIMIT)}", ""] if title else []),
-            "## 🔴 Test step failed",
-            "",
-            "> [!CAUTION]",
-            "> The reported test step failed. Contract counts cover only obligation checks; inspect the run for other failures.",
-            "",
-            *head,
-        ]
-    elif title:
-        head = [f"### {cell(title, TITLE_LIMIT)}", "", *head]
     skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
     if collected_skips is not None:
         skipped, incomplete = collected_skips, False
+    recorded = _recorded(reports.values())
     missing = bool(inventory and set(inventory.applications) - set(reports))
-    unknowable = running or _unknowable(
-        test_outcome, recorded=_recorded(reports.values()), unavailable=unavailable, missing=missing
-    )
-    head += [
+    unknowable = _unknowable(test_outcome, running=running, recorded=recorded, unavailable=unavailable, missing=missing)
+    shown = _known(totals, unknowable)
+    if _applications_unknown(reports, inventory, unavailable):
+        shown["applications"] = None
+    # Order, top to bottom: the title (the first line tells two lanes' stickies apart; a publisher puts its
+    # workflow notice right after it), this report's status notices, the banner, then the counts.
+    head = [
+        *([f"### {cell(title, TITLE_LIMIT)}", ""] if title else []),
+        *_status_notices(
+            test_outcome,
+            recorded=recorded,
+            recorded_failures=totals["failed"] + totals["rejected"],
+            unavailable=unavailable,
+            unknowable=unknowable and not running,
+        ),
+        f'<a href="{PROJECT}"><picture><source media="(prefers-color-scheme: dark)" srcset="{banner_assets}/sticky-banner-dark.svg">'
+        f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
+        "",
         "### Obligation contract checks",
         "",
         "Other pytest tests and workflow steps are not included in these counts.",
         "",
-        _totals(
-            _known(totals, unknowable),
-            glyph_base,
-            neutral=not reports or bool(unavailable),
-            skipped=None if incomplete else skipped,
-        ),
+        _totals(shown, glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped),
         "",
     ]
     known_failures = known_expected_failures(reports)
@@ -528,16 +574,7 @@ def _render(
         ]
         if test_outcome == "success":
             head += ["**Test step succeeded with known expected failures.**", ""]
-    if test_outcome == "failure":
-        head += [
-            f"**🔴 Test step failed. {totals['failed'] + totals['rejected']} failed contract checks recorded; inspect the run log for other failures.**",
-            "",
-        ]
-    elif test_outcome == "cancelled":
-        head += ["**🟠 Test step did not complete.**", ""]
-    if unavailable:
-        head += ["**🟠 Evidence unavailable.**", unavailable, ""]
-    elif reports and timing:
+    if reports and timing and not unavailable:
         elapsed = next(iter(reports.values())).session_seconds
         times = ([f"{elapsed:.1f}s elapsed"] if elapsed is not None else []) + [
             _time(list(reports.values()), compact=True)
@@ -586,8 +623,9 @@ def _render(
             glyph_base,
             compact=compact,
             timing=timing,
-            unknowable=running
-            or _unknowable(test_outcome, recorded=_recorded([suite]), unavailable=unavailable, missing=False),
+            unknowable=_unknowable(
+                test_outcome, running=running, recorded=_recorded([suite]), unavailable=unavailable, missing=False
+            ),
         )
         # Include disclosure separators and the overflow notice in the budget.
         if len("\n\n".join([*head, *sections, section, *footer])) > MAX_BODY - 300:

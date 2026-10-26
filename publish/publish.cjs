@@ -103,29 +103,47 @@ async function renderSandbox(actionPath, archive, resolved, repositoryUrl, asset
   }
 }
 
-function workflowStatus(resolved, label = 'GitHub workflow') {
+// One GitHub alert, the same shape as the report's own notices: the status in bold, then what it means.
+function notice(kind, headline, ...details) {
+  return [`> [!${kind}]`, `> **${headline}**`, ...details.flatMap(detail => ['>', `> ${detail}`])].join('\n') + '\n\n';
+}
+
+const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
+
+// The renderer's own box for a failed test step. This revision's renderer wrote the Markdown from evidence data,
+// so an artifact can produce this box only by reporting a failure; it can never use it to hide one.
+const STEP_FAILED = /^(### [^\n]*\n\n)?> \[!CAUTION\]\n> \*\*The test step failed\.\*\*\n/;
+
+function workflowStatus(resolved, label = 'GitHub workflow', {stepFailed = false} = {}) {
   const conclusion = CONCLUSIONS.has(resolved.conclusion) ? resolved.conclusion : 'unknown';
   if (conclusion === 'success') return '';
+  // The status is the alert's first line; no heading above it says it again.
+  const headline = label === 'GitHub workflow' ? `GitHub reports: ${conclusion}.` : `${label}: GitHub reports ${conclusion}.`;
   if (RUNNING.has(conclusion)) {
-    // The warning alone says it: a heading above it would repeat "still running".
-    return '> [!WARNING]\n'
-      + `> **GitHub reports: ${conclusion}.**\n>\n`
-      + '> These are the contract counts recorded so far; a count shown as ? is not known until the run finishes.\n\n';
+    return notice('WARNING', headline,
+      'These are the contract counts recorded so far; a count shown as ? is not known until the run finishes.');
   }
-  const failed = ['failure', 'timed_out', 'startup_failure'].includes(conclusion);
-  // API status is always the first visual verdict. Contributor evidence cannot replace this warning.
-  return `## ${failed ? '🔴' : '🟠'} ${label} ${failed ? 'failed' : 'did not succeed'}\n\n`
-    + `> [!${failed ? 'CAUTION' : 'WARNING'}]\n`
-    + `> **GitHub reports: ${conclusion}.**\n>\n`
-    + '> Contract counts below cover only obligation checks. Other tests or workflow steps can fail even with zero contract failures. '
-    + 'Contributor-reported success does not override this workflow status.\n\n';
+  const kind = FAILED.has(conclusion) ? 'CAUTION' : 'WARNING';
+  // The report's failed-step box right below says what the counts cover; saying it twice adds nothing.
+  if (stepFailed) return notice(kind, headline);
+  // API status is always the first verdict. Contributor evidence cannot replace this warning.
+  return notice(kind, headline,
+    'Contract counts below cover only obligation checks. Other tests or workflow steps can fail even with zero contract failures. '
+    + 'Contributor-reported success does not override this workflow status.');
+}
+
+// The report's title, when it has one, stays its first line: that is where two lanes' stickies differ.
+// The renderer escapes a title as text, so a leading level-3 heading can only be the title.
+function afterTitle(markdown, prefix) {
+  const title = /^### [^\n]*\n\n/.exec(markdown);
+  return title ? title[0] + prefix + markdown.slice(title[0].length) : prefix + markdown;
 }
 
 function publishedBody(markdown, resolved, repositoryUrl, {label = 'GitHub workflow', intro = ''} = {}) {
-  const prefix = workflowStatus(resolved, label) + intro;
+  const prefix = workflowStatus(resolved, label, {stepFailed: STEP_FAILED.test(markdown)}) + intro;
   const runLabel = resolved.runAttempt > 1 ? `run ${resolved.runAttempt}` : 'run';
   const footer = `\n\n[${runLabel}](${repositoryUrl}/actions/runs/${resolved.runId}/attempts/${resolved.runAttempt})`;
-  const body = prefix + markdown + footer;
+  const body = afterTitle(markdown, prefix) + footer;
   return body.length <= 55_000 ? body : prefix + UNAVAILABLE + footer;
 }
 
