@@ -81,7 +81,8 @@ def _render(args: argparse.Namespace, evidence: StagedEvidence) -> None:
         repository_url=args.repository_url,
         # The source link is anchored to the API-verified PR head. A producer's revision is only a claim.
         revision=args.head_sha,
-        graphics=manifest.graphics if manifest else False,
+        # Graphics is how the report looks, not what it claims: an unreadable manifest keeps the report's default.
+        graphics=manifest.graphics if manifest else True,
         own_text=args.own_text,
         title=manifest.title if manifest else "",
         running=args.workflow_running,

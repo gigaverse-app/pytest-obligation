@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from pydantic import Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError
 
 from pytest_obligation.models import HarnessModel
 
@@ -38,7 +38,19 @@ TestOutcome = Literal["success", "failure", "cancelled", "skipped", "unknown"]
 
 
 class RenderManifest(HarnessModel):
-    """The render settings that are not evidence files; identity comes from the publisher, not here."""
+    """
+    The render settings that are not evidence files; identity comes from the publisher, not here.
+
+    Read by a publisher that can be an older or newer version than the report step that wrote it (a
+    pull request's report step against the default branch's publisher, for one). So a field this
+    version does not know is dropped, never interpreted: the producer controls every field anyway, so
+    refusing extras protects nothing, while refusing the whole manifest loses the report. A change
+    older publishers must not misread raises ``version`` instead, which they do refuse. A new field
+    is optional, and :func:`stage` leaves it out while it holds its default, so older publishers
+    that still refuse unknown fields read the manifest as before.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     version: Literal[1] = 1
     expected_reports: int = Field(ge=0, le=100_000)
@@ -49,6 +61,10 @@ class RenderManifest(HarnessModel):
     inventory_unavailable: bool = False
     #: The report's lane title; the producer's text, so it is rendered as text and bounded.
     title: str = Field(default="", max_length=120)
+
+
+#: Fields added to version 1 after its first release: written only when set (see :class:`RenderManifest`).
+_OPTIONAL_LATER = frozenset({"title"})
 
 
 @dataclass(frozen=True)
@@ -87,7 +103,8 @@ def stage(
     if inventory is not None:
         (directory / INVENTORY).write_text(inventory.model_dump_json(indent=2), encoding="utf-8")
     (directory / MARKDOWN).write_text(markdown, encoding="utf-8")
-    (directory / MANIFEST).write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    unset = {name for name in _OPTIONAL_LATER if getattr(manifest, name) == RenderManifest.model_fields[name].default}
+    (directory / MANIFEST).write_text(manifest.model_dump_json(indent=2, exclude=unset), encoding="utf-8")
 
 
 def _regular(path: Path) -> bool:
