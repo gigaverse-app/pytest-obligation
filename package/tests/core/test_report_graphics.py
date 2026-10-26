@@ -192,7 +192,7 @@ def test_failed_test_step_precedes_branding_and_preserves_colored_contract_count
     failed = case.model_copy(update={"outcomes": {"setup": ["passed"], "call": ["failed"], "teardown": ["passed"]}})
     suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": case, "broken": failed})
     body = render({"tests.Orders": suite}, graphics=True, test_outcome="failure")
-    assert body.startswith("## 🔴 Test step failed")
+    assert body.startswith("> [!CAUTION]\n> **The test step failed.**")
     assert 'alt="1 contract failures"' in body
     assert 'alt="1 contract checks passed"' in body
     assert "/good-1-" in body and "/bad-1-" in body
@@ -274,7 +274,7 @@ def test_the_title_names_the_report_as_text() -> None:
     assert failed.startswith("### ")
     first = failed.splitlines()[0]
     assert "<img" not in first and "**Celery**" not in first
-    assert failed.splitlines()[2] == "## 🔴 Test step failed"
+    assert failed.splitlines()[2:4] == ["> [!CAUTION]", "> **The test step failed.**"]
 
 
 def test_a_workflow_still_running_shows_its_passes_and_no_final_zero() -> None:

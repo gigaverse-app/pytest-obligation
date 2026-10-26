@@ -231,6 +231,10 @@ def test_an_unreadable_manifest_keeps_the_report_graphics(tmp_path: Path) -> Non
     body = _republish(tmp_path / "artifact", tmp_path / "republished.md")
     assert "no valid render manifest" in body
     assert "report-glyphs/" in body
+    # One box gives the one reason. Nothing is read, so nothing is "shown below" and no application count is known.
+    assert body.count("> [!") == 1
+    assert "found 0" not in body and "shown below" not in body
+    assert "Applications: **unknown**" in body and "No application contract checks ran" not in body
 
 
 def test_staged_evidence_is_read_from_fixed_names_only(tmp_path: Path) -> None:

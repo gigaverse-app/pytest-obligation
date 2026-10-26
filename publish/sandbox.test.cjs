@@ -58,8 +58,7 @@ test('preview downloads real producer evidence, renders in Docker and updates on
   assert.equal(f.state.comments.length, 1);
   const body = f.state.comments[0].body;
   assert.match(body, /1 contract checks passed/);
-  assert.match(body, /^## 🔴 Fork workflow failed/);
-  assert.match(body, /\[!CAUTION\]/);
+  assert.ok(body.startsWith('> [!CAUTION]\n> **Fork workflow: GitHub reports failure.**'));
   assert.match(body, /\/good-1-/);
   assert.match(body, /### Obligation contract checks/);
   assert.match(body, /Test step \(reported\): \*\*success\*\*/);

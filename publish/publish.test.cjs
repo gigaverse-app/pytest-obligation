@@ -50,8 +50,8 @@ test('a changed archive is discarded', async t => {
 
 test('workflow failure from the API stays visible above producer success claims', () => {
   const body = publishedBody('Test step (reported): **success**', {conclusion: 'failure', runId: 7, runAttempt: 2}, 'https://github.com/owner/project');
-  assert.match(body, /^## 🔴 GitHub workflow failed/);
-  assert.match(body, /> \[!CAUTION\]/);
+  assert.ok(body.startsWith('> [!CAUTION]\n> **GitHub reports: failure.**'));
+  assert.doesNotMatch(body, /^## /m, 'the alert states the status; no heading repeats it');
   assert.match(body, /Other tests or workflow steps can fail/);
   assert.match(body, /attempts\/2/);
 });
@@ -95,10 +95,39 @@ for (const conclusion of ['timed_out', 'startup_failure', 'cancelled', 'neutral'
   test(`${conclusion} cannot be presented as a successful workflow`, () => {
     const body = publishedBody('Test step (reported): **success**', {conclusion, runId:7, runAttempt:1}, 'https://github.com/owner/project');
     const failed = ['timed_out', 'startup_failure'].includes(conclusion);
-    assert.ok(body.startsWith(failed ? '## 🔴 GitHub workflow failed' : '## 🟠 GitHub workflow did not succeed'));
-    assert.match(body, new RegExp(`GitHub reports: ${conclusion}`));
+    assert.ok(body.startsWith(`> [!${failed ? 'CAUTION' : 'WARNING'}]\n> **GitHub reports: ${conclusion}.**`));
+    assert.doesNotMatch(body, /^## /m);
   });
 }
+
+test('a titled report keeps its title first, with the workflow status right below it', () => {
+  const report = '### Celery main\n\n> [!CAUTION]\n> **The test step failed.**\n\nThe counts';
+  const body = publishedBody(report, {conclusion:'failure', runId:7, runAttempt:1}, 'https://github.com/owner/project');
+  const lines = body.split('\n');
+  assert.equal(lines[0], '### Celery main');
+  assert.deepEqual(lines.slice(2, 4), ['> [!CAUTION]', '> **GitHub reports: failure.**']);
+  assert.ok(body.indexOf('GitHub reports: failure') < body.indexOf('The test step failed'));
+});
+
+test('a failed workflow over a failed test step states the caveat once, in the report box', () => {
+  for (const report of ['> [!CAUTION]\n> **The test step failed.**\n>\n> Contract counts cover only obligation checks.\n\nThe counts',
+    '### Celery main\n\n> [!CAUTION]\n> **The test step failed.**\n>\n> Contract counts cover only obligation checks.\n\nThe counts']) {
+    const body = publishedBody(report, {conclusion:'failure', runId:7, runAttempt:1}, 'https://github.com/owner/project');
+    assert.match(body, /> \*\*GitHub reports: failure\.\*\*\n\n> \[!CAUTION\]\n> \*\*The test step failed\.\*\*/);
+    assert.equal(body.match(/cover only obligation checks/g).length, 1);
+  }
+  // A report that claims success, or mentions the box anywhere but its top, keeps the full workflow caveat.
+  for (const report of ['Test step (reported): **success**', 'The counts\n\n> [!CAUTION]\n> **The test step failed.**\n']) {
+    const body = publishedBody(report, {conclusion:'failure', runId:7, runAttempt:1}, 'https://github.com/owner/project');
+    assert.match(body, /Contributor-reported success does not override/);
+  }
+});
+
+test('a report without a title gets the workflow status first', () => {
+  const body = publishedBody('The counts', {conclusion:'in_progress', runId:7, runAttempt:1}, 'https://github.com/owner/project');
+  assert.ok(body.startsWith('> [!WARNING]\n> **GitHub reports: in_progress.**'));
+  assert.match(body, /\n\nThe counts\n\n\[run\]/);
+});
 
 test('only a PR from a branch of this repository renders its contract text live', () => {
   const resolved = {headSha:'f'.repeat(40), runId:200, runAttempt:2};

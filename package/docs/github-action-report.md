@@ -34,6 +34,14 @@ keeps its zeroes. A sticky the publish action posts while the source workflow is
 running opens with a warning that GitHub reports it in progress, and shows every zero as `?`. Publish again on
 `workflow_run: completed` (as `obligation-sticky.yml` does here) to replace it with the final report.
 
+Each status is one GitHub alert box above the counts, never a heading as well: the
+workflow status from the API (publish action only), then the test step's outcome
+(failed, did not complete, or not reported), then **Evidence unavailable** with its
+reason. The first box that applies says what `?` means. A lane's `title` stays the
+first line, above the boxes. A report from which no application can be read shows
+its application count as `?` too, and an application with no supported guarantee
+shows `⚪ 0`, not a green zero.
+
 The header counts applications and passing contract checks on the left, with contract
 failures, blocked checks, coverage gaps and rejected bindings after a divider.
 Application names use the full available width and wrap when needed. Their colored
@@ -624,7 +632,7 @@ Contents read and Metadata read permissions.
   produced **30 passing contract checks, 4 failing contract checks and 0 rejected
   bindings**. The binding passes the ownership guard, but its deriver never discovers
   owed work. A separate ordinary pytest test also fails, so pytest reports 5 failures
-  while the contract report correctly counts 4. The same comment now starts with
+  while the contract report correctly counts 4. The same comment then started with
   **Fork workflow failed**, followed by green passing counts, red contract failures
   and an amber `?` for the unknown skipped count. The graphical captions explicitly
   say **Contract checks passed** and **Contract failures**. This was checked in
