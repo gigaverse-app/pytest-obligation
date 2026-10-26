@@ -3,6 +3,7 @@
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -308,8 +309,53 @@ def test_report_accepts_prior_version_without_optional_failure_metadata() -> Non
 
 def test_failed_test_step_remains_red_when_no_contract_failure_was_recorded() -> None:
     body = render({}, test_outcome="failure")
-    assert "🔴 Test step failed" in body
-    assert "0 failed contract checks recorded" in body
+    assert body.startswith("> [!CAUTION]\n> **The test step failed.**")
+    assert "No contract check was recorded" in body
+    # Said once, at the top: no second "Test step failed" line below the counts.
+    assert body.lower().count("test step failed") == 1
+
+
+@pytest.mark.parametrize(
+    ("test_outcome", "unavailable", "boxes"),
+    [
+        ("failure", "", ["CAUTION"]),
+        ("cancelled", "", ["WARNING"]),
+        ("unknown", "", ["WARNING"]),
+        ("failure", "Expected 2 reports; found 0.", ["CAUTION", "WARNING"]),
+        ("unknown", "Expected 2 reports; found 0.", ["WARNING"]),
+    ],
+)
+def test_every_status_with_unknown_counts_says_once_what_a_question_mark_means(
+    test_outcome: str, unavailable: str, boxes: list[str]
+) -> None:
+    body = render({}, test_outcome=test_outcome, unavailable=unavailable)
+    assert re.findall(r"^> \[!(\w+)\]$", body, flags=re.M) == boxes
+    assert body.count("A count shown as ? is not known.") == 1
+    assert "0 contract checks passed" not in body
+    if unavailable:
+        # The evidence box says why nothing was read; the failure box does not guess at it.
+        assert "No contract check was recorded" not in body
+
+
+def test_an_outcome_that_was_not_reported_needs_no_box_when_the_evidence_is_complete() -> None:
+    body = render(
+        {
+            "a": SuiteCoverage(
+                name="orders",
+                profiles={},
+                additional_cases={
+                    "c": CaseEvidence(family="derive", collected=True, selected=True, outcomes={"call": ["passed"]})
+                },
+            )
+        },
+        test_outcome="unknown",
+    )
+    assert "> [!" not in body
+
+
+def test_zero_supported_guarantees_are_not_green() -> None:
+    body = render({"a": SuiteCoverage(name="orders", profiles={})}, test_outcome="failure")
+    assert "⚪ 0 supported guarantees" in body and "🟢 0" not in body
 
 
 def test_broken_optional_diagnostics_preserve_the_original_failure_category() -> None:

@@ -38,6 +38,16 @@ def _number(base: str, value: int, color: str, width: int, height: int, label: s
     )
 
 
+def count_text(value: int | None) -> str:
+    """A count as text: unknown reads ``?``, never ``0``."""
+    return "?" if value is None else str(value)
+
+
+def _unknown(base: str, width: int, height: int, label: str) -> str:
+    """The amber question mark: a count that is not known, at the size of the digits beside it."""
+    return _picture(base, "warning-unknown", width, height, f"{label}: unknown")
+
+
 def _color(kind: str, value: int) -> str:
     if kind == "applications":
         return "neutral"
@@ -61,14 +71,14 @@ def summary_html(values: Mapping[str, int | None], base: str, *, neutral: bool =
         value = values[key]
         if value is None:
             parts += [
-                _picture(base, "warning-unknown", 18, 36, f"{label}: unknown"),
+                _unknown(base, 18, 36, label),
                 _space(base, positions[i + 1] - positions[i] - 18),
             ]
             continue
         available = positions[i + 1] - positions[i] - (13 if i == 1 else 0)
         width = min(18, available // len(str(value)))
         if width < 1:
-            return escape(" · ".join(f"{values[k]} {label}" for k, label in zip(keys, labels, strict=True)))
+            return escape(" · ".join(f"{count_text(values[k])} {label}" for k, label in zip(keys, labels, strict=True)))
         parts.append(
             _number(
                 base,
@@ -100,27 +110,19 @@ def application_html(name: str, values: Mapping[str, int | None], base: str) -> 
     parts = []
     for i, key in enumerate(METRICS):
         value = values[key]
-        if value is None:
-            # Unknown, not zero: the same amber question mark as the headline, at the row's digit size.
-            parts += [
-                _picture(base, "warning-unknown", 8, 16, f"{key}: unknown"),
-                _picture(base, f"label-{key}", label_widths[i], 18),
-                _space(base, columns[i] - 8 - label_widths[i], 18),
-            ]
-            if i == 0:
-                parts += [_picture(base, "divider", 1, 22), _space(base, 12, 18)]
-            continue
-        width = min(8, (columns[i] - label_widths[i]) // len(str(value)))
+        digits = len(count_text(value))
+        width = 8 if value is None else min(8, (columns[i] - label_widths[i]) // digits)
         if width < 1:
-            return (
-                native_name
-                + " · "
-                + escape(" · ".join(f"{'?' if values[k] is None else values[k]} {k}" for k in METRICS))
-            )
+            return native_name + " · " + escape(" · ".join(f"{count_text(values[k])} {k}" for k in METRICS))
+        number = (
+            _unknown(base, width, width * 2, key)
+            if value is None
+            else _number(base, value, _color(key, value), width, width * 2, key)
+        )
         parts += [
-            _number(base, value, _color(key, value), width, width * 2, key),
+            number,
             _picture(base, f"label-{key}", label_widths[i], 18),
-            _space(base, columns[i] - len(str(value)) * width - label_widths[i], 18),
+            _space(base, columns[i] - digits * width - label_widths[i], 18),
         ]
         if i == 0:
             parts += [_picture(base, "divider", 1, 22), _space(base, 12, 18)]

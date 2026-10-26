@@ -42,8 +42,12 @@ def merge_evidence(
     reports: dict[str, SuiteCoverage] = {}
     problems = list(problems)
     skipped = test_outcome == "skipped" and expected_reports == 0
-    if (not paths and not skipped) or (expected_reports and len(paths) != expected_reports):
-        problems.append(f"Expected {expected_reports or 'at least one'} report(s); found {len(paths)}.")
+    # A problem already given (an unreadable manifest, say) explains an empty artifact; "found 0" adds nothing.
+    if (not paths and not skipped and not problems) or (expected_reports and len(paths) != expected_reports):
+        wanted = (
+            f"{expected_reports} report{'s' * (expected_reports != 1)}" if expected_reports else "at least one report"
+        )
+        problems.append(f"Expected {wanted}; found {len(paths)}.")
     for path in paths:
         try:
             if path.stat().st_size > 10_000_000:
@@ -97,7 +101,9 @@ def merge_evidence(
             except (OSError, ParseError, DefusedXmlException):
                 unavailable = "JUnit evidence could not be read; skipped-test count is unknown."
     if unavailable:
-        unavailable += " Check the JSON artifacts and pytest logs; available evidence is shown below."
+        unavailable += " Check the JSON artifacts and pytest logs" + (
+            "; available evidence is shown below." if reports else "."
+        )
     return Evidence(reports=reports, unavailable=unavailable, collected_skips=collected_skips)
 
 
