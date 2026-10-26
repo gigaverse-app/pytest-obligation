@@ -100,12 +100,12 @@ assert_test_binding_delegates_to_production(adopter='orders', field='select',
             assert "Run the missing" in body
             omitted = sum(not c.selected for group in suite.case_groups() for c in group.values())
             assert omitted > 0
-            assert f"Checks skipped: **{omitted} known**" in body
+            assert f"Checks skipped: **{omitted}**." in body
         elif mode == "skipped":
             assert result.ret == pytest.ExitCode.OK
             omitted = sum("skipped" in c.outcomes.get("setup", []) for c in executed)
             assert omitted > 0
-            assert f"Checks skipped: **{omitted} known**" in body
+            assert f"Checks skipped: **{omitted}**." in body
         elif mode == "binding":
             if expected_binding_failure:
                 assert result.ret == pytest.ExitCode.OK

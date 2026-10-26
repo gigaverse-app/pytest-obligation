@@ -24,13 +24,18 @@ it can contain both passing and failing contracts. For example, 17 green contrac
 checks and zero contract failures can coexist with a red workflow because an ordinary
 pytest test failed. Missing evidence is marked unavailable and never gets green zeroes.
 
-A zero is shown only when the run earned it. When the test step failed, was cancelled
-or reported no outcome (it may still be running), and nothing was recorded, evidence is
-unavailable, an application has no report or the run was cancelled, each zero count is
-an amber `?` instead, in the totals and in each application's row: a collection error
-that stopped every check proves nothing about failures. Non-zero counts are what was
-recorded and stay. A step that succeeded, or was skipped because nothing was selected,
-keeps its zeroes. A sticky the publish action posts while the source workflow is still
+Every count follows one rule: it is what the evidence holds, and an amber `?` replaces
+it only where the evidence cannot settle it. A zero is a result only once the run has
+earned it. While the workflow is still running, when a report is missing or unreadable,
+when the test step was cancelled, and when it failed or reported no outcome before
+recording anything (or with a declared application unreported), each zero is `?`, in the
+totals and in each application's row: a collection error that stopped every check proves
+nothing about failures. Non-zero counts are what was recorded and stay. A step that
+succeeded, or was skipped because nothing was selected, keeps its zeroes. The skipped-tests
+count follows the same rule, and is also `?` when it is only a lower bound: a declared
+application has no report, or JUnit was requested and could not classify the run's tests.
+The line under the counts then gives the known number and the reason. Without an
+inventory, every count, skips included, covers the reported applications. A sticky the publish action posts while the source workflow is still
 running opens with a warning that GitHub reports it in progress, and shows every zero as `?`. Publish again on
 `workflow_run: completed` (as `obligation-sticky.yml` does here) to replace it with the final report.
 
@@ -194,8 +199,8 @@ list uncollected applications.
 
 The graphical summary counts the union of discovered and reported applications,
 even when none ran. Its **Skipped tests** counter uses known deselections and
-explicit pytest skips. It shows an amber **?** when uncollected applications or incomplete
-reports prevent an exact total. Application lists and skip explanations stay
+explicit pytest skips, by the counting rule above: **?** only when declared
+applications have no report or JUnit could not settle the total. Application lists and skip explanations stay
 collapsed; zero recorded checks use neutral colors when no execution was reported.
 
 ### Exact skipped-test counts without executing tests
@@ -265,6 +270,8 @@ results. Tests absent from completed admitted sessions, deselections and explici
 pytest skips count as skipped; executed failures remain failures. Repeated XML
 reports cannot double-count tests. Missing/invalid evidence, stale inventory or an
 interrupted run retains **?**, rather than misclassifying lost execution as a skip.
+A JUnit problem concerns only this count: the contract counts stay, and no
+**Evidence unavailable** notice is shown for it.
 No historical pass is substituted for current execution. The same CLI is available
 as `python -m pytest_obligation.reporting.collect`; the report CLI accepts
 `--inventory`, `--collection-revision` and `--junit-input`. Install the `report` extra
