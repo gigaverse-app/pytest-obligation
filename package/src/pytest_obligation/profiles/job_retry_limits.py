@@ -342,7 +342,15 @@ class ClassifiedFailure(RetryLifecycle):
     #: just short of ``provider_wait``.
     advance_by: Callable[[Any, timedelta], Any] | None = None
 
+    #: OBSERVE: opt in to the non-failure wait guarantee. The shared history
+    #: repeats waits and requires this persisted budget to remain unchanged.
+    preserved_failure_budget: Callable[[Any], int] | None = None
+
     def model_post_init(self, _context: Any) -> None:
+        if self.preserved_failure_budget is not None and (
+            self.classification is not FailureClass.RETRYABLE or not self.waits
+        ):
+            raise ValueError("a preserved failure budget requires paced retryable waiting")
         if (self.product_outcome is None) != (self.expected_product_outcome is None):
             raise ValueError(
                 "ClassifiedFailure binds product_outcome and expected_product_outcome together: "
@@ -377,8 +385,13 @@ def _assert_product_outcome(failure: ClassifiedFailure, operation: Any, *, after
 def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
     """One execution of the named outcome receives its declared classification, visibly and stably."""
     operation, attempts = _fresh_failing(failure)
+    budget = failure.preserved_failure_budget(operation) if failure.preserved_failure_budget is not None else None
     failure.run_once(operation)
     attempts = _assert_one_failure_attempt(failure, operation, before=attempts, execution=1)
+    if failure.preserved_failure_budget is not None:
+        assert failure.preserved_failure_budget(operation) == budget, (
+            f"{failure.name}: provider waiting spent the failure budget"
+        )
 
     if failure.classification is FailureClass.RETRYABLE:
         assert not failure.is_terminal(operation), (
@@ -394,6 +407,21 @@ def assert_failure_takes_its_declared_class(failure: ClassifiedFailure) -> None:
         if failure.provider_wait is not None and failure.advance_by is not None:
             assert_provider_wait_is_honored(failure, operation)
         _advance_after_failure(failure, operation, attempts=attempts, execution=1)
+        if failure.preserved_failure_budget is not None:
+            for execution in range(1, PERSISTENT_EXECUTIONS + 1):
+                assert failure.preserved_failure_budget(operation) == budget, (
+                    f"{failure.name}: provider waiting spent the failure budget"
+                )
+                assert not failure.is_terminal(operation), f"{failure.name}: provider waiting exhausted the operation"
+                if execution == PERSISTENT_EXECUTIONS:
+                    break
+                failure.run_once(operation)
+                attempts = _assert_one_failure_attempt(failure, operation, before=attempts, execution=execution + 1)
+                assert failure.preserved_failure_budget(operation) == budget, (
+                    f"{failure.name}: provider waiting spent the failure budget"
+                )
+                assert not _is_due(failure, operation), f"{failure.name}: provider waiting created a hot loop"
+                _advance_after_failure(failure, operation, attempts=attempts, execution=execution + 1)
         return
 
     assert failure.is_terminal(operation), (
