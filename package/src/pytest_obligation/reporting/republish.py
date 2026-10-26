@@ -78,6 +78,7 @@ def _render(args: argparse.Namespace, evidence: StagedEvidence) -> None:
         revision=args.head_sha,
         graphics=manifest.graphics if manifest else False,
         own_text=args.own_text,
+        title=manifest.title if manifest else "",
     )
     write_report(args.output, body, evidence.inventory)
 

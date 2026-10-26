@@ -53,6 +53,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         default="",
         help="Source line for the document's copy, which leaves out run-specific times and links",
     )
+    parser.add_argument(
+        "--title", default="", help="Names this lane or session in its report, so two reports can be told apart"
+    )
     parser.add_argument("--badge", type=Path, help="shields.io endpoint JSON to write with the report's headline")
     parser.add_argument(
         "--own-text",
@@ -106,6 +109,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             graphics=args.graphics,
             timing=timing,
             own_text=args.own_text,
+            title=args.title,
         )
 
     body = rendered(run_url=args.run_url, source=args.source, revision=args.revision)
@@ -130,6 +134,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             revision=args.revision if re.fullmatch(r"[0-9a-fA-F]{40}", args.revision) else "",
             junit=junit is not None,
             inventory_unavailable=inventory_unavailable,
+            title=args.title[:120],
         )
         stage(args.stage_artifact, manifest, reports=paths, junit=junit or [], inventory=inventory, markdown=body)
 

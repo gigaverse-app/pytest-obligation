@@ -2,6 +2,7 @@
 
 import re
 from collections import Counter
+from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
 from pathlib import PurePosixPath
 from urllib.parse import quote, urlparse
@@ -162,10 +163,45 @@ def _priority(item: tuple[str, SuiteCoverage]) -> tuple[int, int, str]:
     return 4, 0, item[0]
 
 
-def _totals(values: dict[str, int], glyph_base: str, *, neutral: bool = False, skipped: int | None = None) -> str:
-    alt = " · ".join(f"{values[kind]} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
+#: A lane title is a name, not a paragraph.
+TITLE_LIMIT = 120
+
+
+def _recorded(suites: Iterable[SuiteCoverage]) -> bool:
+    return any(case.outcomes for suite in suites for case in all_cases(suite).values())
+
+
+def _unknowable(test_outcome: str, *, recorded: bool, unavailable: str, missing: bool) -> bool:
+    """
+    Whether a zero count proves nothing, so it reads as unknown.
+
+    A test step that succeeded recorded what ran, and one that was skipped ran
+    nothing on purpose. One that failed, was cancelled or reported no outcome
+    (it may still be running) may have stopped before a check ran, so its zeros
+    are unknown when nothing was recorded, evidence is unavailable, an
+    application has no report or the run was cancelled. Non-zero counts are what
+    was recorded, and stay.
+    """
+    if test_outcome in ("success", "skipped"):
+        return False
+    return test_outcome == "cancelled" or not recorded or bool(unavailable) or missing
+
+
+def _known(values: Mapping[str, int], unknowable: bool) -> dict[str, int | None]:
+    """The counts as shown: under :func:`_unknowable`, a zero category is unknown, not zero."""
+    return {kind: None if unknowable and kind in METRICS and value == 0 else value for kind, value in values.items()}
+
+
+def _count(value: int | None) -> str:
+    return "?" if value is None else str(value)
+
+
+def _totals(
+    values: Mapping[str, int | None], glyph_base: str, *, neutral: bool = False, skipped: int | None = None
+) -> str:
+    alt = " · ".join(f"{_count(values[kind])} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
     if not glyph_base:
-        return f"**{alt} · {skipped if skipped is not None else '?'} skipped tests**"
+        return f"**{alt} · {_count(skipped)} skipped tests**"
     return summary_html({**values, "skipped": skipped}, glyph_base, neutral=neutral)
 
 
@@ -242,9 +278,10 @@ def _suite(
     *,
     compact: bool = False,
     timing: bool = True,
+    unknowable: bool = False,
 ) -> str:
-    values = counts(suite)
-    description = " · ".join(f"{values[k]} {LABELS[k].lower()}" for k in METRICS)
+    values = _known(counts(suite), unknowable)
+    description = " · ".join(f"{_count(values[k])} {LABELS[k].lower()}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
     if compact:
         summary = f"<strong>{application_name(suite.name)}</strong> · evidence and decisions"
@@ -392,9 +429,11 @@ def render(
     collected_skips: int | None = None,
     timing: bool = True,
     own_text: bool = False,
+    title: str = "",
 ) -> str:
     """
-    The report's Markdown. ``timing=False`` leaves out elapsed and summed check times, so a copy kept
+    The report's Markdown. ``title`` names the lane or session, so two reports on one pull request can be
+    told apart; it is shown as text, never as Markdown. ``timing=False`` leaves out elapsed and summed check times, so a copy kept
     in a document (see :mod:`pytest_obligation.reporting.readme`) changes only when the evidence does.
     ``own_text=True`` keeps the application's mentions, issue references and links live: only for
     contracts that are the repository's own code (see :func:`~.evidence.rendering_own_text`).
@@ -413,6 +452,7 @@ def render(
             inventory=inventory,
             collected_skips=collected_skips,
             timing=timing,
+            title=title,
         )
 
 
@@ -430,6 +470,7 @@ def _render(
     inventory: ApplicationInventory | None,
     collected_skips: int | None,
     timing: bool,
+    title: str,
 ) -> str:
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
@@ -444,6 +485,7 @@ def _render(
     ]
     if test_outcome == "failure":
         head = [
+            *([f"### {cell(title, TITLE_LIMIT)}", ""] if title else []),
             "## 🔴 Test step failed",
             "",
             "> [!CAUTION]",
@@ -451,16 +493,25 @@ def _render(
             "",
             *head,
         ]
+    elif title:
+        head = [f"### {cell(title, TITLE_LIMIT)}", "", *head]
     skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
     if collected_skips is not None:
         skipped, incomplete = collected_skips, False
+    missing = bool(inventory and set(inventory.applications) - set(reports))
+    unknowable = _unknowable(
+        test_outcome, recorded=_recorded(reports.values()), unavailable=unavailable, missing=missing
+    )
     head += [
         "### Obligation contract checks",
         "",
         "Other pytest tests and workflow steps are not included in these counts.",
         "",
         _totals(
-            dict(totals), glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped
+            _known(totals, unknowable),
+            glyph_base,
+            neutral=not reports or bool(unavailable),
+            skipped=None if incomplete else skipped,
         ),
         "",
     ]
@@ -524,7 +575,16 @@ def _render(
     ]
     sections = []
     for key, suite in sorted(reports.items(), key=_priority):
-        section = _suite(key, suite, repository_url, revision, glyph_base, compact=compact, timing=timing)
+        section = _suite(
+            key,
+            suite,
+            repository_url,
+            revision,
+            glyph_base,
+            compact=compact,
+            timing=timing,
+            unknowable=_unknowable(test_outcome, recorded=_recorded([suite]), unavailable=unavailable, missing=False),
+        )
         # Include disclosure separators and the overflow notice in the budget.
         if len("\n\n".join([*head, *sections, section, *footer])) > MAX_BODY - 300:
             sections.append(

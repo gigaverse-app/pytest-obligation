@@ -24,6 +24,14 @@ it can contain both passing and failing contracts. For example, 17 green contrac
 checks and zero contract failures can coexist with a red workflow because an ordinary
 pytest test failed. Missing evidence is marked unavailable and never gets green zeroes.
 
+A zero is shown only when the run earned it. When the test step failed, was cancelled
+or reported no outcome (it may still be running), and nothing was recorded, evidence is
+unavailable, an application has no report or the run was cancelled, each zero count is
+an amber `?` instead, in the totals and in each application's row: a collection error
+that stopped every check proves nothing about failures. Non-zero counts are what was
+recorded and stay. A step that succeeded, or was skipped because nothing was selected,
+keeps its zeroes.
+
 The header counts applications and passing contract checks on the left, with contract
 failures, blocked checks, coverage gaps and rejected bindings after a divider.
 Application names use the full available width and wrap when needed. Their colored
@@ -303,7 +311,9 @@ application or alter its environment. Pin the action to a reviewed commit for
 production. The action is available on `main`. A release pin must contain `report/action.yml`;
 older releases without that path cannot provide this action.
 
-Use a stable, distinct `sticky-key` for each independently reported test lane.
+Use a stable, distinct `sticky-key` for each independently reported test lane, and give
+each lane a `title` (for example `Celery main` and `This fork`): it is shown at the top of
+the lane's comment, so two stickies on one pull request can be told apart.
 For a sharded lane, upload each session's JSON with a unique filename, download
 only this run's artifacts into a clean directory, then publish once:
 

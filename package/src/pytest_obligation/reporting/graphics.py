@@ -93,16 +93,30 @@ def application_name(name: str) -> str:
     return "&#8203;".join(cell(clean[start : start + 24]) for start in range(0, len(clean), 24))
 
 
-def application_html(name: str, values: dict[str, int], base: str) -> str:
+def application_html(name: str, values: Mapping[str, int | None], base: str) -> str:
     native_name = f"<strong>{application_name(name)}</strong>"
     label_widths = (37, 33, 44, 27, 48)
     columns = (82, 81, 88, 74, 90)
     parts = []
     for i, key in enumerate(METRICS):
         value = values[key]
+        if value is None:
+            # Unknown, not zero: the same amber question mark as the headline, at the row's digit size.
+            parts += [
+                _picture(base, "warning-unknown", 8, 16, f"{key}: unknown"),
+                _picture(base, f"label-{key}", label_widths[i], 18),
+                _space(base, columns[i] - 8 - label_widths[i], 18),
+            ]
+            if i == 0:
+                parts += [_picture(base, "divider", 1, 22), _space(base, 12, 18)]
+            continue
         width = min(8, (columns[i] - label_widths[i]) // len(str(value)))
         if width < 1:
-            return native_name + " · " + escape(" · ".join(f"{values[k]} {k}" for k in METRICS))
+            return (
+                native_name
+                + " · "
+                + escape(" · ".join(f"{'?' if values[k] is None else values[k]} {k}" for k in METRICS))
+            )
         parts += [
             _number(base, value, _color(key, value), width, width * 2, key),
             _picture(base, f"label-{key}", label_widths[i], 18),
