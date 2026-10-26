@@ -5,6 +5,7 @@ from typing import Any
 
 import redis
 from celery import Celery
+from celery.result import AsyncResult
 
 from tests.redis_databases import redis_url
 
@@ -57,3 +58,43 @@ def send_message_once(message: str) -> str:
     if RECORDS.set(f"key:{message}", 1, nx=True):
         RECORDS.rpush("sent", message)
     return message
+
+
+@app.task(ignore_result=True)
+def send_and_forget(message: str) -> None:
+    """Keeps no result, so a lost delivery leaves nothing Celery recorded, only what the message did."""
+    RECORDS.rpush("sent", message)
+
+
+@app.task
+def deliver_owed(message: str) -> None:
+    """Sends a message the application owes, then settles what it owes."""
+    # EXTERNAL SEAM: the message leaves for the customer.
+    RECORDS.rpush("sent", message)
+    RECORDS.srem("owed", message)
+
+
+def owe(message: str) -> AsyncResult:
+    """REAL PRODUCTION: the application records what it owes, then sends the task that pays it."""
+    RECORDS.sadd("owed", message)
+    return deliver_owed.delay(message)
+
+
+def sweep_owed() -> None:
+    """REAL PRODUCTION: the application's recovery sweep sends again whatever it still owes."""
+    for message in RECORDS.smembers("owed"):
+        deliver_owed.delay(message)
+
+
+#: Where send_to_outbox writes; the worker's setup moves it, as a test double would replace a provider.
+OUTBOX = ["production outbox"]
+
+
+@app.task
+def send_to_outbox(message: str) -> None:
+    RECORDS.rpush(OUTBOX[0], message)
+
+
+def use_test_outbox() -> None:
+    """ARRANGE, in the worker: send_to_outbox writes to the test outbox instead."""
+    OUTBOX[0] = "test outbox"
