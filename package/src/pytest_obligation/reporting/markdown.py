@@ -4,6 +4,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from urllib.parse import quote, urlparse
 
@@ -23,33 +24,25 @@ from .evidence import (
 from .evidence import (
     MAX_BODY as MAX_BODY,
 )
-from .graphics import application_html, application_name, count_text, summary_html
+from .graphics import LABELS, METRICS, application_html, application_name, count_text, summary_html
 from .inventory import ApplicationInventory
 
 
-def _skipped_checks(
-    reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
-) -> tuple[int, bool]:
-    declared = inventory.applications if inventory else {}
-    cases = [case for suite in reports.values() for case in all_cases(suite).values()]
-    # Count only known checks with explicit non-execution evidence. Interrupted
-    # selected checks and expected failures must not masquerade as skips.
-    skipped = sum(
+def _skips_recorded(reports: Mapping[str, SuiteCoverage]) -> int:
+    """Checks the reports show were not run on purpose: deselected, uncollected or skipped by pytest."""
+    # Interrupted selected checks and expected failures must not masquerade as skips.
+    return sum(
         not case.outcomes
         and (not case.collected or not case.selected)
         or case_status(case) == "Test skipped or incomplete"
         and any("skipped" in outcomes for outcomes in case.outcomes.values())
-        for case in cases
+        for suite in reports.values()
+        for case in all_cases(suite).values()
     )
-    incomplete = bool(unavailable or set(declared) - set(reports) or inventory is None)
-    return skipped, incomplete
 
 
 def _execution_summary(
-    reports: dict[str, SuiteCoverage],
-    inventory: ApplicationInventory | None,
-    unavailable: str,
-    collected_skips: int | None = None,
+    reports: dict[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str, shown: "Headline"
 ) -> list[str]:
     declared = inventory.applications if inventory else {}
     applications = set(declared) | set(reports)
@@ -57,28 +50,18 @@ def _execution_summary(
     absent = applications - observed
     unknown = absent if unavailable else set()
     not_run = absent - unknown
-    skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
-    if collected_skips is not None:
-        skipped, incomplete = collected_skips, False
-    skip_count = f"**{skipped} known**" if skipped and incomplete else "**unknown**" if incomplete else f"**{skipped}**"
-    nothing_known = _applications_unknown(reports, inventory, unavailable)
     lines = [
         "<details>",
         "<summary>Application inventory and skipped tests</summary>",
         "",
-        "Applications: **unknown**; no report or inventory could be read."
-        if nothing_known
+        "Applications: **unknown**; no report or inventory names one."
+        if shown.values["applications"] is None
         else f"**{len(observed)}** applications with results · **{len(not_run)}** applications not run"
         + (f" · **{len(unknown)}** unknown" if unknown else ""),
-        f"Checks skipped: {skip_count}."
-        + (
-            " Uncollected applications have no measured test count."
-            if incomplete and set(declared) - set(reports)
-            else ""
-        ),
+        f"Checks skipped: {_skips_text(shown)}",
         "",
     ]
-    if not reports and not nothing_known:
+    if not reports and shown.values["applications"] is not None:
         lines += ["No application contract checks ran.", ""]
     if absent or inventory is None or inventory.limitations:
         used = 0
@@ -97,17 +80,6 @@ def _execution_summary(
             lines += ["", *[cell(limitation) for limitation in inventory.limitations[:10]]]
     lines += ["", "</details>", ""]
     return lines
-
-
-METRICS = ("passed", "failed", "blocked", "gaps", "rejected")
-LABELS = {
-    "applications": "Applications",
-    "passed": "Contract checks passed",
-    "failed": "Contract failures",
-    "blocked": "Blocked checks",
-    "gaps": "Coverage gaps",
-    "rejected": "Rejected bindings",
-}
 
 
 def has_gap(profile: ProfileCoverage) -> bool:
@@ -141,7 +113,7 @@ def counts(suite: SuiteCoverage) -> dict[str, int]:
     return result
 
 
-def report_totals(reports: dict[str, SuiteCoverage]) -> Counter[str]:
+def report_totals(reports: Mapping[str, SuiteCoverage]) -> Counter[str]:
     """Each category's checks summed over every reported application: the headline counts."""
     totals: Counter[str] = Counter(dict.fromkeys(METRICS, 0))
     for suite in reports.values():
@@ -174,43 +146,107 @@ def _recorded(suites: Iterable[SuiteCoverage]) -> bool:
     return any(case.outcomes for suite in suites for case in all_cases(suite).values())
 
 
-def _unknowable(test_outcome: str, *, running: bool, recorded: bool, unavailable: str, missing: bool) -> bool:
+def _zero_is_final(test_outcome: str, *, running: bool, unavailable: str, recorded: bool, missing: bool) -> bool:
     """
-    Whether a zero count proves nothing, so it reads as unknown.
+    Whether a zero count is a result rather than the absence of one.
 
-    A workflow still running has no final zero. Otherwise, a test step that
-    succeeded recorded what ran, and one that was skipped ran nothing on
-    purpose. One that failed, was cancelled or reported no outcome may have
-    stopped before a check ran, so its zeros are unknown when nothing was
-    recorded, evidence is unavailable, an application has no report or the run
-    was cancelled. Non-zero counts are what was recorded, and stay.
+    No zero is final while the workflow is still running, or when report evidence is unavailable. A test
+    step that succeeded recorded everything it ran, and one that was skipped ran nothing on purpose. Any
+    other step (failed, cancelled, outcome not reported) may have stopped before a check ran, so its zeros
+    are final only when it was not cancelled, recorded an outcome, and no declared application is
+    ``missing`` its report.
     """
-    if running:
-        return True
-    if test_outcome in ("success", "skipped"):
+    if running or unavailable:
         return False
-    return test_outcome == "cancelled" or not recorded or bool(unavailable) or missing
+    if test_outcome in ("success", "skipped"):
+        return True
+    return test_outcome != "cancelled" and recorded and not missing
 
 
-def _applications_unknown(
-    reports: Mapping[str, SuiteCoverage], inventory: ApplicationInventory | None, unavailable: str
-) -> bool:
-    """Evidence is unavailable and nothing names an application, so even their number is unknown."""
-    return bool(unavailable) and not reports and inventory is None
+def _shown(values: Mapping[str, int | None], final: bool) -> dict[str, int | None]:
+    """Counts as shown: a zero that is not final is unknown (``None``, shown ``?``); any other is what was recorded."""
+    return {kind: None if value == 0 and not final else value for kind, value in values.items()}
 
 
-def _known(values: Mapping[str, int], unknowable: bool) -> dict[str, int | None]:
-    """The counts as shown: under :func:`_unknowable`, a zero category is unknown, not zero."""
-    return {kind: None if unknowable and kind in METRICS and value == 0 else value for kind, value in values.items()}
+@dataclass(frozen=True)
+class Headline:
+    """
+    Every headline count, decided once: the totals, the inventory details and the status notices read it.
+
+    A count is what the evidence holds. It is ``None`` (shown ``?``) only where the evidence cannot settle
+    it: a zero that is not final (:func:`_zero_is_final`), or a skip count that is only a lower bound,
+    because a declared application has no report or JUnit could not classify the run's tests. A missing
+    inventory narrows nothing: every count, skips included, then covers the reported applications.
+    """
+
+    #: ``applications``, each of :data:`METRICS`, and ``skipped``.
+    values: dict[str, int | None]
+    #: Whether a zero among ``values`` is a result.
+    final: bool
+    #: Whether any check recorded an outcome.
+    recorded: bool
+    #: The skips the evidence shows: a lower bound when ``values["skipped"]`` is unknown.
+    skips_known: int
+    #: Why the skip count is only a lower bound; empty when it is exact.
+    skips_unknown: str
 
 
-def _totals(
-    values: Mapping[str, int | None], glyph_base: str, *, neutral: bool = False, skipped: int | None = None
-) -> str:
-    alt = " · ".join(f"{count_text(values[kind])} {LABELS[kind].lower()}" for kind in ("applications", *METRICS))
+def headline(
+    reports: Mapping[str, SuiteCoverage],
+    *,
+    inventory: ApplicationInventory | None,
+    unavailable: str,
+    test_outcome: str,
+    running: bool,
+    collected_skips: int | None,
+    skips_unknown: str,
+) -> Headline:
+    """The headline counts. ``collected_skips`` is JUnit's exact skip count; ``skips_unknown`` says why it is missing."""
+    declared = set(inventory.applications) if inventory else set()
+    unreported = declared - set(reports)
+    recorded = _recorded(reports.values())
+    final = _zero_is_final(
+        test_outcome, running=running, unavailable=unavailable, recorded=recorded, missing=bool(unreported)
+    )
+    if collected_skips is not None:
+        skips, why = collected_skips, ""
+    else:
+        skips = _skips_recorded(reports)
+        why = skips_unknown or ("Applications without a report have no measured test count." if unreported else "")
+    values: dict[str, int | None] = {
+        # Discovery widens the application denominator, never the passing evidence.
+        "applications": len(declared | set(reports)),
+        **report_totals(reports),
+        "skipped": None if why else skips,
+    }
+    return Headline(values=_shown(values, final), final=final, recorded=recorded, skips_known=skips, skips_unknown=why)
+
+
+def _skips_text(shown: Headline) -> str:
+    """The skip count in words: exact, a lower bound or unknown, and why when it is not exact."""
+    skipped = shown.values["skipped"]
+    count = (
+        f"**{skipped}**"
+        if skipped is not None
+        else f"**{shown.skips_known} known**"
+        if shown.skips_known
+        else "**unknown**"
+    )
+    return count + "." + (f" {shown.skips_unknown}" if shown.skips_unknown else "")
+
+
+def suite_counts(suite: SuiteCoverage, *, test_outcome: str, running: bool, unavailable: str) -> dict[str, int | None]:
+    """One application's counts as shown, by the headline's rule applied to that application's own outcomes."""
+    final = _zero_is_final(
+        test_outcome, running=running, unavailable=unavailable, recorded=_recorded([suite]), missing=False
+    )
+    return _shown(counts(suite), final)
+
+
+def _totals(values: Mapping[str, int | None], glyph_base: str, *, neutral: bool = False) -> str:
     if not glyph_base:
-        return f"**{alt} · {count_text(skipped)} skipped tests**"
-    return summary_html({**values, "skipped": skipped}, glyph_base, neutral=neutral)
+        return "**" + " · ".join(f"{count_text(value)} {LABELS[kind]}" for kind, value in values.items()) + "**"
+    return summary_html(values, glyph_base, neutral=neutral)
 
 
 def _notice(kind: str, headline: str, *details: str) -> list[str]:
@@ -331,10 +367,11 @@ def _suite(
     *,
     compact: bool = False,
     timing: bool = True,
-    unknowable: bool = False,
+    values: Mapping[str, int | None] | None = None,
 ) -> str:
-    values = _known(counts(suite), unknowable)
-    description = " · ".join(f"{count_text(values[k])} {LABELS[k].lower()}" for k in METRICS)
+    """One application's section. ``values`` are its counts as shown; its recorded counts when omitted."""
+    values = counts(suite) if values is None else values
+    description = " · ".join(f"{count_text(values[k])} {LABELS[k]}" for k in METRICS)
     summary = f"{code(suite.name)} · {description}"
     if compact:
         summary = f"<strong>{application_name(suite.name)}</strong> · evidence and decisions"
@@ -480,6 +517,7 @@ def render(
     graphics: bool = False,
     inventory: ApplicationInventory | None = None,
     collected_skips: int | None = None,
+    skips_unknown: str = "",
     timing: bool = True,
     own_text: bool = False,
     title: str = "",
@@ -505,6 +543,7 @@ def render(
             graphics=graphics,
             inventory=inventory,
             collected_skips=collected_skips,
+            skips_unknown=skips_unknown,
             timing=timing,
             title=title,
             running=running,
@@ -524,6 +563,7 @@ def _render(
     graphics: bool,
     inventory: ApplicationInventory | None,
     collected_skips: int | None,
+    skips_unknown: str,
     timing: bool,
     title: str,
     running: bool,
@@ -531,28 +571,27 @@ def _render(
     ref = quote(asset_ref, safe="")
     banner_assets = f"https://raw.githubusercontent.com/gigaverse-app/pytest-obligation/{ref}/docs/assets"
     glyph_base = f"{banner_assets}/report-glyphs/" if graphics else ""
-    totals = report_totals(reports)
-    # Discovery widens the application denominator, never the passing evidence.
-    totals["applications"] = len(set(reports) | (set(inventory.applications) if inventory else set()))
-    skipped, incomplete = _skipped_checks(reports, inventory, unavailable)
-    if collected_skips is not None:
-        skipped, incomplete = collected_skips, False
-    recorded = _recorded(reports.values())
-    missing = bool(inventory and set(inventory.applications) - set(reports))
-    unknowable = _unknowable(test_outcome, running=running, recorded=recorded, unavailable=unavailable, missing=missing)
-    shown = _known(totals, unknowable)
-    if _applications_unknown(reports, inventory, unavailable):
-        shown["applications"] = None
+    shown = headline(
+        reports,
+        inventory=inventory,
+        unavailable=unavailable,
+        test_outcome=test_outcome,
+        running=running,
+        collected_skips=collected_skips,
+        skips_unknown=skips_unknown,
+    )
+    recorded_failures = (shown.values["failed"] or 0) + (shown.values["rejected"] or 0)
     # Order, top to bottom: the title (the first line tells two lanes' stickies apart; a publisher puts its
     # workflow notice right after it), this report's status notices, the banner, then the counts.
     head = [
         *([f"### {cell(title, TITLE_LIMIT)}", ""] if title else []),
         *_status_notices(
             test_outcome,
-            recorded=recorded,
-            recorded_failures=totals["failed"] + totals["rejected"],
+            recorded=shown.recorded,
+            recorded_failures=recorded_failures,
             unavailable=unavailable,
-            unknowable=unknowable and not running,
+            # While the workflow runs, the publisher's own notice says what ? means.
+            unknowable=not shown.final and not running,
         ),
         f'<a href="{PROJECT}"><picture><source media="(prefers-color-scheme: dark)" srcset="{banner_assets}/sticky-banner-dark.svg">'
         f'<img alt="pytest-obligation: what passed, what is missing, what to fix" src="{banner_assets}/sticky-banner-light.svg" width="640"></picture></a>',
@@ -561,13 +600,18 @@ def _render(
         "",
         "Other pytest tests and workflow steps are not included in these counts.",
         "",
-        _totals(shown, glyph_base, neutral=not reports or bool(unavailable), skipped=None if incomplete else skipped),
+        _totals(shown.values, glyph_base, neutral=not reports),
         "",
     ]
+    if shown.final and shown.values["skipped"] is None:
+        # No status box explains this one ?: say why here.
+        head += [f"<sub>Skipped tests: {_skips_text(shown)}</sub>", ""]
     known_failures = known_expected_failures(reports)
     if known_failures:
+        failed = shown.values["failed"]
+        assert failed is not None, "a known expected failure is a recorded failure"
         head += [
-            f"**Failures: {totals['failed'] - known_failures} unexpected + {known_failures} known expected.** "
+            f"**Failures: {failed - known_failures} unexpected + {known_failures} known expected.** "
             "Expected failures are declared by the application and do not fail CI. "
             "Review their reasons and evidence below; counts are checks, not distinct product bugs.",
             "",
@@ -580,7 +624,7 @@ def _render(
             _time(list(reports.values()), compact=True)
         ]
         head += ["<sub>" + " · ".join(times) + "</sub>", ""]
-    head += _execution_summary(reports, inventory, unavailable, collected_skips)
+    head += _execution_summary(reports, inventory, unavailable, shown)
     compact = len(reports) > 3
     if compact:
         head += _overview(reports)
@@ -623,9 +667,7 @@ def _render(
             glyph_base,
             compact=compact,
             timing=timing,
-            unknowable=_unknowable(
-                test_outcome, running=running, recorded=_recorded([suite]), unavailable=unavailable, missing=False
-            ),
+            values=suite_counts(suite, test_outcome=test_outcome, running=running, unavailable=unavailable),
         )
         # Include disclosure separators and the overflow notice in the budget.
         if len("\n\n".join([*head, *sections, section, *footer])) > MAX_BODY - 300:

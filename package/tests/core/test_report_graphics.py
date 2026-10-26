@@ -28,7 +28,8 @@ def test_skipped_tests_counter_is_top_level_and_does_not_count_interruptions(
 ) -> None:
     case = CaseEvidence(family="replay", collected=True, selected=selected, outcomes=outcomes)
     suite = SuiteCoverage(name="orders", profiles={}, additional_cases={"replay": case})
-    body = render({"tests.Orders": suite}, inventory=ApplicationInventory(), graphics=True)
+    # A step that succeeded: whatever was recorded is final, so only the skip rule decides the count.
+    body = render({"tests.Orders": suite}, inventory=ApplicationInventory(), graphics=True, test_outcome="success")
     headline = body.split("<details>")[0]
     assert f'alt="{skipped} skipped tests"' in headline
     assert "applications not run" not in headline

@@ -82,11 +82,13 @@ def test_unexecuted_applications_are_named_without_fabricating_results(tmp_path:
     body = unescape(output.read_text())
     assert "Order delivery" in body
     assert "1 applications" in body
-    assert "0 contract checks passed" in body
     if evidence == "missing":
+        # A missing report proves nothing, even after a step that succeeded: no zero is shown for it.
+        assert "? contract checks passed" in body and "0 contract checks passed" not in body
         assert "Evidence unavailable" in body
         assert "Unknown: reports incomplete" in body
     else:
+        assert "0 contract checks passed" in body
         assert "Evidence unavailable" not in body
         assert "Not run" in body
         assert "No application contract checks ran" in body
