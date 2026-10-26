@@ -107,8 +107,8 @@ function workflowStatus(resolved, label = 'GitHub workflow') {
   const conclusion = CONCLUSIONS.has(resolved.conclusion) ? resolved.conclusion : 'unknown';
   if (conclusion === 'success') return '';
   if (RUNNING.has(conclusion)) {
-    return `## ⏳ ${label} still running\n\n`
-      + '> [!WARNING]\n'
+    // The warning alone says it: a heading above it would repeat "still running".
+    return '> [!WARNING]\n'
       + `> **GitHub reports: ${conclusion}.**\n>\n`
       + '> These are the contract counts recorded so far; a count shown as ? is not known until the run finishes.\n\n';
   }

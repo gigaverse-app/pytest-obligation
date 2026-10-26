@@ -72,8 +72,10 @@ for (const attempt of [1, 2, 3]) test(`successful attempt ${attempt} has only a 
 for (const conclusion of ['in_progress', 'queued', 'requested', 'waiting', 'pending']) {
   test(`${conclusion} reads as still running, not as a failed run`, () => {
     const body = publishedBody('The report', {conclusion, runId:7, runAttempt:1}, 'https://github.com/owner/project');
-    assert.ok(body.startsWith('## ⏳ GitHub workflow still running'));
+    assert.ok(body.startsWith('> [!WARNING]\n'), 'only the warning, no heading repeating it');
     assert.match(body, new RegExp(`GitHub reports: ${conclusion}`));
+    assert.match(body, /recorded so far/);
+    assert.doesNotMatch(body, /^## /m);
     assert.doesNotMatch(body, /did not succeed/);
   });
   test(`${conclusion} tells the renderer no zero is final yet`, () => {
