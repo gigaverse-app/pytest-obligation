@@ -174,7 +174,6 @@ def test_republish_never_reads_the_markdown_the_pull_request_uploaded(tmp_path: 
         None,
         "{broken",
         '{"version": 2, "expected_reports": 0, "test_outcome": "success", "graphics": false}',
-        '{"expected_reports": 0, "test_outcome": "success", "graphics": false, "comment": "@everyone"}',
         '{"expected_reports": 0, "test_outcome": "passed", "graphics": false}',
         '{"expected_reports": 0, "test_outcome": "success", "graphics": false, "revision": "main](https://x)"}',
     ],
@@ -191,6 +190,47 @@ def test_untrusted_manifest_is_rejected_and_never_turns_green(tmp_path: Path, ma
     assert "Evidence unavailable" in body
     assert "no valid render manifest" in body
     assert "@everyone" not in body and "https://x" not in body
+
+
+def test_a_field_this_version_does_not_know_is_dropped_and_never_rendered(tmp_path: Path) -> None:
+    """A newer report step's manifest still renders here; its unknown field never reaches the report."""
+    _evidence(tmp_path)
+    _report(tmp_path, "--expected-reports", "2", "--test-outcome", "success")
+    path = tmp_path / "artifact" / MANIFEST
+    manifest = json.loads(path.read_text())
+    path.write_text(json.dumps({**manifest, "comment": "@everyone", "added_in_a_later_version": True}))
+    body = _republish(tmp_path / "artifact", tmp_path / "republished.md")
+    assert "no valid render manifest" not in body
+    assert "@everyone" not in body
+    assert "Orders" in body and "Refunds" in body
+
+
+@pytest.mark.parametrize("title", ["", "Celery main"])
+def test_a_later_optional_field_is_written_only_when_set(tmp_path: Path, title: str) -> None:
+    """Older publishers refuse unknown fields; a manifest without a title reads exactly as it did before titles."""
+    _evidence(tmp_path)
+    _report(tmp_path, "--expected-reports", "2", "--test-outcome", "success", "--title", title)
+    written = json.loads((tmp_path / "artifact" / MANIFEST).read_text())
+    assert ("title" in written) == bool(title)
+    assert set(written) - {"title"} == {
+        "version",
+        "expected_reports",
+        "test_outcome",
+        "graphics",
+        "revision",
+        "junit",
+        "inventory_unavailable",
+    }
+
+
+def test_an_unreadable_manifest_keeps_the_report_graphics(tmp_path: Path) -> None:
+    """How the report looks is not evidence: the unavailable report still uses the glyphs."""
+    _evidence(tmp_path)
+    _report(tmp_path, "--expected-reports", "2", "--test-outcome", "success", "--graphics")
+    (tmp_path / "artifact" / MANIFEST).unlink()
+    body = _republish(tmp_path / "artifact", tmp_path / "republished.md")
+    assert "no valid render manifest" in body
+    assert "report-glyphs/" in body
 
 
 def test_staged_evidence_is_read_from_fixed_names_only(tmp_path: Path) -> None:
