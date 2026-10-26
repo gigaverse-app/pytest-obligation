@@ -63,7 +63,7 @@ def test_all_passed_cases_cannot_hide_unassessed_scenario_family() -> None:
 @pytest.mark.parametrize("number", [1, 3, 4])
 def test_application_rows_keep_counts_visible_and_flatten_small_reports(number: int) -> None:
     suites = {f"app{i}": SuiteCoverage(name=f"application {i}", profiles={}) for i in range(number)}
-    body = render(suites, graphics=True)
+    body = render(suites, graphics=True, test_outcome="success")
     assert ("most actionable first" in body) == (number > 3)
     summaries = re.findall(r'<summary><strong>.*?<div align="right">.*?</summary>', body)
     assert len(summaries) == (number if number <= 3 else 0)

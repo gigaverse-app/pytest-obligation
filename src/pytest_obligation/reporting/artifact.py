@@ -47,6 +47,8 @@ class RenderManifest(HarnessModel):
     revision: str = Field(default="", pattern=r"^([0-9a-fA-F]{40})?$")
     junit: bool = False
     inventory_unavailable: bool = False
+    #: The report's lane title; the producer's text, so it is rendered as text and bounded.
+    title: str = Field(default="", max_length=120)
 
 
 @dataclass(frozen=True)
