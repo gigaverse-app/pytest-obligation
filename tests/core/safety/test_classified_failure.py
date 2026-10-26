@@ -186,3 +186,36 @@ def test_an_incoherent_provider_wait_binding_is_refused(update: dict, message: s
     binding = reference_throttled_failure_binding()
     with pytest.raises(ValueError, match=message):
         ClassifiedFailure.model_validate(binding.model_dump() | update)
+
+
+@pytest.mark.parametrize("charges_budget", [False, True])
+@pytest.mark.parametrize("clock_resets_budget", [False, True])
+def test_waiting_budget_proof_accepts_waits_and_rejects_charged_waits(charges_budget, clock_resets_budget):
+    class WaitingLifecycle(InMemoryClassifyingLifecycle):
+        def __init__(self):
+            super().__init__(FailureClass.RETRYABLE)
+            self.budget = 0
+
+        def run_once(self, operation_id):
+            before = self.rows[operation_id].executions
+            super().run_once(operation_id)
+            if charges_budget:
+                self.budget += self.rows[operation_id].executions - before
+
+    lifecycle = WaitingLifecycle()
+    binding = reference_classified_failure_binding(lifecycle, classification=FailureClass.RETRYABLE)
+    advance = binding.advance_to_due
+
+    def move_clock(operation):
+        advance(operation)
+        if clock_resets_budget:
+            lifecycle.budget = 0  # A bad clock binding must not conceal a charged wait.
+
+    binding = binding.model_copy(
+        update={"preserved_failure_budget": lambda _operation: lifecycle.budget, "advance_to_due": move_clock}
+    )
+    if charges_budget:
+        with pytest.raises(AssertionError, match="provider waiting spent"):
+            assert_failure_takes_its_declared_class(binding)
+    else:
+        assert_failure_takes_its_declared_class(binding)

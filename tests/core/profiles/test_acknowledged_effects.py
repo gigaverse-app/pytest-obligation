@@ -95,3 +95,19 @@ def test_a_discharge_budget_below_one_is_refused() -> None:
     binding = reference_acknowledged_effect_binding()
     with pytest.raises(ValueError, match="max_runs_to_discharge must be at least one"):
         AcknowledgedEffect.model_validate(binding.model_dump() | {"max_runs_to_discharge": 0})
+
+
+def test_observation_clock_cannot_discharge_the_operation():
+    teardown = InMemoryAcknowledgingTeardown()
+    binding = reference_acknowledged_effect_binding(teardown).model_copy(
+        update={"advance_to_observation": lambda operation: teardown.owed.pop(operation)}
+    )
+    with pytest.raises(AssertionError, match="advancing observation time discharged"):
+        assert_an_applied_acknowledgement_discharges(binding)
+
+
+def test_observation_clock_can_advance_without_changing_the_obligation():
+    binding = reference_acknowledged_effect_binding().model_copy(
+        update={"advance_to_observation": lambda operation: None}
+    )
+    assert_acknowledged_effect_contract(binding)

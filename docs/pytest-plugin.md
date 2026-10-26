@@ -237,3 +237,22 @@ must resolve one. Deselected tests are outside this run. Dynamic calls to
 The check works with xdist: workers collect the same single failing diagnostic
 item, so a missing fixture reports a normal failure rather than crashing worker
 collection. The runnable catalog and upstream adopter CI enable this option.
+
+
+### Waiting is not an actual failure
+
+A `ClassifiedFailure` may bind `preserved_failure_budget` to a persisted
+production counter. The retryable, paced history then repeats six provider waits,
+checks the budget immediately after each execution (before clock advancement),
+and refuses terminal retirement or a hot loop. Keep a separate `BoundedRetry`
+binding for actual failures so exempting waits cannot accidentally make all
+failures unlimited. `provider_wait` and `advance_by` still prove the provider's
+minimum interval, including stale deliveries.
+
+For asynchronously accepted effects, `AcknowledgedEffect.owed_work` selects
+outstanding obligations, including those currently waiting. It must not be a
+due-now-only query. Bind optional `advance_to_observation` when production
+paces confirmation reads. That clock callback may advance only time; the proof
+rejects a callback that discharges the obligation or performs provider I/O.
+The provider fake alone applies the accepted operation, and the real executor
+must subsequently observe completion and discharge the obligation.
