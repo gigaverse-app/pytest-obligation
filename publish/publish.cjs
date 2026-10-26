@@ -110,8 +110,7 @@ function workflowStatus(resolved, label = 'GitHub workflow') {
     return `## ⏳ ${label} still running\n\n`
       + '> [!WARNING]\n'
       + `> **GitHub reports: ${conclusion}.**\n>\n`
-      + '> These are the contract counts recorded so far; a count shown as ? is not known until the run finishes. '
-      + 'This comment is updated when it does.\n\n';
+      + '> These are the contract counts recorded so far; a count shown as ? is not known until the run finishes.\n\n';
   }
   const failed = ['failure', 'timed_out', 'startup_failure'].includes(conclusion);
   // API status is always the first visual verdict. Contributor evidence cannot replace this warning.

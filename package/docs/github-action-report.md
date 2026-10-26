@@ -31,8 +31,8 @@ an amber `?` instead, in the totals and in each application's row: a collection 
 that stopped every check proves nothing about failures. Non-zero counts are what was
 recorded and stay. A step that succeeded, or was skipped because nothing was selected,
 keeps its zeroes. A sticky the publish action posts while the source workflow is still
-running is headed **still running**, shows every zero as `?`, and is updated when the run
-finishes.
+running is headed **still running** and shows every zero as `?`. Publish again on
+`workflow_run: completed` (as `obligation-sticky.yml` does here) to replace it with the final report.
 
 The header counts applications and passing contract checks on the left, with contract
 failures, blocked checks, coverage gaps and rejected bindings after a divider.
