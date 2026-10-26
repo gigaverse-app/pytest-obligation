@@ -75,6 +75,10 @@ class AcknowledgedEffect(HarnessModel):
     #: EXTERNAL SEAM: the provider applies every acknowledgement it holds for the operation.
     apply_acknowledged: Callable[[Any], Any]
 
+    #: FAULT INJECTION: advance only a pending observation's wait, not its
+    #: provider effect, acknowledgement count or owed state.
+    advance_to_observation: Callable[[Any], Any] | None = None
+
     #: Production runs allowed, after the provider applies, to discharge the operation.
     max_runs_to_discharge: int = 3
 
@@ -158,6 +162,13 @@ def assert_an_applied_acknowledgement_discharges(effect: AcknowledgedEffect) -> 
     for _ in range(effect.max_runs_to_discharge):
         if not _is_owed(effect, operation):
             return
+        if effect.advance_to_observation is not None:
+            before = effect.acknowledgement_count(operation)
+            effect.advance_to_observation(operation)
+            assert _is_owed(effect, operation), f"{effect.name}: advancing observation time discharged the operation"
+            assert effect.acknowledgement_count(operation) == before, (
+                f"{effect.name}: advancing time performed provider I/O"
+            )
         effect.run_once(operation)
     assert not _is_owed(effect, operation), (
         f"{effect.name}: the provider applied the effect, yet {effect.max_runs_to_discharge} further production "
