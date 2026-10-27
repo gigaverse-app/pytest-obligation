@@ -17,7 +17,7 @@ from django.db.models import QuerySet
 from django.test.utils import isolate_apps
 
 from pytest_obligation.contract import ScheduledSelection
-from pytest_obligation.integrations.django.selection import explain_index_eligibility
+from pytest_obligation.integrations.django.selection import DjangoSelectionInspector, explain_index_eligibility
 from pytest_obligation.integrations.postgres_plans import assert_plan_is_index_served, iter_plan_nodes
 from pytest_obligation.profiles.automatic_recovery import assert_selection_is_index_served
 
@@ -116,6 +116,31 @@ def test_an_index_that_narrows_passes_beside_the_second_key_one(chunk_table: Non
 
 
 _PARTIAL_INDEX = "proof_chunk_unknown_ix"
+
+
+def test_retained_partial_index_remains_eligible_beside_a_small_wrong_key_index(chunk_table: None) -> None:
+    # A reused test DB can retain a large, valid index after its rows are gone,
+    # while a newly created accounting index is tiny. Eligibility must not be
+    # confused with the cheapest plan for that empty-table history.
+    _Chunk.objects.bulk_create(_Chunk(campaign_id=i, state="UNKNOWN", padding="x" * 1500) for i in range(_ROWS))
+    _index(f"CREATE INDEX {_PARTIAL_INDEX} ON {_TABLE} (id) INCLUDE (padding) WHERE state = 'UNKNOWN'")
+    _Chunk.objects.all().delete()
+    _index(f"CREATE INDEX {_SECOND_KEY_INDEX} ON {_TABLE} (campaign_id, state) INCLUDE (id)")
+    with connection.cursor() as cursor:
+        cursor.execute(f"ANALYZE {_TABLE}")
+    inspector = DjangoSelectionInspector(partial_indexes=(_PARTIAL_INDEX,))
+    selection = _unknown_chunks().values("id").order_by("campaign_id", "state")
+    bitmap = explain_index_eligibility(selection, bitmap_only=True)
+    assert any(node.get("Index Name") == _PARTIAL_INDEX for node in iter_plan_nodes(bitmap))
+    assert_plan_is_index_served(name="eligible alternative", plan=bitmap, table=_TABLE)
+    served, evidence = inspector.index_served(selection)
+    assert served, evidence
+
+    # Removing the real narrowing index must still fail on the accounting
+    # index's unconstrained leading key; never accept its state condition alone.
+    _index(f"DROP INDEX {_PARTIAL_INDEX}")
+    served, evidence = DjangoSelectionInspector().index_served(selection)
+    assert not served, evidence
 
 
 @pytest.mark.parametrize(

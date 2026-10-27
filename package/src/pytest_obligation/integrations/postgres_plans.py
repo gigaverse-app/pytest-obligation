@@ -351,13 +351,19 @@ def bitmap_overturns_the_walk(
         for scan in iter_plan_nodes(walked)
         if scan.get("Relation Name") == table
         for node in iter_plan_nodes(scan)
-        if "Index Cond" in node and CATALOG_INDEX in node and _leading_key_left_open(node) is not None
+        if "Index Cond" in node
+        and CATALOG_INDEX in node
+        and _leading_key_left_open(node) is not None
+        and not _borrowed_from_a_join(node, _own_names(scan))
     ]
     filters = _expressions(walked, table, "Filter")
     bounded = _range_bounded_columns(filters + unnarrowed)
     # A scan narrowed only by a join has no local predicate to excuse: changing
     # join strategy must not hide a full child-table walk.
-    if not bounded and not filters:
+    # A local equality can be printed as an Index Cond on the wrong key,
+    # leaving no heap Filter or range bound. It still asks for a narrowed
+    # selection; the alternative must independently prove that narrowing.
+    if not bounded and not filters and not unnarrowed:
         return False
     # Equality-only selections can also favor an unrelated index after ANALYZE
     # on an empty table. The bitmap must still genuinely narrow the selection;
