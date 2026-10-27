@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 import pytest
 
+from pytest_obligation.helpers import BindingScopeError, entered_binding
 from pytest_obligation.regression_controls import assert_detects_regression
 
 
@@ -41,6 +42,42 @@ def test_a_broken_baseline_never_counts_as_detection() -> None:
 
     with pytest.raises(AssertionError, match="baseline"):
         assert_detects_regression(broken, regression=never_entered, match="duplicate delivery")
+
+
+@pytest.mark.parametrize("phase", ["factory", "enter", "exit"])
+def test_binding_failures_with_matching_diagnostics_are_not_detection(phase: str) -> None:
+    active = False
+
+    @contextmanager
+    def mutation():
+        nonlocal active
+        active = True
+        try:
+            yield
+        finally:
+            active = False
+
+    @contextmanager
+    def scope():
+        if active and phase == "enter":
+            raise AssertionError("duplicate delivery: setup failed")
+        try:
+            yield
+        finally:
+            if active and phase == "exit":
+                raise AssertionError("duplicate delivery: cleanup failed")
+
+    def factory():
+        if active and phase == "factory":
+            raise AssertionError("duplicate delivery: factory failed")
+        return scope()
+
+    def check():
+        with entered_binding(factory):
+            assert not active, "duplicate delivery"
+
+    with pytest.raises(BindingScopeError, match="binding.*failed"):
+        assert_detects_regression(check, regression=mutation, match="duplicate delivery")
 
 
 def test_a_control_that_leaves_the_regression_enabled_fails_validation() -> None:

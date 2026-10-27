@@ -20,6 +20,18 @@ is a regression baseline; it is not an independent specification of correctness.
 
 ## Check the detector in both directions
 
+For generated contracts, declare an `ExtraProof` whose `run` is
+`pytest_obligation.regression_controls.RegressionControl(binding=..., proof=...,
+regression=..., match=...)`. The proof must be owned by the harness and the
+binding's semantic commands must delegate to production. Each invocation needs
+fresh state; a context-managed binding can roll back database rows and close
+clients after each baseline, fault, and restoration run. Do not add an adopter
+exception for a direct proof call merely to test sensitivity.
+
+Setup and cleanup assertion failures raise `BindingScopeError`, preserving the
+original cause. They never count as detection, even if their message happens
+to match the expected regression diagnostic.
+
 `pytest_obligation.regression_controls.assert_detects_regression` runs a check
 on the working baseline, inside a context that introduces a regression, and
 again after the context exits to verify that the baseline was restored:

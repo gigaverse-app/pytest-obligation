@@ -33,10 +33,17 @@ T = TypeVar("T")
 Binding: TypeAlias = Callable[[], T | AbstractContextManager[T]]
 
 
+class BindingScopeError(AssertionError):
+    """A scoped assertion, preserved as an assertion but never regression evidence."""
+
+
 @contextmanager
 def entered_binding(factory: Binding[T]) -> Iterator[T]:
     """Keep a binding's scope alive without allowing cleanup to suppress a proof failure."""
-    built = factory()
+    try:
+        built = factory()
+    except AssertionError as error:
+        raise BindingScopeError(f"binding factory failed: {error}") from error
     if isinstance(built, AbstractContextManager):
         with proof_context(built) as value:
             yield value
@@ -207,11 +214,18 @@ def proof_context(scope: AbstractContextManager[T]) -> Iterator[T]:
     exception afterwards, including its replay notes and invariant identity.
     """
     failure: BaseException | None = None
-    with scope as binding:
-        try:
-            yield binding
-        except BaseException as error:
-            failure = error
+    try:
+        with scope as binding:
+            try:
+                yield binding
+            except BaseException as error:
+                failure = error
+                raise
+    except AssertionError as error:
+        if error is failure:
             raise
+        # Only the original proof assertion may count as a detected regression.
+        # Resource assertions must remain failures even when their text matches it.
+        raise BindingScopeError(f"binding setup or cleanup failed: {error}") from error
     if failure is not None:
         raise failure

@@ -34,6 +34,7 @@ from typing import Any
 from pytest_obligation.binding import (
     assert_test_binding_delegates_to_production,
 )
+from pytest_obligation.helpers import BindingScopeError
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.automatic_recovery import (
     DueWorkSweep,
@@ -64,6 +65,7 @@ from pytest_obligation.profiles.eventual_convergence import (
     assert_snapshot_transitions_are_production_bound,
 )
 from pytest_obligation.profiles.fact_derived_obligations import (
+    FixedEffectDerived,
     StateDerived,
     assert_derivation_bindings_are_production_bound,
     assert_derived_transitions_are_production_bound,
@@ -94,7 +96,7 @@ def _convergence_guards(convergence: ConvergentWrite) -> None:
     assert_convergence_bindings_are_production_bound(convergence)
 
 
-def _derivation_guards(derived: StateDerived) -> None:
+def _derivation_guards(derived: StateDerived | FixedEffectDerived) -> None:
     assert_derived_transitions_are_production_bound(derived)
     assert_settlement_is_production_bound(derived)
     assert_outstanding_selection_is_production_bound(derived)
@@ -111,7 +113,15 @@ _SEMANTIC_BINDING_GUARDS: dict[type, Callable[[Any], None]] = {
     ConvergentWrite: _convergence_guards,
     SupersededSnapshot: assert_snapshot_transitions_are_production_bound,
     StateDerived: _derivation_guards,
+    FixedEffectDerived: _derivation_guards,
 }
+
+
+def assert_semantic_binding_is_production_bound(binding: Any) -> None:
+    """Apply the same invariant-0 guards before interpreting a proof's failure."""
+    guard = _SEMANTIC_BINDING_GUARDS.get(type(binding))
+    assert guard is not None, f"unsupported semantic binding: {type(binding).__name__}"
+    guard(binding)
 
 
 class MissingScheduledConsumer(HarnessModel):
@@ -210,9 +220,11 @@ class DisprovenCapability(HarnessModel):
             f"DisprovenCapability: the binding built a {type(built).__name__}, "
             f"which is not a profile adapter this probe knows how to guard"
         )
-        guard(built)
+        assert_semantic_binding_is_production_bound(built)
         try:
             self.proof(built)
+        except BindingScopeError:
+            raise
         except AssertionError as error:
             assert re.search(self.match, str(error)), (
                 f"the decline names {self.proof.__name__} but the failure was a "
