@@ -173,7 +173,7 @@ def test_republish_never_reads_the_markdown_the_pull_request_uploaded(tmp_path: 
     [
         None,
         "{broken",
-        '{"version": 2, "expected_reports": 0, "test_outcome": "success", "graphics": false}',
+        '{"version": 3, "expected_reports": 0, "test_outcome": "success", "graphics": false}',
         '{"expected_reports": 0, "test_outcome": "passed", "graphics": false}',
         '{"expected_reports": 0, "test_outcome": "success", "graphics": false, "revision": "main](https://x)"}',
     ],
