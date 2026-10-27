@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.23.0...v0.24.0) (2026-10-27)
+
+
+### Features
+
+* **contracts:** share regression, expiry and baseline controls ([87bc3a6](https://github.com/gigaverse-app/pytest-obligation/commit/87bc3a6ec006abf8cb80f01e8e49259d490676c0))
+
 ## [0.23.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.22.0...v0.23.0) (2026-10-27)
 
 
