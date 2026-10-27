@@ -157,6 +157,15 @@ plan unless its leading key is constrained or its partial predicate bounds the
 selection. A bitmap of a partial index is accepted automatically when it serves
 the whole selection; joins and heap filters still need narrowing evidence.
 
+Eligibility is separate from the cheapest plan on a tiny or reused test table.
+The inspector tries the normal plan with sequential scans discouraged, then a
+bitmap alternative, and finally an alternative with explicit sorting discouraged.
+The last probe can reveal an ordered partial index hidden by a cheaper unrelated
+bitmap plus a sort. Every alternative must pass the same catalog-backed verdict
+and narrow the original range bounds. Planner settings are restored afterward;
+these probes use EXPLAIN without executing the selection. Retained-history and
+scan-cost proofs still measure actual work under normal planner settings.
+
 ```text
 (campaign_id, state) + WHERE state = 'UNKNOWN' → entire index can be walked
 (state, campaign_id) + WHERE state = 'UNKNOWN' → leading key narrows the read
