@@ -1,5 +1,12 @@
 # Keep generated debt visible
 
+Use `pytest_obligation.debt.assert_debt_baseline(root, baseline=...)` in project
+policy tests to audit deleted or renamed suites and malformed ticket references.
+Its `unticketed_ceiling` defaults to zero. An existing reviewed allowance must
+match the actual unticketed count, so fixing or ticketing debt requires lowering
+the allowance. Per-suite execution checks still apply. This global audit replaces
+adopter copies of the same checks.
+
 A green run can include strict expected failures. `NotAssessed` means a production
 binding is missing; other generated strict xfails describe known defects. An
 application-owned baseline prevents either from changing silently.

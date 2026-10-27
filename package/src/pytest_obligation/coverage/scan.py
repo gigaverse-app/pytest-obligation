@@ -83,7 +83,9 @@ def _unaccounted_message(qualified: str, sites: list[Site]) -> str:
 def scan(config: CoverageConfig) -> CoverageReport:
     """Find every site and every disposition, and every way they fail to match."""
     project = Project(config)
-    kinds = kinds_for(project.frameworks, config.kinds)
+    kinds = kinds_for(project.frameworks, config.kinds) if config.detect_sites else config.kinds
+    if not kinds and not config.detect_sites:
+        raise ValueError("explicit coverage requires at least one declared site kind")
     report = CoverageReport(kinds=names(kinds), sites=sites_by_function(project, kinds))
     report.problems.extend(
         f"{hidden} holds production code but `exclude` hides it from the scan: narrow the pattern"
@@ -101,7 +103,12 @@ def scan(config: CoverageConfig) -> CoverageReport:
         (config.bridges, "bridge", "pyproject.toml [tool.due-work-harness] bridges"),
     ):
         for qualified, count in configured.items():
-            declared[project.canonical(qualified)].append(Disposition(how=how, sites=count, where=where))
+            canonical = project.canonical(qualified)
+            # External helpers identify handoffs in the adopter's callers;
+            # their own implementation belongs to the provider's inventory.
+            if how == "bridge" and not config.is_production(canonical):
+                continue
+            declared[canonical].append(Disposition(how=how, sites=count, where=where))
 
     for qualified, dispositions in sorted(declared.items()):
         if len(dispositions) > 1:

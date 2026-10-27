@@ -1,5 +1,27 @@
 # Find every handoff
 
+For passive expiry, declare `exempt_due_work_suite(...,
+prove=LossExpiresWithin(binding=..., max_age=...))` from
+`pytest_obligation.expiry`. Its `ExpiryObservation` binds the real publisher and
+update producer, observes external presence and remaining TTL, and advances an
+external clock. The probe requires fresh publication, a genuinely lost update
+leaving stale state, a positive bounded TTL, survival before expiry, and absence
+after expiry. Scope the client and clock with the binding.
+
+When migrating an existing inventory, `detect-sites = false` together with
+`sites = ["django"]` preserves an explicitly reviewed framework scope. The
+default continues detecting framework imports. External `bridges` identify
+handoffs in application callers without enrolling the provider's implementation.
+
+CI should run `due-work-harness check --base-ref <reviewed-base-sha>`. If an old
+inventory used Python literal policy data, configure
+`[tool.due-work-harness.legacy-baseline]` with `path`, `mappings`, and `sets`.
+The checker reads that file from the reviewed Git revision without importing it.
+Once the base revision contains the normal TOML baseline, it takes precedence.
+Removing a proof and adding its source to the current baseline cannot approve
+itself. Keep unproven legacy sources baselined until an executable declaration
+replaces them.
+
 A crash history proves one handoff. The static coverage check finds other
 places in production code that hand work off, so a newly added task or queue
 publication cannot quietly escape review:

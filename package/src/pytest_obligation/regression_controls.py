@@ -3,6 +3,38 @@
 import re
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from typing import Any
+
+from pytest_obligation.binding import callable_code, is_harness_owned
+from pytest_obligation.gap_probes import assert_semantic_binding_is_production_bound
+from pytest_obligation.helpers import Binding, entered_binding
+from pytest_obligation.models import HarnessModel
+
+
+class RegressionControl(HarnessModel):
+    """A configured shared proof, declared as ``ExtraProof(run=RegressionControl(...))``.
+
+    Each execution builds fresh production-bound profile evidence. The unchanged
+    shared proof must pass, reject the selected production fault, then pass again.
+    Application fault factories change production or provider seams, never the
+    observer or expectation. ExtraProof owns collection, fixtures and reporting.
+    """
+
+    binding: Binding[Any]
+    proof: Callable[[Any], None]
+    regression: Callable[[], AbstractContextManager[object]]
+    match: str
+
+    def __call__(self) -> None:
+        code = callable_code(self.proof)
+        assert code is not None and is_harness_owned(code), "regression proof must be owned by the shared harness"
+
+        def check() -> None:
+            with entered_binding(self.binding) as binding:
+                assert_semantic_binding_is_production_bound(binding)
+                self.proof(binding)
+
+        assert_detects_regression(check, regression=self.regression, match=self.match)
 
 
 def assert_detects_regression(

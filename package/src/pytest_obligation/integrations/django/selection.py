@@ -39,10 +39,12 @@ from django.db.backends.postgresql.psycopg_any import sql
 from django.db.models import Model, QuerySet
 from django.test.utils import CaptureQueriesContext
 
+from pytest_obligation.binding import assert_test_binding_delegates_to_production
 from pytest_obligation.host import ReadCosts
 from pytest_obligation.integrations.django.indexes import attach_catalog_facts, installed_indexes
 from pytest_obligation.integrations.django.writes import require_postgresql
 from pytest_obligation.integrations.postgres_plans import (
+    assert_plan_is_index_served,
     bitmap_overturns_the_walk,
     index_served_verdict,
     read_cost,
@@ -50,6 +52,33 @@ from pytest_obligation.integrations.postgres_plans import (
     scan_counts,
 )
 from pytest_obligation.models import HarnessModel
+
+
+class IndexedSelectionDependencies(HarnessModel):
+    """Require a production selection and its named dependency tables to use indexes.
+
+    This checks structural eligibility with sequential scans disabled. It does
+    not claim that production cardinalities will choose the same plan.
+    """
+
+    selection: Callable[[], QuerySet[Any]]
+    tables: tuple[str, ...]
+    name: str = "selection dependencies"
+
+    def __call__(self) -> None:
+        assert self.tables, "name at least one dependency table"
+        assert_test_binding_delegates_to_production(
+            adopter=self.name,
+            field="selection",
+            binding=self.selection,
+            production_shape="the production query including its dependency predicates",
+        )
+        selection = self.selection()
+        served, evidence = DjangoSelectionInspector().index_served(selection)
+        assert served, evidence
+        plan = explain_index_eligibility(selection)
+        for table in self.tables:
+            assert_plan_is_index_served(name=self.name, plan=plan, table=table)
 
 
 def _plan(explained: str | list[Any]) -> dict[str, Any]:

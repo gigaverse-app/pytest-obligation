@@ -11,6 +11,7 @@ Set ``DUE_WORK_DEBT_BASELINE=update`` to regenerate selected whole suites,
 preserving surviving issue references. Updates refuse xdist workers.
 """
 
+import ast
 import os
 import re
 from pathlib import Path
@@ -196,3 +197,30 @@ def _yaml() -> Any:
     except ImportError as error:
         raise RuntimeError("YAML debt baselines require pytest-obligation[debt]") from error
     return yaml
+
+
+def assert_debt_baseline(root: Path, *, baseline: Path = BASELINE, unticketed_ceiling: int = 0) -> None:
+    """Audit the whole baseline, including suites absent from this pytest selection.
+
+    Applications own the path and reviewed allowance. The library owns stale
+    suite detection, ticket validation and the exact remaining allowance, so a
+    resolved unticketed defect cannot silently free a slot for another one.
+    """
+    recorded = load_baseline(root, baseline=baseline)
+    problems: list[str] = []
+    for item in recorded.suites:
+        module, _, name = item.suite.rpartition(".")
+        path = root.joinpath(*module.split(".")).with_suffix(".py")
+        if not path.is_file() or not any(
+            isinstance(node, ast.ClassDef) and node.name == name
+            for node in ast.parse(path.read_text(encoding="utf-8")).body
+        ):
+            problems.append(f"baseline suite no longer exists: {item.suite}")
+        problems.extend(f"{item.suite}: {defect}" for defect in ticket_defects(item.debt))
+    untracked = sum(entry.ticket == UNTICKETED for item in recorded.suites for entry in item.debt)
+    if untracked != unticketed_ceiling:
+        problems.append(
+            f"unticketed defects {untracked} differ from reviewed ceiling {unticketed_ceiling}; "
+            "new defects need tickets and resolved allowances must be lowered"
+        )
+    assert not problems, "\n".join(problems)

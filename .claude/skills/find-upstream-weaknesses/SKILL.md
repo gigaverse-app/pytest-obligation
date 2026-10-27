@@ -36,6 +36,15 @@ gigaverse-backend's own due-work runtime and conformance instructions.
 - **Disclose assistance and affiliation briefly.** Follow the target's policy. Do not add repetitive
   pitches or duplicate comments, and respect a maintainer's refusal.
 - **Prove the detector's sensitivity.** Read [contract validation](../../../package/docs/validating-contracts.md).
+  Prefer `ExtraProof(run=RegressionControl(...))` for profile sensitivity checks.
+  Bind the existing harness proof and real production commands; give every run
+  fresh, scoped state. Setup/cleanup failures are infrastructure failures, never
+  evidence that a behavioral regression was detected. For bounded stale cache
+  state, bind `LossExpiresWithin` through `exempt_due_work_suite`; advance the
+  external clock and observe the actual TTL instead of writing a local proof.
+  For Django query dependencies, declare `IndexedSelectionDependencies` as an
+  `ExtraProof`. Keep table names and product policy in the adopter, and assertions
+  in the library. Never add a backend-only direct-proof allowance to enable these.
   A claimed regression needs a passing baseline and a reverted fix or targeted bad behavior that fails
   for the intended reason with unchanged observations and expectations. Separate declarations from
   executed checks and use resources the test owns before erasing data.
