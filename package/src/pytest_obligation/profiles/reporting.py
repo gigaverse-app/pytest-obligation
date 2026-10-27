@@ -120,7 +120,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                     profiles["selection"].cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
                     continue
                 if case.profile is None or case.assessment_only:
-                    additional_cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
+                    additional_cases[case.id] = CaseEvidence(
+                        family=case.family, debt=debt.get(case.id), declaration=case.declaration
+                    )
                     continue
                 for profile in (case.profile, *case.related_profiles):
                     profiles[profile.name].cases[case.id] = CaseEvidence(family=case.family, debt=debt.get(case.id))
@@ -233,6 +235,7 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
                 old = existing_cases[case_id]
                 assert old.debt == case.debt, f"{suite}/{case_id}: workers disagree on declared debt"
                 assert old.family == case.family
+                assert old.declaration == case.declaration, f"{suite}/{case_id}: workers disagree on declaration"
                 old.collected |= case.collected
                 old.selected |= case.selected
                 for phase, outcomes in case.outcomes.items():
@@ -275,6 +278,8 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
 
 
 def _case_status(case: CaseEvidence) -> str:
+    if case.declaration_recorded:
+        return "declaration recorded (no behavioral proof)"
     if case.passed:
         return "passed"
     if not case.collected:

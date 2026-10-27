@@ -44,6 +44,7 @@ class CaseEvidence(_ExecutedEvidence):
     """Coverage of one generated case; a pass requires successful setup, call and teardown."""
 
     family: str = Field(description="Binding or history family that generated this case.")
+    declaration: str | None = None
     debt: DebtEntry | None = Field(default=None, description="Declared expected failure, with its baseline ticket.")
     collected: bool = Field(default=False, description="Pytest collected this expected case before selection filters.")
     selected: bool = Field(default=False, description="The case survived pytest selection filters.")
@@ -59,15 +60,24 @@ class CaseEvidence(_ExecutedEvidence):
     @computed_field
     @property
     def passed(self) -> bool:
-        # A prior pass cannot cover an interrupted repeat on another worker or retry.
+        return self.declaration is None and self._completed("passed")
+
+    @computed_field
+    @property
+    def declaration_recorded(self) -> bool:
+        """Only a completed declaration call counts; setup skips and teardown errors do not."""
+        return self.declaration is not None and self._completed("skipped")
+
+    def _completed(self, call_outcome: str) -> bool:
+        # A prior completed attempt cannot cover a failed or interrupted repeat.
         phases = ("setup", "call", "teardown")
         return (
             self.collected
             and self.selected
             and len({len(self.outcomes.get(phase, ())) for phase in phases}) == 1
             and all(
-                self.outcomes.get(phase) and all(result == "passed" for result in self.outcomes[phase])
-                for phase in phases
+                self.outcomes.get(phase) and all(outcome == expected for outcome in self.outcomes[phase])
+                for phase, expected in (("setup", "passed"), ("call", call_outcome), ("teardown", "passed"))
             )
         )
 
@@ -131,5 +141,5 @@ class SuiteCoverage(_ExecutedEvidence):
             and all(
                 profile.verified or profile.assessment.state == "not applicable" for profile in self.profiles.values()
             )
-            and all(case.passed for case in self.additional_cases.values())
+            and all(case.passed or case.declaration_recorded for case in self.additional_cases.values())
         )

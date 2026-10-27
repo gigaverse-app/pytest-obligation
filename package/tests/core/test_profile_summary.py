@@ -22,6 +22,14 @@ class TestCatalog:
 
 
 @pytest.mark.parametrize("workers", [0, 2])
+def test_declarations_do_not_inflate_behavioral_passes(contract_project: pytest.Pytester, workers: int) -> None:
+    result = contract_project.runpytest_subprocess("-q", "-n", str(workers), "--due-work-summary")
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines(["*DECLARED*A-not_applicable*", "*9 declared*"])
+    assert "PASSED  A-not_applicable" not in result.stdout.str()
+
+
+@pytest.mark.parametrize("workers", [0, 2])
 def test_complete_contract_is_verified_without_a_json_file(contract_project: pytest.Pytester, workers: int) -> None:
     result = contract_project.runpytest_subprocess("-q", "-n", str(workers), "--due-work-summary")
     assert result.ret == pytest.ExitCode.OK

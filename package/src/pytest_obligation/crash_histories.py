@@ -117,6 +117,7 @@ from typing import Any, NamedTuple, Protocol, TypeAlias, TypeVar, runtime_checka
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
 from pytest_obligation.helpers import Binding, entered_binding
+from pytest_obligation.history_evidence import record_histories
 from pytest_obligation.host import CountedFaults, current_host
 from pytest_obligation.models import (
     MISSING,
@@ -938,6 +939,7 @@ def assert_findings_hold(name: str, runs: list[HistoryRun], findings: Findings |
     While ``pytest --due-work-record-findings`` is recording, the runs are
     recorded instead of checked (see :mod:`pytest_obligation.recording`).
     """
+    record_histories(name, runs, findings)
     recorder = current_recorder()
     if recorder is not None:
         recorder.record(name, findings_from(runs))

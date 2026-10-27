@@ -10,7 +10,7 @@ from celery.result import AsyncResult
 from tests.redis_databases import redis_url
 
 #: A Redis server of its own for the broker-full history: that fault refuses writes on the whole server.
-OWN_BROKER = os.environ.get("CELERY_OWN_BROKER_URL", "redis://localhost:6380/0")
+OWN_BROKER = os.environ.get("CELERY_OWN_BROKER_URL")
 BROKER = redis_url("celery broker")
 BACKEND = redis_url("celery backend")
 #: What the tasks did, readable from the test process and every worker process.

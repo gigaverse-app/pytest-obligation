@@ -20,6 +20,9 @@ The rules that shape every step:
   the harness first (steps 6 and 8), as a general capability, not as a hack in the fork.
 - **Claim only what you measured.** Each sentence in a report is either something you ran or is marked as
   code reading.
+- **Validate the detector.** Follow [contract validation](../package/docs/validating-contracts.md): each
+  claimed regression needs a passing baseline and a deliberately broken behavior that changes the
+  observation and fails for the intended reason. An unchanged XFAIL or injected crash alone is insufficient.
 
 ## 1. Choose the target
 
@@ -54,6 +57,8 @@ git -C REPO checkout -b test/<what-breaks>
 - Run the databases and brokers the project's own CI runs (Postgres, Redis, RabbitMQ) in containers,
   and run **their unmodified test suite first**. A red baseline (Wagtail's `main` had one) has to be known
   before it is blamed on you.
+- Own every resource you erase. Never default destructive setup to localhost databases. Prefer existing
+  disposable fixtures or the library's disposable Redis context/runner; verify cleanup after failed runs.
 - Use the harness from source (`PYTHONPATH=<harness>/src`) while it changes, and from PyPI once released.
 - Keep Docker networking simple: `--network container:<the database container>` lets the test process
   reach `localhost:<port>` exactly as their CI does.
@@ -115,6 +120,11 @@ A harness run says *that* histories diverge. Before you write a sentence about i
 
 Drop a candidate that you cannot reproduce, or that the project documents and defends.
 
+Before claiming an existing fix is guarded, revert it in an isolated checkout or introduce an equivalent
+targeted regression, keeping the contract and observation unchanged. Check the specific assertion, then
+restore and rerun. Record unsupported claims as unverified and improve the reusable harness or observation.
+The [validation guide](../package/docs/validating-contracts.md) supplies the helper and evidence format.
+
 ## 6. Declare, pin, and mark the magic
 
 - **Findings.** Put a `Findings(delivered, {label: outcome})` on each history. Do not write the table by
@@ -153,12 +163,12 @@ can pin `due-work-harness>=X`. See [CONTRIBUTING](../CONTRIBUTING.md) and [RELEA
 
 ## 8. Disclose
 
-Issues first, then one PR that references them. Templates are in
+Reuse an existing issue when it describes the same defect; open a new one only for a distinct verified
+finding and when posting is authorized. Prefer one concise PR referencing the evidence. Templates are in
 [`upstream-templates/`](upstream-templates).
 
-- **Every AI-authored comment opens with the self-identification line** in the form
-  `> I'm {model}, AI can make mistakes. {a fresh three-to-five-word joke}`, and comments on incidents drop
-  the joke. Follow the project's own template and policy instead of ours when they differ: Celery's issue
+- **Disclose AI assistance and project affiliation honestly and briefly.** Follow the project's own
+  template and policy: Celery's issue
   template has a long checklist, and Wagtail asks for a human-written PR description and an "AI usage"
   section, which you fill in truthfully. If a policy says no, tell the person you work for and let them
   decide.
@@ -169,8 +179,10 @@ Issues first, then one PR that references them. Templates are in
   happens* section with a permalink at the pushed commit to the decorated class, and the case list from
   `--due-work-summary`; the contract in a few bullets; the plain tests; and what was run and what it
   printed. Numbers in it are ones you have just measured.
-- **A plain-language comment with ASCII art** on every issue and PR: two actors and a timeline for the
-  bug, or the list of runs the harness makes for the PR. Concrete nouns, no jargon.
+- Keep the reproduction useful without adopting the harness. Explain the dependency and maintenance
+  cost, and offer the smallest useful test. Add a diagram only when it clarifies the failure. Do not
+  post a second explanatory or promotional comment when the issue or PR already contains that evidence.
+  Respect a maintainer's refusal; do not retry the same pitch or open duplicate reports.
 - **Say when CI is red for a reason that is not yours** (their `main` fails too), with the evidence, and
   do not change their test.
 
@@ -205,5 +217,5 @@ threads close: maintainers' answers decide what to write next.
 - [ ] `Findings` and gaps declared; the plain test fails for the stated reason
 - [ ] magic-point comment above the decorated class
 - [ ] harness gap closed upstream first, released, pins raised
-- [ ] issues, PR, plain-language comments posted; self-ID on each; no fix offered
+- [ ] authorized reports reuse existing issues; assistance and affiliation disclosed; no duplicate promotional comments
 - [ ] CI watched to green, or red explained

@@ -4,6 +4,10 @@ For a guided map of interfaces, examples and debugging paths, see the
 [harness guide](harness-guide.md). Application source-policy checks are
 covered separately in [source policies](source-policies.md).
 
+Before claiming coverage, [validate the contract](validating-contracts.md): show
+that a deliberate regression changes its observation and fails the intended
+check, use disposable resources, and distinguish declarations from executed proofs.
+
 
 This is the path from "we use Django/Celery, Procrastinate or DBOS" to "CI fails
 when background work can be lost or repeated". A complete, minimal adopter lives

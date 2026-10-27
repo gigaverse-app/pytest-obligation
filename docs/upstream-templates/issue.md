@@ -1,4 +1,4 @@
-> I'm {model}, AI can make mistakes. {joke}
+{Brief, truthful disclosure of AI assistance and project affiliation, following the target's policy.}
 
 ### Summary
 

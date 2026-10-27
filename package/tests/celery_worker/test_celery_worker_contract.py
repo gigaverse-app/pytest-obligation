@@ -55,6 +55,7 @@ def send() -> str:
 def send_on_own_broker() -> str:
     # The same task, published to a broker on a Redis server of its own, which BROKER_FULL fills.
     empty()
+    assert reference.OWN_BROKER, "broker-full tests require a separate disposable CELERY_OWN_BROKER_URL"
     redis.Redis.from_url(reference.OWN_BROKER).flushdb()
     with reference.app.connection_for_write(reference.OWN_BROKER) as connection:
         return reference.send_message.apply_async(
@@ -68,7 +69,7 @@ def send_on_own_broker() -> str:
 def send_chord() -> str:
     # Two messages, and a body that announces them once both are sent; the body's error callback reports a failure.
     empty()
-    header = [reference.send_message.s(f"order {n} has shipped") for n in (1, 2)]
+    header = [reference.send_message.s(f"order {n} has shipped").on_error(reference.report_failure.s()) for n in (1, 2)]
     return chord(header)(reference.announce_all.s().on_error(reference.report_failure.s())).id
 
 
@@ -131,7 +132,7 @@ FINDINGS = Findings(
     ("SUCCESS", 1, (SENT,)),
     {
         "died at task_prerun": ("FAILURE", 0, ("failed: WorkerLostError",)),
-        # https://github.com/celery/celery/issues/10949
+        # https://github.com/celery/celery/issues/10954
         "died at mark_as_done": ("FAILURE", 1, ("failed: WorkerLostError", SENT)),
         # The kernel's SIGKILL reaches the parent through billiard's signal path, and leaves the same.
         "died at task_prerun (SIGKILL)": ("FAILURE", 0, ("failed: WorkerLostError",)),
@@ -162,17 +163,17 @@ FULL_BROKER_FINDINGS = Findings(
 CHORD_FINDINGS = Findings(
     ("SUCCESS", 2, ("sent 2 messages",)),
     {
-        "died at task_prerun": ("FAILURE", 1, ("failed: ChordError",)),
-        # https://github.com/celery/celery/issues/10949
-        "died at mark_as_done": ("FAILURE", 2, ("failed: ChordError",)),
+        "died at task_prerun": ("FAILURE", 1, ("failed: ChordError", "failed: WorkerLostError")),
+        # https://github.com/celery/celery/issues/10954
+        "died at mark_as_done": ("FAILURE", 2, ("failed: ChordError", "failed: WorkerLostError")),
         # https://github.com/celery/celery/issues/10725#issuecomment-6318108091
         "the broker refused the task's link": ("FAILURE", 2, ("failed: ChordError",)),
     }
     # Before the fixes, a header lost after its stored SUCCESS is counted twice, once as a failure.
     | before_the_10724_fixes(
         {
-            "died at task_postrun": ("FAILURE", 2, ("failed: ChordError",)),
-            "the task's on_success hook raised": ("FAILURE", 2, ("failed: ChordError",)),
+            "died at task_postrun": ("FAILURE", 2, ("failed: ChordError", "failed: WorkerLostError")),
+            "the task's on_success hook raised": ("FAILURE", 2, ("failed: ChordError", "failed: ReceiverFailed")),
         }
     ),
 )

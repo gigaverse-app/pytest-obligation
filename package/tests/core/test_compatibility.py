@@ -94,4 +94,5 @@ class TestCompatibility:
     pass
 """)
     result = pytester.runpytest_subprocess("-q", "-p", "due_work_harness", "--due-work-require-assessed")
-    result.assert_outcomes(passed=10)
+    result.assert_outcomes(passed=0)
+    result.stdout.fnmatch_lines(["*10 declared*"])

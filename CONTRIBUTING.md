@@ -72,6 +72,21 @@ uv run --no-sync pytest demos/dbos_transactional_outbox -p no:django
 
 ## Rules the code follows
 
+Redis-backed self-tests own their servers, including a separate server for
+server-wide faults. Install `redis-server` and the Redis/Celery/RQ extras, then run:
+
+```bash
+uv run python -m pytest_obligation.integrations.redis_server -- pytest package/tests/rq package/tests/celery_worker -n 4
+uv run python scripts/check_celery_regressions.py
+```
+
+The second command verifies observer sensitivity against two pinned upstream fix
+reversions using real workers; it creates a temporary checkout and disposable
+Redis. See [contract validation](package/docs/validating-contracts.md) for the
+framework-independent control and evidence requirements. Direct destructive
+self-test runs require explicit dedicated-server configuration; localhost is
+never assumed disposable.
+
 See [ARCHITECTURE.md](package/docs/architecture.md). In short: nothing outside
 `src/pytest_obligation/integrations/` imports a framework; integrations import
 theirs only when installed; every harness defense is self-tested in both
