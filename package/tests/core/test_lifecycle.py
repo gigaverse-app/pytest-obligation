@@ -6,6 +6,7 @@ import pytest
 
 from pytest_obligation.contract import NotApplicable, ObligationContract, Profile, contract_cases
 from pytest_obligation.lifecycle import (
+    LifecycleProof,
     assert_competing_transition_preserves_effects,
     assert_pending_admission_preserves_effects,
     assert_settled_admission_preserves_effects,
@@ -84,3 +85,9 @@ def test_a_production_error_handler_cannot_hide_a_failed_checkpoint_control():
     example = settlement_example("swallow").model_copy(update={"observe_competing": lambda: 0})
     with pytest.raises(AssertionError, match="changed no product state"):
         assert_competing_transition_preserves_effects(example)
+
+
+def test_existing_hosts_can_declare_the_same_proof_without_runtime_changes():
+    LifecycleProof(binding=admission_example, proof=assert_pending_admission_preserves_effects)()
+    with pytest.raises(AssertionError, match="shared lifecycle assertion"):
+        LifecycleProof(binding=admission_example, proof=lambda example: None)()

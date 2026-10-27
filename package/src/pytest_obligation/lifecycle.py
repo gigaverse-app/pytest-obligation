@@ -10,6 +10,7 @@ from contextlib import AbstractContextManager
 from typing import Any
 
 from pytest_obligation.binding import INVOCATION_AUTHORING_OPERATIONS, assert_binding_reaches_production
+from pytest_obligation.helpers import Binding, entered_binding
 from pytest_obligation.models import HarnessModel
 
 
@@ -119,3 +120,24 @@ def assert_competing_transition_preserves_effects(example: SettlementInterleavin
     assert reached == 1, "production operation never reached the declared checkpoint"
     example.recover()
     assert example.observe() == example.expected, "competing transition discarded or duplicated admitted effects"
+
+
+class LifecycleProof(HarnessModel):
+    """Configure a lifecycle proof through an existing host's ``ExtraProof`` API.
+
+    This compatibility route runs the same assertions as the named contract
+    fields, allowing adopters to upgrade the proof library independently of a
+    runtime release. The binding scope stays open for the entire proof.
+    """
+
+    binding: Binding[Any]
+    proof: Callable[[Any], None]
+
+    def __call__(self) -> None:
+        assert self.proof in (
+            assert_pending_admission_preserves_effects,
+            assert_settled_admission_preserves_effects,
+            assert_competing_transition_preserves_effects,
+        ), "LifecycleProof requires a shared lifecycle assertion"
+        with entered_binding(self.binding) as example:
+            self.proof(example)

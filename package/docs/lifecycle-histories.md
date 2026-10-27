@@ -52,6 +52,12 @@ only during setup, is a failing binding, not passing coverage.
 
 ## Verify the observer
 
+For a host version that exposes only `extras`, declare
+`ExtraProof(name="...", run=LifecycleProof(binding=..., proof=...), transactional=True)`.
+`LifecycleProof` runs the same shared assertion with its binding scope open.
+This lets an application upgrade its proof library without importing unrelated
+runtime or database changes. Declare both admission assertions separately.
+
 Use `RegressionControl` in `ExtraProof` with
 `assert_pending_admission_preserves_effects`,
 `assert_settled_admission_preserves_effects`, or
