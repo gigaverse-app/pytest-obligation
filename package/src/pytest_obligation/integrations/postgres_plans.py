@@ -331,12 +331,13 @@ def bitmap_overturns_the_walk(
     walked: dict[str, Any], bitmap: dict[str, Any], *, table: str, predicate_indexes: PredicateIndexes = ()
 ) -> bool:
     """
-    Whether a bitmap-only plan shows an index narrows the selection after the walked plan said none does.
+    Whether another access path proves narrowing after the preferred plan said none does.
 
     On a tiny table every index walk costs about the same, so with sequential
     scans off the planner may walk an unrelated index (a unique key) and filter
     an equality or due-time filter, whichever statistics autovacuum left. Asked
-    again with plain index scans off too, it must build a bitmap. The bitmap
+    again with plain index scans off, or with explicit sorting discouraged, it
+    may expose a useful bitmap or ordered partial-index path. The alternative
     must pass :func:`index_served_verdict` with the same named partial indexes.
     When range bounds exist, every input must additionally narrow those columns,
     either by naming it in its ``Index Cond`` (outside string literals) or by
@@ -373,6 +374,10 @@ def bitmap_overturns_the_walk(
     constrained = _constrained_columns(predicate_indexes)
     scans = [node for node in iter_plan_nodes(bitmap) if node.get("Relation Name") == table]
     return all(bounded <= _narrowed(node, bounded, constrained) for node in scans)
+
+
+# Both probe shapes share one verdict; preserve the existing bitmap keyword API.
+alternative_overturns_the_walk = bitmap_overturns_the_walk
 
 
 def _narrowed(node: dict[str, Any], bounded: set[str], constrained: Mapping[str, Collection[str]]) -> set[str]:

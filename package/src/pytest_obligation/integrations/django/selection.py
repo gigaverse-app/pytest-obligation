@@ -15,8 +15,10 @@ answers them for a ``due_work`` binding that returns a Django ``QuerySet``:
   makes the plan structural evidence rather than a costing artifact. When that
   plan walks an unrelated index and filters a range bound, the plan is asked
   again with plain index scans off too, and
-  :func:`~pytest_obligation.integrations.postgres_plans.bitmap_overturns_the_walk`
-  decides;
+  :func:`~pytest_obligation.integrations.postgres_plans.alternative_overturns_the_walk`
+  decides. If a bitmap still favors an unrelated index, a final probe discourages
+  explicit sorting to expose an eligible ordered index. Every alternative must
+  pass the same structural narrowing verdict;
 * **replica read** — the database alias the QuerySet is routed to, compared
   against the aliases that are replicas;
 * **scan counts** — ``EXPLAIN ANALYZE (FORMAT JSON)``, read by
@@ -43,7 +45,7 @@ from pytest_obligation.host import ReadCosts
 from pytest_obligation.integrations.django.indexes import attach_catalog_facts, installed_indexes
 from pytest_obligation.integrations.django.writes import require_postgresql
 from pytest_obligation.integrations.postgres_plans import (
-    bitmap_overturns_the_walk,
+    alternative_overturns_the_walk,
     index_served_verdict,
     read_cost,
     referenced_columns,
@@ -62,13 +64,19 @@ def _plan(explained: str | list[Any]) -> dict[str, Any]:
 _WITHOUT_SEQUENTIAL_SCANS = ("enable_seqscan",)
 #: ...and to ask whether one narrows it: a bitmap needs an index condition or a matching partial predicate.
 _BITMAP_ONLY = ("enable_seqscan", "enable_indexscan", "enable_indexonlyscan")
+#: Prefer an index that supplies ordering over a small unrelated bitmap plus a sort.
+_WITHOUT_SORTS = ("enable_seqscan", "enable_sort")
 
 
 def explain_index_eligibility(queryset: QuerySet[Any], *, bitmap_only: bool = False) -> dict[str, Any]:
     """Probe index eligibility without executing the selected query or leaking settings."""
+    return _explain_with_disabled(queryset, _BITMAP_ONLY if bitmap_only else _WITHOUT_SEQUENTIAL_SCANS)
+
+
+def _explain_with_disabled(queryset: QuerySet[Any], disabled: tuple[str, ...]) -> dict[str, Any]:
+    """Run one bounded access-path probe, restoring its caller's planner settings."""
     require_postgresql(queryset.db, "the index-served proof", "it reads EXPLAIN plans")
     database = connections[queryset.db]
-    disabled = _BITMAP_ONLY if bitmap_only else _WITHOUT_SEQUENTIAL_SCANS
     # A successful nested atomic block releases a savepoint, not SET LOCAL.
     # Restore explicitly on success; rollback owns restoration on SQL failure.
     # Use the queryset's actual connection for both EXPLAIN and its settings.
@@ -165,8 +173,14 @@ class DjangoSelectionInspector(HarnessModel):
             return True, json.dumps(plan, indent=2)
         # A tiny table may make the planner walk an unrelated index; the bitmap-only plan decides then.
         bitmap = explain_index_eligibility(queryset, bitmap_only=True)
-        if bitmap_overturns_the_walk(plan, bitmap, table=table, predicate_indexes=named):
+        if alternative_overturns_the_walk(plan, bitmap, table=table, predicate_indexes=named):
             return True, json.dumps(bitmap, indent=2)
+        # Eligibility must survive a cost preference for an unrelated bitmap.
+        # The alternative still has to narrow every original bound; never
+        # accept an index just because it supplies ORDER BY.
+        ordered = _explain_with_disabled(queryset, _WITHOUT_SORTS)
+        if alternative_overturns_the_walk(plan, ordered, table=table, predicate_indexes=named):
+            return True, json.dumps(ordered, indent=2)
         return False, verdict
 
     def replica_read(self, selection: object) -> str | None:
