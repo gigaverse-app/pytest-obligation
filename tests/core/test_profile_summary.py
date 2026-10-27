@@ -21,6 +21,50 @@ class TestCatalog:
     return pytester
 
 
+@pytest.mark.parametrize("summary", [False, True])
+def test_declarations_cooperate_with_consumers_that_require_execution(
+    contract_project: pytest.Pytester, summary: bool
+) -> None:
+    contract_project.makeconftest("""
+import pytest
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+    if report.skipped or getattr(report, "wasxfail", None):
+        report.outcome = "failed"
+        report.longrepr = "A registered proof cannot be skipped or xfailed"
+    return report
+""")
+    result = contract_project.runpytest_subprocess(
+        "-q",
+        "--due-work-profile-report=evidence.json",
+        "--junitxml=evidence.xml",
+        *(["--due-work-summary"] if summary else []),
+    )
+    assert result.ret == pytest.ExitCode.OK
+    if not summary:
+        assert "declared" not in result.parseoutcomes()
+        assert result.parseoutcomes()["passed"] > 9
+    import json
+    from xml.etree import ElementTree
+
+    suite = next(iter(json.loads((contract_project.path / "evidence.json").read_text()).values()))
+    declarations = suite["additional_cases"].values()
+    assert len(suite["additional_cases"]) == 9
+    assert all(row["declaration_recorded"] and not row["passed"] for row in declarations)
+    document = ElementTree.parse(contract_project.path / "evidence.xml")
+    assert len(document.findall(".//property[@name='obligation_declaration']")) == 9
+    assert not document.findall(".//skipped")
+
+
+@pytest.mark.parametrize("workers", [0, 2])
+def test_declarations_do_not_inflate_behavioral_passes(contract_project: pytest.Pytester, workers: int) -> None:
+    result = contract_project.runpytest_subprocess("-q", "-n", str(workers), "--due-work-summary")
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines(["*DECLARED*A-not_applicable*", "*9 declared*"])
+    assert "PASSED  A-not_applicable" not in result.stdout.str()
+
+
 @pytest.mark.parametrize("workers", [0, 2])
 def test_complete_contract_is_verified_without_a_json_file(contract_project: pytest.Pytester, workers: int) -> None:
     result = contract_project.runpytest_subprocess("-q", "-n", str(workers), "--due-work-summary")

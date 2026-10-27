@@ -1198,6 +1198,8 @@ class ContractCase(HarnessModel):
     family: str = ""
     #: Declaration rows stay visible but never count as passing behavioral proofs.
     assessment: Disposition | None = None
+    #: An explicit no-op declaration, distinct from executable assessment probes.
+    declaration: str | None = None
     #: Composition contributes this same execution to each related guarantee.
     related_profiles: tuple[Profile, ...] = ()
 
@@ -1298,11 +1300,12 @@ def _unclaimed_case(
         case = ContractCase(
             id=f"{label}-declined",
             run=disposition.prove or (lambda: None),
+            declaration=disposition.because if disposition.prove is None else None,
             fixtures=fixtures if disposition.prove else (),
         )
         return case.parameter(transactional=transactional if disposition.prove else None)
     if isinstance(disposition, NotApplicable):
-        case = ContractCase(id=f"{label}-not_applicable", run=lambda: None)
+        case = ContractCase(id=f"{label}-not_applicable", run=lambda: None, declaration=disposition.because)
         return case.parameter()
     case = ContractCase(
         id=f"{label}-known_gap",
@@ -1608,6 +1611,11 @@ def _install_suite(cls: type, params: list[Any], test_name: str, doc: str) -> ty
     @pytest.mark.due_work
     @pytest.mark.parametrize("case", params)
     def run_case(self: Any, case: ContractCase, request: pytest.FixtureRequest) -> None:
+        if case.declaration is not None:
+            # Complete the declaration normally for consumer execution guards.
+            # Coverage and the optional summary distinguish it from behavioral proof.
+            request.node.user_properties.append(("obligation_declaration", case.declaration))
+            return
         for fixture in case.fixtures:
             request.getfixturevalue(fixture)
         case.run()
@@ -1778,7 +1786,11 @@ def _covered_recovery_cases(contract: ObligationContract, covers: tuple[DueWorkS
             # The declared split collects as a visible row, the way a declined
             # profile does — reviewable, never silently skipped.
             case_id = f"covers-{short}-recovery_declined"
-            params.append(pytest.param(ContractCase(id=case_id, run=lambda: None), id=case_id))
+            params.append(
+                pytest.param(
+                    ContractCase(id=case_id, run=lambda: None, declaration=source.unrecoverable_because), id=case_id
+                )
+            )
             continue
         case = ContractCase(
             profile=Profile.A,
@@ -2116,7 +2128,9 @@ def scheduled_selection_cases(selection: ScheduledSelection) -> list[Any]:
     else:
         # The declared absence collects as a visible row, the same way a
         # declined profile does: reviewable, never silently skipped.
-        case = ContractCase(id="schedule_evidence-declined", run=lambda: None, fixtures=selection.fixtures)
+        case = ContractCase(
+            id="schedule_evidence-declined", run=lambda: None, declaration=selection.unscheduled_because
+        )
         params.append(case.parameter())
     params.extend(_extra_cases(selection.extras, selection.fixtures))
     return params

@@ -88,6 +88,8 @@ def code(value: str) -> str:
 
 
 def case_status(case: CaseEvidence) -> str:
+    if case.declaration_recorded:
+        return "Declaration recorded; no behavioral proof"
     if case.passed:
         return "Passed"
     if any(f.kind == "binding" for f in case.failures):
@@ -148,7 +150,9 @@ def advice(profile: ProfileCoverage) -> str:
 
 def all_cases(suite: SuiteCoverage) -> dict[str, CaseEvidence]:
     # Related profiles can reference the same generated case. Count that case once.
-    result = {key: value for group in suite.case_groups() for key, value in group.items()}
+    result = {
+        key: value for group in suite.case_groups() for key, value in group.items() if not value.declaration_recorded
+    }
     # Optional exploration disabled by selection does not invalidate fixed-history proofs.
     result.update({f"exploration:{k}": v for k, v in (suite.exploration or {}).items() if v.selected})
     return result
