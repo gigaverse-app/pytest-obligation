@@ -814,3 +814,49 @@ python -m pytest_obligation.reporting \
 This reads JSON as data and recomputes verdicts from evidence. Stored `verified`
 and `passed` display values cannot turn missing/failed execution into green.
 The terminal's `--due-work-summary` remains available alongside the PR report.
+# Combining separate CI jobs
+
+Each test lane should write `--due-work-profile-report` JSON and JUnit, then run
+the report action with `post-comment: false` and a distinct `sticky-key`. Run
+the report step even after test failure. Its artifact contains the evidence and
+expected shard count, rather than only rendered Markdown.
+
+An aggregate job waits for every expected lane, downloads each artifact from
+the **current workflow run and attempt** into its own directory, and supplies
+those directories as `evidence-paths`:
+
+```yaml
+- uses: actions/download-artifact@v8
+  with:
+    name: obligation-workers-${{ github.run_attempt }}
+    path: worker-evidence
+- uses: gigaverse-app/pytest-obligation/report@v1
+  with:
+    report-path: unit-evidence/obligation-*.json
+    expected-reports: ${{ needs.plan.outputs.shards }}
+    junit-path: unit-evidence/report-*.xml
+    evidence-paths: worker-evidence
+    test-outcome: ${{ needs.unit.result }}
+```
+
+Use the reporter version containing this feature and pin the report/publish
+actions to the same reviewed revision during adoption. Both lanes must check
+out the same immutable commit. Do not download the latest successful artifact
+from a different run: a revision check is compatibility validation, not proof
+that the latest attempt passed. Fork publication continues to treat every
+artifact as data and re-renders it in the trusted publisher.
+
+Every requested directory is required. Missing files, incompatible declarations
+or revisions keep evidence unavailable, while readable checks remain visible.
+Each lane's expected count is checked independently. Filtered checks in one
+lane can receive execution evidence from another; failures and interrupted
+attempts remain failures/incomplete, and repeated paths are read once. The
+aggregate counts checks, not jobs, so a check referenced by several profiles
+still counts once. Omit an optional lane only when it was deliberately not
+scheduled; its unexecuted checks remain filtered, never inferred as passing.
+
+The CLI equivalent repeats `--evidence-input DIRECTORY` with `--revision SHA`.
+For an aggregate containing only staged lanes, use an empty raw `--input` glob
+and `--test-outcome skipped`. Aggregate artifacts use manifest version 2 so an
+older publisher cannot silently discard unavailable-lane evidence.
+

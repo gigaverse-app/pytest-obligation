@@ -52,7 +52,7 @@ class RenderManifest(HarnessModel):
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    version: Literal[1] = 1
+    version: Literal[1, 2] = 1
     expected_reports: int = Field(ge=0, le=100_000)
     test_outcome: TestOutcome
     graphics: bool
@@ -61,10 +61,12 @@ class RenderManifest(HarnessModel):
     inventory_unavailable: bool = False
     #: The report's lane title; the producer's text, so it is rendered as text and bounded.
     title: str = Field(default="", max_length=120)
+    #: A requested lane was missing, stale or invalid. Survives trusted re-rendering.
+    evidence_unavailable: bool = False
 
 
 #: Fields added to version 1 after its first release: written only when set (see :class:`RenderManifest`).
-_OPTIONAL_LATER = frozenset({"title"})
+_OPTIONAL_LATER = frozenset({"title", "evidence_unavailable"})
 
 
 @dataclass(frozen=True)
@@ -195,6 +197,8 @@ def load(directory: Path) -> StagedEvidence:
     inventory = None
     # A rejected collected inventory may still leave the statically discovered one in use.
     problems = [INVENTORY_UNAVAILABLE] if manifest.inventory_unavailable else []
+    if manifest.evidence_unavailable:
+        problems.append("One or more requested CI evidence lanes were unavailable or incompatible.")
     inventory_path = directory / INVENTORY
     if inventory_path.exists() or inventory_path.is_symlink():
         try:
@@ -202,7 +206,7 @@ def load(directory: Path) -> StagedEvidence:
                 raise ValueError("no regular inventory")
             inventory = ApplicationInventory.model_validate_json(inventory_path.read_bytes())
         except (OSError, ValueError, ValidationError):
-            problems[:] = [INVENTORY_UNAVAILABLE]
+            problems.append(INVENTORY_UNAVAILABLE)
     return StagedEvidence(
         manifest=manifest,
         reports=_members(directory / REPORTS, ".json"),
