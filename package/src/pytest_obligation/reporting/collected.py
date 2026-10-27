@@ -21,7 +21,6 @@ def skipped_tests(inventory: ApplicationInventory, paths: list[Path]) -> int | N
             skip = case.find("skipped")
             attempted = (
                 skip is None
-                or any(prop.get("name") == "obligation_declaration" for prop in case.findall("properties/property"))
                 or skip.get("type") == "pytest.xfail"
                 or case.find("failure") is not None
                 or case.find("error") is not None

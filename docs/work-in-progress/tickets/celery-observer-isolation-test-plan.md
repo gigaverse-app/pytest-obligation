@@ -9,3 +9,12 @@
 - [x] Run affected core and Redis suites, lint, types, skill validation, and CI; document exact scope and results in the PR.
 
 Local validation: 1,489 core tests passed (9 optional skips); 438 Redis/RQ/Celery tests passed, 10 known xfails, 85 declarations; both pinned upstream reversions detected. CI routing, changed-file types, lint, framework-free imports, documentation links and skill validation passed. GitHub CI results are recorded on the PR.
+
+Review follow-up: reproduced Due's strict execution guard failure with a consumer
+hook, then verified ordinary pytest outcomes remain compatible while summary,
+JSON and JUnit retain declaration metadata. Added a failing control that leaks
+its regression; the helper now verifies the restored baseline. Consolidated the
+Redis subprocess environment and extracted the shared reference observer.
+Updated local core and application-core run: 1,534 passed, 9 optional skips;
+5 Redis lifecycle controls passed. The Redis CI command explicitly requests
+the declaration-aware summary. The unchanged pinned Due consumer runs in CI.

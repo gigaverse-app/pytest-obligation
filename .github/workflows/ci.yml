@@ -231,7 +231,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y redis-server
       # Each xdist worker takes its own four Redis databases (tests/redis_databases.py), so cases that
       # empty theirs cannot wipe another worker's; four workers use all 16 of the service's databases.
-      - run: uv run --no-sync python -m pytest_obligation.integrations.redis_server -- pytest package/tests/rq package/tests/celery_worker integration_tests/rq integration_tests/celery_worker -p no:django -rxX -n 4 --durations=10 --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-redis.json --junitxml=adopters-redis.xml
+      - run: uv run --no-sync python -m pytest_obligation.integrations.redis_server -- pytest package/tests/rq package/tests/celery_worker integration_tests/rq integration_tests/celery_worker -p no:django -rxX -n 4 --durations=10 --due-work-summary --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-redis.json --junitxml=adopters-redis.xml
       - name: Verify detector sensitivity against reverted Celery fixes
         run: uv run --no-sync python scripts/check_celery_regressions.py
       # The framework tutorial's RQ example: its own pytest root and host, on the database REDIS_URL names.

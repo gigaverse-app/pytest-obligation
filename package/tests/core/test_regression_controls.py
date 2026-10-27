@@ -43,6 +43,22 @@ def test_a_broken_baseline_never_counts_as_detection() -> None:
         assert_detects_regression(broken, regression=never_entered, match="duplicate delivery")
 
 
+def test_a_control_that_leaves_the_regression_enabled_fails_validation() -> None:
+    deliveries = 1
+
+    @contextmanager
+    def leaks_regression() -> Iterator[None]:
+        nonlocal deliveries
+        deliveries = 2
+        yield
+
+    def check() -> None:
+        assert deliveries == 1, "duplicate delivery"
+
+    with pytest.raises(AssertionError, match="restored baseline.*duplicate delivery"):
+        assert_detects_regression(check, regression=leaks_regression, match="duplicate delivery")
+
+
 @pytest.mark.parametrize("phase", ["enter", "check", "exit"])
 def test_unrelated_failures_never_count_as_detection(phase: str) -> None:
     active = False

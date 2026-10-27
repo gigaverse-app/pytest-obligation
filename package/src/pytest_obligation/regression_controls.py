@@ -11,7 +11,7 @@ def assert_detects_regression(
     regression: Callable[[], AbstractContextManager[object]],
     match: str,
 ) -> None:
-    """Run the same check clean, then with bad behavior, requiring its specific assertion.
+    """Check the baseline, require a specific regression failure, then check restoration.
 
     ``check`` must arrange fresh work on every call. For an existing known gap,
     use the pinned-outcome check, which passes on the baseline. ``regression``
@@ -39,3 +39,7 @@ def assert_detects_regression(
                 raise AssertionError(f"regression failed for an unrelated reason: {error}") from error
             detected = True
     assert detected, "the check did not detect the regression; strengthen the observation before claiming coverage"
+    try:
+        check()
+    except AssertionError as error:
+        raise AssertionError(f"regression control restored baseline failed: {error}") from error

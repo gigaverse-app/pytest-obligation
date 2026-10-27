@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from pytest_obligation.integrations.redis_server import redis_server
+from pytest_obligation.integrations.redis_server import redis_environment
 from pytest_obligation.regression_controls import assert_detects_regression
 
 BASE = "e3cc7cc532a9a0ef0be575a66a03cfff52ef23be"
@@ -35,7 +35,7 @@ def probe(stage: str, blind: bool) -> None:
     from pytest_obligation.integrations.celery_worker import worker_history
     from pytest_obligation.process_histories import assert_pinned_process_outcomes
     from tests.celery_worker import app as reference
-    from tests.celery_worker.test_celery_worker_contract import send_chord, what_happened
+    from tests.celery_worker.observations import send_chord, what_happened
 
     def old_chord() -> str:
         reference.empty()
@@ -83,21 +83,13 @@ def main() -> None:
             check=True,
         )
         subprocess.run(["git", "-C", str(checkout), "checkout", "--quiet", BASE], check=True)
-        with redis_server() as server, redis_server() as fault_broker:
-            env = {
-                **os.environ,
-                "REDIS_URL": server,
-                "CELERY_OWN_BROKER_URL": fault_broker,
-                "PYTEST_OBLIGATION_REDIS_RESET": "1",
-                "PYTHONDONTWRITEBYTECODE": "1",
-                "PYTHONPATH": os.pathsep.join((str(checkout), str(ROOT / "package"))),
-            }
-            for variable, database in (
-                ("CELERY_BROKER_URL", 10),
-                ("CELERY_RESULT_BACKEND", 11),
-                ("CELERY_RECORDS_URL", 12),
-            ):
-                env[variable] = server.rsplit("/", 1)[0] + f"/{database}"
+        with redis_environment() as env:
+            env.update(
+                {
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONPATH": os.pathsep.join((str(checkout), str(ROOT / "package"))),
+                }
+            )
             for number, commit, source, stage in FIXES:
                 patch = subprocess.check_output(
                     ["git", "-C", str(checkout), "diff", f"{commit}^", commit, "--", source]

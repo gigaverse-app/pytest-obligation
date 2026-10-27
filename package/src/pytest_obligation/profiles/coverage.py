@@ -60,15 +60,15 @@ class CaseEvidence(_ExecutedEvidence):
     @computed_field
     @property
     def passed(self) -> bool:
-        return self.declaration is None and self._completed("passed")
+        return self.declaration is None and self._completed()
 
     @computed_field
     @property
     def declaration_recorded(self) -> bool:
         """Only a completed declaration call counts; setup skips and teardown errors do not."""
-        return self.declaration is not None and self._completed("skipped")
+        return self.declaration is not None and self._completed()
 
-    def _completed(self, call_outcome: str) -> bool:
+    def _completed(self) -> bool:
         # A prior completed attempt cannot cover a failed or interrupted repeat.
         phases = ("setup", "call", "teardown")
         return (
@@ -76,8 +76,8 @@ class CaseEvidence(_ExecutedEvidence):
             and self.selected
             and len({len(self.outcomes.get(phase, ())) for phase in phases}) == 1
             and all(
-                self.outcomes.get(phase) and all(outcome == expected for outcome in self.outcomes[phase])
-                for phase, expected in (("setup", "passed"), ("call", call_outcome), ("teardown", "passed"))
+                self.outcomes.get(phase) and all(outcome == "passed" for outcome in self.outcomes[phase])
+                for phase in phases
             )
         )
 

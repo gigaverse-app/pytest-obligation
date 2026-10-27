@@ -184,7 +184,7 @@ class _Summary:
             suite, _, case = report.nodeid.rpartition("::")
             reason = getattr(report, "wasxfail", "")
             declaration = dict(report.user_properties).get("obligation_declaration")
-            if isinstance(declaration, str) and report.skipped:
+            if isinstance(declaration, str) and report.passed:
                 outcome, reason = "DECLARED", declaration
             elif reason and report.skipped:
                 outcome = "XFAIL"
@@ -225,8 +225,13 @@ _WORDS = {
 }
 
 
-def pytest_report_teststatus(report: pytest.TestReport) -> tuple[str, str, str] | None:
-    if report.when == "call" and report.skipped and dict(report.user_properties).get("obligation_declaration"):
+def pytest_report_teststatus(report: pytest.TestReport, config: pytest.Config) -> tuple[str, str, str] | None:
+    if (
+        config.getoption(SUMMARY)
+        and report.when == "call"
+        and report.passed
+        and dict(report.user_properties).get("obligation_declaration")
+    ):
         return "declared", "D", "DECLARED"
     return None
 

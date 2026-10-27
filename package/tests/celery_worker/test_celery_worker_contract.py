@@ -11,12 +11,11 @@ import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import celery
 import pytest
 import redis
-from celery import chord
 from celery.app.task import Task
 from celery.result import AsyncResult
 from packaging.version import Version
@@ -34,6 +33,7 @@ from pytest_obligation.integrations.celery_worker import (
 from pytest_obligation.process_histories import ProcessHistory
 from tests.celery_worker import app as reference
 from tests.celery_worker.app import empty
+from tests.celery_worker.observations import send_chord, what_happened
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32",
@@ -64,24 +64,6 @@ def send_on_own_broker() -> str:
             link_error=reference.report_failure.s(),
             producer=reference.app.amqp.Producer(connection),
         ).id
-
-
-def send_chord() -> str:
-    # Two messages, and a body that announces them once both are sent; the body's error callback reports a failure.
-    empty()
-    header = [reference.send_message.s(f"order {n} has shipped").on_error(reference.report_failure.s()) for n in (1, 2)]
-    return chord(header)(reference.announce_all.s().on_error(reference.report_failure.s())).id
-
-
-def what_happened(task_id: str) -> tuple[str, int, tuple[str, ...]]:
-    # decode_responses=True makes every reply a str; redis-py's annotations do not follow it.
-    announced = cast("list[str]", reference.RECORDS.lrange("announced", 0, -1))
-    return (
-        str(AsyncResult(task_id, app=reference.app).state),
-        reference.RECORDS.llen("sent"),
-        # Sorted: the link and the error callback run in different processes, in either order.
-        tuple(sorted(announced)),
-    )
 
 
 #: Celery #10752 and #10759 stopped a task whose SUCCESS was stored from running its error callback. Both

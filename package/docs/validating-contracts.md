@@ -21,7 +21,8 @@ is a regression baseline; it is not an independent specification of correctness.
 ## Check the detector in both directions
 
 `pytest_obligation.regression_controls.assert_detects_regression` runs a check
-on the working baseline, then inside a context that introduces a regression:
+on the working baseline, inside a context that introduces a regression, and
+again after the context exits to verify that the baseline was restored:
 
 ```python
 from pytest_obligation.regression_controls import assert_detects_regression
@@ -74,8 +75,12 @@ number. Namespaced keys do not isolate server-wide configuration changes.
 
 ## Report what ran
 
-- `DECLARED` rows document exclusions without executing behavioral checks.
-  They remain visible in the terminal and are skipped with a reason in JUnit.
+- With `--due-work-summary`, `DECLARED` rows document exclusions separately
+  from behavioral checks. Declaration calls complete normally for compatibility
+  with pytest consumers that reject skipped tests. Without that option, pytest's
+  ordinary pass count includes completed declarations; it is not a behavioral
+  proof count. JSON coverage always excludes declarations from passing proofs;
+  JUnit preserves their reasons in the `obligation_declaration` property.
   A decline with a real `prove` callback still executes and can fail.
 - `--due-work-summary` includes each completed history stage's comparison:
   baseline, matching outcome, pinned divergence, changed outcome, or unreached

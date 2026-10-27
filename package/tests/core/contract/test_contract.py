@@ -1187,8 +1187,7 @@ def test_suite_cases_are_exactly_what_pytest_collects_from_the_generated_suite()
 
 def test_the_conforming_reference_suite_passes_every_generated_case() -> None:
     outcomes, output, code = _run_reference_cases("conforming")
-    assert outcomes == {"passed": _generated_case_count() - 3 - 8, "xfailed": 3}, output
-    assert "8 declared" in output
+    assert outcomes == {"passed": _generated_case_count() - 3, "xfailed": 3}, output
     assert code == pytest.ExitCode.OK, output
 
 

@@ -50,7 +50,7 @@ def test_generated_histories_and_optional_search_are_real_due_work_cases(
         "-q", "-n", str(workers), "-m", "due_work", f"--due-work-explore={mode}", f"--due-work-profile-report={report}"
     )
     result.assert_outcomes(
-        passed=len(scenario.histories()) + (mode == "smoke"), xfailed=3, deselected=(mode == "off" and workers == 0)
+        passed=9 + len(scenario.histories()) + (mode == "smoke"), xfailed=3, deselected=(mode == "off" and workers == 0)
     )
     suites = TypeAdapter(dict[str, SuiteCoverage]).validate_json(report.read_bytes())
     suite = next(iter(suites.values()))

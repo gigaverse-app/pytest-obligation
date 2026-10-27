@@ -74,13 +74,13 @@ def redis_server(*, executable: str = "redis-server") -> Iterator[str]:
                         process.wait()
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run a test command with two disposable servers, including a separate fault broker."""
-    command = list(sys.argv[1:] if argv is None else argv)
-    if command[:1] == ["--"]:
-        command.pop(0)
-    if not command:
-        raise SystemExit("usage: python -m pytest_obligation.integrations.redis_server -- pytest [arguments]")
+@contextmanager
+def redis_environment() -> Iterator[dict[str, str]]:
+    """Own two servers and yield a subprocess environment with isolated endpoints.
+
+    The caller's environment is untouched. Celery endpoint overrides are removed
+    so each test worker can derive its databases from the owned REDIS_URL.
+    """
     with redis_server() as server, redis_server() as fault_broker:
         env = {
             **os.environ,
@@ -92,6 +92,17 @@ def main(argv: list[str] | None = None) -> int:
         # derived from REDIS_URL by the test application. Never inherit one.
         for variable in ("CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", "CELERY_RECORDS_URL"):
             env.pop(variable, None)
+        yield env
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run a test command with two disposable servers, including a separate fault broker."""
+    command = list(sys.argv[1:] if argv is None else argv)
+    if command[:1] == ["--"]:
+        command.pop(0)
+    if not command:
+        raise SystemExit("usage: python -m pytest_obligation.integrations.redis_server -- pytest [arguments]")
+    with redis_environment() as env:
         return subprocess.call(command, env=env)
 
 

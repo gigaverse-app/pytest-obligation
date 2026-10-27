@@ -1,6 +1,7 @@
 """Owned Redis processes cannot erase an unrelated server or survive their scope."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -50,17 +51,19 @@ def test_default_urls_cannot_authorize_destructive_setup(monkeypatch: pytest.Mon
 def test_runner_clears_overrides_and_cleans_up_after_command_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/10")
+    for variable in ("CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", "CELERY_RECORDS_URL"):
+        monkeypatch.setenv(variable, "redis://localhost:6379/10")
     script = tmp_path / "command.py"
     output = tmp_path / "endpoints.json"
     script.write_text("""
 import json, os, sys
 from pathlib import Path
-assert 'CELERY_BROKER_URL' not in os.environ
+assert not {'CELERY_BROKER_URL', 'CELERY_RESULT_BACKEND', 'CELERY_RECORDS_URL'} & os.environ.keys()
 Path(sys.argv[1]).write_text(json.dumps([os.environ['REDIS_URL'], os.environ['CELERY_OWN_BROKER_URL']]))
 sys.exit(7)
 """)
     assert main([sys.executable, str(script), str(output)]) == 7
+    assert os.environ["CELERY_BROKER_URL"] == "redis://localhost:6379/10"
     urls = json.loads(output.read_text())
     assert urls[0] != urls[1]
     for url in urls:
