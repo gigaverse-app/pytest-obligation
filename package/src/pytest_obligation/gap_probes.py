@@ -34,6 +34,7 @@ from typing import Any
 from pytest_obligation.binding import (
     assert_test_binding_delegates_to_production,
 )
+from pytest_obligation.helpers import BindingScopeError
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.automatic_recovery import (
     DueWorkSweep,
@@ -222,6 +223,8 @@ class DisprovenCapability(HarnessModel):
         assert_semantic_binding_is_production_bound(built)
         try:
             self.proof(built)
+        except BindingScopeError:
+            raise
         except AssertionError as error:
             assert re.search(self.match, str(error)), (
                 f"the decline names {self.proof.__name__} but the failure was a "

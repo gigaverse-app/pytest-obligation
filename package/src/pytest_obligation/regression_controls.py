@@ -7,7 +7,7 @@ from typing import Any
 
 from pytest_obligation.binding import callable_code, is_harness_owned
 from pytest_obligation.gap_probes import assert_semantic_binding_is_production_bound
-from pytest_obligation.helpers import Binding, entered_binding
+from pytest_obligation.helpers import Binding, BindingScopeError, entered_binding
 from pytest_obligation.models import HarnessModel
 
 
@@ -59,6 +59,8 @@ def assert_detects_regression(
     pattern = re.compile(match)
     try:
         check()
+    except BindingScopeError:
+        raise
     except AssertionError as error:
         raise AssertionError(f"regression control baseline failed: {error}") from error
     detected = False
@@ -66,6 +68,8 @@ def assert_detects_regression(
         # Catch only the proof itself: a failing setup or cleanup is not detection.
         try:
             check()
+        except BindingScopeError:
+            raise
         except AssertionError as error:
             if not pattern.search(str(error)):
                 raise AssertionError(f"regression failed for an unrelated reason: {error}") from error
@@ -73,5 +77,7 @@ def assert_detects_regression(
     assert detected, "the check did not detect the regression; strengthen the observation before claiming coverage"
     try:
         check()
+    except BindingScopeError:
+        raise
     except AssertionError as error:
         raise AssertionError(f"regression control restored baseline failed: {error}") from error

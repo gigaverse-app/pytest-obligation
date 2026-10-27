@@ -33,8 +33,8 @@ T = TypeVar("T")
 Binding: TypeAlias = Callable[[], T | AbstractContextManager[T]]
 
 
-class BindingScopeError(RuntimeError):
-    """An assertion in resource setup/cleanup, distinct from a behavioral proof failure."""
+class BindingScopeError(AssertionError):
+    """A scoped assertion, preserved as an assertion but never regression evidence."""
 
 
 @contextmanager
