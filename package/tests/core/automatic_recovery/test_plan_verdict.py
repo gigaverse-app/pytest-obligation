@@ -633,6 +633,23 @@ def test_equality_selection_requires_a_genuinely_narrowing_bitmap(indexed: bool,
     assert bitmap_overturns_the_walk(walked, bitmap, table=_TABLE) is (indexed and filtered)
 
 
+@pytest.mark.parametrize(
+    "condition,local", [("(state = 'ready'::text)", True), ("(state = $1)", True), ("(state = p.state)", False)]
+)
+@pytest.mark.parametrize("indexed", [True, False])
+def test_a_local_equality_on_the_wrong_key_can_use_a_real_narrowing_alternative(
+    condition: str, local: bool, indexed: bool
+) -> None:
+    walked = _index_scan(
+        **{
+            "Catalog Index": {"Access Method": "btree", "Key Columns": ["owner_id", "state"], "Predicate": None},
+            "Index Cond": condition,
+        }
+    )
+    alternative = _bitmap(_input("state_ix", "(state = 'ready')" if indexed else None))
+    assert bitmap_overturns_the_walk(walked, alternative, table=_TABLE) is (local and indexed)
+
+
 def test_the_bitmap_is_judged_with_the_named_partial_indexes() -> None:
     # A named partial index needs no Index Cond, for the verdict and the fallback alike; it must be named.
     bitmap = {

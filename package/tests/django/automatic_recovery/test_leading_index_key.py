@@ -9,6 +9,7 @@ Each test creates the table and its indexes inside its own transaction, before
 any row exists, so no earlier history can leave an index the planner may not use.
 """
 
+import json
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -17,7 +18,7 @@ from django.db.models import QuerySet
 from django.test.utils import isolate_apps
 
 from pytest_obligation.contract import ScheduledSelection
-from pytest_obligation.integrations.django.selection import explain_index_eligibility
+from pytest_obligation.integrations.django.selection import DjangoSelectionInspector, explain_index_eligibility
 from pytest_obligation.integrations.postgres_plans import assert_plan_is_index_served, iter_plan_nodes
 from pytest_obligation.profiles.automatic_recovery import assert_selection_is_index_served
 
@@ -116,6 +117,86 @@ def test_an_index_that_narrows_passes_beside_the_second_key_one(chunk_table: Non
 
 
 _PARTIAL_INDEX = "proof_chunk_unknown_ix"
+
+
+@pytest.mark.parametrize("ordered_projection", [False, True], ids=["member-key", "ordered-projection"])
+def test_retained_partial_index_remains_eligible_beside_a_small_wrong_key_index(
+    chunk_table: None, ordered_projection: bool
+) -> None:
+    # A reused test DB can retain a large, valid index after its rows are gone,
+    # while a newly created accounting index is tiny. Eligibility must not be
+    # confused with the cheapest plan for that empty-table history.
+    _Chunk.objects.bulk_create(_Chunk(campaign_id=i, state="UNKNOWN", padding="x" * 1500) for i in range(_ROWS))
+    keys = "(padding, id)" if ordered_projection else "(id) INCLUDE (padding)"
+    _index(f"CREATE INDEX {_PARTIAL_INDEX} ON {_TABLE} {keys} WHERE state = 'UNKNOWN'")
+    _Chunk.objects.all().delete()
+    included = "id, padding" if ordered_projection else "id"
+    _index(f"CREATE INDEX {_SECOND_KEY_INDEX} ON {_TABLE} (campaign_id, state) INCLUDE ({included})")
+    with connection.cursor() as cursor:
+        cursor.execute(f"ANALYZE {_TABLE}")
+    inspector = DjangoSelectionInspector(partial_indexes=(_PARTIAL_INDEX,))
+    selection = (
+        _unknown_chunks().values("padding", "id").order_by("padding", "id")
+        if ordered_projection
+        else _unknown_chunks().values("id").order_by("campaign_id", "state")
+    )
+    served, evidence = inspector.index_served(selection)
+    assert served, evidence
+
+    # Removing the real narrowing index must still fail on the accounting
+    # index's unconstrained leading key; never accept its state condition alone.
+    _index(f"DROP INDEX {_PARTIAL_INDEX}")
+    served, evidence = DjangoSelectionInspector().index_served(selection)
+    assert not served, evidence
+
+
+@pytest.mark.parametrize("has_partial", [False, True], ids=["missing-index", "eligible-index"])
+def test_an_ordered_partial_path_can_overturn_the_cheaper_bitmap(
+    chunk_table: None, monkeypatch: pytest.MonkeyPatch, has_partial: bool
+) -> None:
+    _index(f"CREATE INDEX {_SECOND_KEY_INDEX} ON {_TABLE} (campaign_id, state)")
+    if has_partial:
+        _index(f"CREATE INDEX {_PARTIAL_INDEX} ON {_TABLE} (padding, id) WHERE state = 'UNKNOWN'")
+    selection = _unknown_chunks().values("padding", "id").order_by("padding", "id")
+
+    def explain(**kwargs: object) -> str:
+        # EXTERNAL SEAM: EXPLAIN shapes captured from a real reused PostgreSQL
+        # adopter database. Pin the planner's cost choice, not the proof verdict;
+        # catalog lookup, setting changes and structural validation remain real.
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW enable_sort")
+            sorting = cursor.fetchone()[0]
+        if sorting == "off" and has_partial:
+            plan = {"Node Type": "Index Only Scan", "Relation Name": _TABLE, "Index Name": _PARTIAL_INDEX}
+        else:
+            plan = {
+                "Node Type": "Sort",
+                "Plans": [
+                    {
+                        "Node Type": "Bitmap Heap Scan",
+                        "Relation Name": _TABLE,
+                        "Plans": [
+                            {
+                                "Node Type": "Bitmap Index Scan",
+                                "Index Name": _SECOND_KEY_INDEX,
+                                "Index Cond": "((state)::text = 'UNKNOWN'::text)",
+                            }
+                        ],
+                    }
+                ],
+            }
+        return json.dumps([{"Plan": plan}])
+
+    monkeypatch.setattr(selection, "explain", explain)
+    with connection.cursor() as cursor:
+        cursor.execute("SHOW enable_sort")
+        previous = cursor.fetchone()[0]
+    inspector = DjangoSelectionInspector(partial_indexes=(_PARTIAL_INDEX,) if has_partial else ())
+    served, evidence = inspector.index_served(selection)
+    assert served is has_partial, evidence
+    with connection.cursor() as cursor:
+        cursor.execute("SHOW enable_sort")
+        assert cursor.fetchone()[0] == previous
 
 
 @pytest.mark.parametrize(

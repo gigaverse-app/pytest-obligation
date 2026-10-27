@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.22.0...v0.23.0) (2026-10-27)
+
+
+### Features
+
+* **celery:** task_contract for an application's own task, recovery bound by the application ([#180](https://github.com/gigaverse-app/pytest-obligation/issues/180)) ([38b339c](https://github.com/gigaverse-app/pytest-obligation/commit/38b339c63cdeaf21891102d8e2c7650015fc41e5))
+* **proofs:** verify provider waits preserve failure budgets ([18e554f](https://github.com/gigaverse-app/pytest-obligation/commit/18e554f954b9d231b44c1d30d5b237a6215a4940))
+* **report:** an amber ? for counts a run did not record, and a title per lane ([#182](https://github.com/gigaverse-app/pytest-obligation/issues/182)) ([c7f1693](https://github.com/gigaverse-app/pytest-obligation/commit/c7f169300605b6d9e8b45573a55aacfd4e00c46e))
+
+
+### Bug fixes
+
+* **contracts:** validate regression sensitivity and separate declarations ([#186](https://github.com/gigaverse-app/pytest-obligation/issues/186)) ([08d68ee](https://github.com/gigaverse-app/pytest-obligation/commit/08d68eedabf0aea393ffd8917a7a872561f376ea))
+* **plans:** recognize local equality in a nonleading index key ([494df85](https://github.com/gigaverse-app/pytest-obligation/commit/494df85ed875bb2559bdcb280e6e180aee7c90d2))
+* **report:** one counting rule decides every number in the sticky ([#185](https://github.com/gigaverse-app/pytest-obligation/issues/185)) ([68378bb](https://github.com/gigaverse-app/pytest-obligation/commit/68378bbcaa3c2b2539277619df2df0a612fabf79))
+* **report:** readable manifests across versions, one alert per status ([#184](https://github.com/gigaverse-app/pytest-obligation/issues/184)) ([5345ccd](https://github.com/gigaverse-app/pytest-obligation/commit/5345ccdb06019ca311df34a283b74bcba99c1dbd))
+
 ## [0.22.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.21.0...v0.22.0) (2026-10-25)
 
 
