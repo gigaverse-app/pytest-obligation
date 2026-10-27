@@ -19,6 +19,7 @@ from pytest_obligation.lifecycle import (
     assert_settled_admission_preserves_effects,
 )
 from pytest_obligation.references.lifecycle import admission_example, settlement_example
+from pytest_obligation.regression_controls import RegressionControl
 
 
 @pytest.mark.parametrize(
@@ -114,3 +115,30 @@ def test_report_distinguishes_missing_history_from_a_declared_extra():
     report = contract_report(contract)
     assert "Admission overlap: extra:pending" in report
     assert "Settlement interleaving: not declared; outside" in report
+
+
+@pytest.mark.parametrize(
+    "factory, proof, regression, message",
+    [
+        (admission_example, assert_pending_admission_preserves_effects, "retain-first", "overlapping admissions lost"),
+        (
+            settlement_example,
+            assert_competing_transition_preserves_effects,
+            "discard",
+            "competing transition discarded",
+        ),
+    ],
+)
+def test_shared_regression_control_accepts_lifecycle_bindings(factory, proof, regression, message):
+    fault = None
+
+    @contextmanager
+    def mutate():
+        nonlocal fault
+        fault = regression
+        try:
+            yield
+        finally:
+            fault = None
+
+    RegressionControl(binding=lambda: factory(fault), proof=proof, regression=mutate, match=message)()
