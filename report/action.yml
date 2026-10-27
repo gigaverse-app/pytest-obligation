@@ -16,6 +16,9 @@ inputs:
   expected-reports:
     description: Expected number of shard reports. Missing shards keep the aggregate from claiming complete evidence.
     default: '0'
+  evidence-paths:
+    description: Newline-separated downloaded report artifact directories from other jobs in this run/attempt. Each lane must use the same checked-out commit. Missing or incompatible lanes remain visible.
+    default: ''
   application-paths:
     description: Newline-separated repository-relative Python source files/directories to inventory without importing or collecting tests. Checkout the tested revision first. Static decorator declarations are listed even when their tests are not selected.
     default: ''
@@ -81,6 +84,7 @@ runs:
       env:
         REPORT_PATH: ${{ inputs.report-path }}
         EXPECTED_REPORTS: ${{ inputs.expected-reports }}
+        EVIDENCE_PATHS: ${{ inputs.evidence-paths }}
         REPORTER_PACKAGE: ${{ github.action_path }}/../package
         REPORT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         REPORT_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
@@ -106,6 +110,9 @@ runs:
         if [[ "$REPORT_GRAPHICS" == 'true' ]]; then graphics_args+=(--graphics); fi
         inventory_args=()
         while IFS= read -r path; do
+          if [[ -n "$path" ]]; then inventory_args+=(--evidence-input "$path"); fi
+        done <<< "$EVIDENCE_PATHS"
+        while IFS= read -r path; do
           if [[ -n "$path" ]]; then inventory_args+=(--application-path "$path"); fi
         done <<< "$APPLICATION_PATHS"
         while IFS= read -r decorator; do
@@ -125,7 +132,7 @@ runs:
           --input "$REPORT_PATH" --expected-reports "$EXPECTED_REPORTS" --output "$output" \
           --source "PR head $REPORT_HEAD · workflow commit $GITHUB_SHA · run $GITHUB_RUN_ID · attempt $GITHUB_RUN_ATTEMPT" \
           --run-url "$REPORT_RUN" --test-outcome "$TEST_OUTCOME" --title "$REPORT_TITLE" --asset-ref "$REPORT_ASSET_REF" \
-          --repository-url "$REPORT_REPOSITORY" --revision "$GITHUB_SHA" "${graphics_args[@]}" "${inventory_args[@]}" \
+          --repository-url "$REPORT_REPOSITORY" --revision "$(git rev-parse HEAD)" "${graphics_args[@]}" "${inventory_args[@]}" \
           "${document_args[@]}" --stage-artifact "$workspace/artifact"
         echo "markdown-path=$output" >> "$GITHUB_OUTPUT"
         echo "artifact-path=$workspace/artifact" >> "$GITHUB_OUTPUT"

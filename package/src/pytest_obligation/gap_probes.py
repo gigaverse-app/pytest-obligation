@@ -72,6 +72,7 @@ from pytest_obligation.profiles.fact_derived_obligations import (
     assert_outstanding_selection_is_production_bound,
     assert_settlement_is_production_bound,
 )
+from pytest_obligation.profiles.harmless_replay import ReplaySafeEffect, assert_replay_transition_is_production_bound
 
 
 def _sweep_guards(sweep: DueWorkSweep) -> None:
@@ -114,6 +115,7 @@ _SEMANTIC_BINDING_GUARDS: dict[type, Callable[[Any], None]] = {
     SupersededSnapshot: assert_snapshot_transitions_are_production_bound,
     StateDerived: _derivation_guards,
     FixedEffectDerived: _derivation_guards,
+    ReplaySafeEffect: assert_replay_transition_is_production_bound,
 }
 
 

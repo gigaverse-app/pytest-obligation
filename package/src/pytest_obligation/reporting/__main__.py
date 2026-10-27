@@ -10,11 +10,19 @@ from pytest_obligation.reporting import badge, readme
 from pytest_obligation.reporting.artifact import INVENTORY_UNAVAILABLE, RenderManifest, stage
 from pytest_obligation.reporting.compose import merge_evidence, render_merged, safe_run_url, write_report
 from pytest_obligation.reporting.inventory import ApplicationInventory, discover
+from pytest_obligation.reporting.lanes import combine_lanes
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="JSON file or glob of shards from this run")
+    parser.add_argument(
+        "--evidence-input",
+        action="append",
+        default=[],
+        type=Path,
+        help="Downloaded staged artifact directory from another job in this run; repeat per lane",
+    )
     parser.add_argument(
         "--expected-reports", type=int, default=0, help="Expected shard count; 0 disables count checking"
     )
@@ -87,12 +95,34 @@ def main(argv: Sequence[str] | None = None) -> None:
             inventory_unavailable = True
     paths = [Path(path) for path in sorted(glob.glob(args.input, recursive=True))]
     junit = [Path(path) for path in sorted(glob.glob(args.junit_input, recursive=True))] if args.junit_input else None
+    problems = [INVENTORY_UNAVAILABLE] if inventory_unavailable else []
+    lane_problems = False
+    if args.evidence_input:
+        # Check the raw lane independently too, before adding other jobs' files.
+        raw = merge_evidence(
+            paths,
+            expected_reports=args.expected_reports,
+            test_outcome=args.test_outcome,
+            inventory=None,
+            problems=[],
+            junit=None,
+        )
+        if raw.unavailable:
+            problems.append(raw.unavailable)
+        lanes = combine_lanes(args.evidence_input, revision=args.revision, test_outcome=args.test_outcome)
+        args.expected_reports = (args.expected_reports or len(paths)) + lanes.expected_reports
+        paths.extend(lanes.reports)
+        if junit is not None:
+            junit.extend(lanes.junit)
+        args.test_outcome = lanes.test_outcome
+        problems.extend(lanes.problems)
+        lane_problems = bool(problems)
     evidence = merge_evidence(
         paths,
         expected_reports=args.expected_reports,
         test_outcome=args.test_outcome,
         inventory=inventory,
-        problems=[INVENTORY_UNAVAILABLE] if inventory_unavailable else [],
+        problems=problems,
         junit=junit,
     )
 
@@ -127,6 +157,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     if args.stage_artifact:
         manifest = RenderManifest(
+            # Older publishers must refuse aggregates they cannot preserve,
+            # especially the unavailable-lane flag, rather than silently drop it.
+            version=2 if args.evidence_input else 1,
             expected_reports=args.expected_reports,
             test_outcome=args.test_outcome,
             graphics=args.graphics,
@@ -135,6 +168,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             junit=junit is not None,
             inventory_unavailable=inventory_unavailable,
             title=args.title[:120],
+            evidence_unavailable=lane_problems,
         )
         stage(args.stage_artifact, manifest, reports=paths, junit=junit or [], inventory=inventory, markdown=body)
 

@@ -7,10 +7,13 @@ from pytest_obligation.contract import ExtraProof, NotApplicable, ObligationCont
 from pytest_obligation.profiles.fact_derived_obligations import (
     assert_unrecorded_obligation_is_discovered,
 )
+from pytest_obligation.profiles.harmless_replay import assert_replay_converges
 from pytest_obligation.references.in_memory import (
     EdgeTriggeredDeriver,
+    InMemoryReplayEffect,
     MaterialisingDeriver,
     materialising_derivation_binding,
+    reference_replay_safety_binding,
 )
 from pytest_obligation.regression_controls import RegressionControl
 
@@ -45,3 +48,22 @@ def test_a_regression_declaration_rejects_a_test_written_proof() -> None:
             regression=nullcontext,
             match="anything",
         )()
+
+
+def test_replay_controls_validate_production_binding_before_detecting_duplicates() -> None:
+    original = InMemoryReplayEffect.execute
+
+    def duplicate(effect: InMemoryReplayEffect, operation_id: int) -> None:
+        original(effect, operation_id)
+        if effect.executions > 1:
+            effect.outputs[operation_id] += ":duplicate"
+
+    control = RegressionControl(
+        binding=reference_replay_safety_binding,
+        proof=assert_replay_converges,
+        regression=lambda: patch.object(InMemoryReplayEffect, "execute", duplicate),
+        match="in-memory replay-safe effect",
+    )
+    control()
+    with pytest.raises(AssertionError, match="did not detect"):
+        control.model_copy(update={"regression": nullcontext})()
