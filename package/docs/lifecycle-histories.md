@@ -5,6 +5,11 @@ different entry points touch the same owner. Inventory migration bridges,
 webhooks, repair commands and ordinary producers before choosing bindings.
 Running each producer separately does not establish their composition.
 
+A fixed provider identity can still have a growing requested effect scope.
+Inventory every admitted input before declaring immutability. Bind the existing
+convergence and stale-snapshot families for mutable scope; do not decline all of
+profile E merely because the owner ID or provider key cannot change.
+
 Declare named `admission_overlaps` and `settlement_interleavings` on
 `ObligationContract`. Each factory yields fresh wiring from
 `pytest_obligation.lifecycle` in a context that owns its external seams.

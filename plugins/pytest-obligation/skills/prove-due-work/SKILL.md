@@ -27,6 +27,10 @@ Supply production commands and independent effect observations; never implement
 the scope union, settlement decision, or recovery loop in bindings. Verify a
 lost-effect regression with unchanged expectations. Document unbound pairs and
 checkpoints as outside coverage; A–J pass counts do not cover them implicitly.
+Inventory every admitted input field before declaring it immutable. A fixed
+owner/provider identity does not freeze the requested effect scope. Bind the
+existing convergence and stale-snapshot families when that scope can expand;
+do not use identity immutability to decline profile E for the whole operation.
 
 4. Inspect the installed pytest-obligation version, its Python requirements, extras and public API before writing a contract. Current source uses `pytest_obligation.ObligationContract`; older adopters may use the compatibility namespace. Match documentation to the installed release, and do not silently substitute unreleased source for a published dependency. If installation is authorized, add only the development extras needed for the integration. Use [integration boundaries](references/integrations.md) to choose a supported adapter; identify missing boundaries rather than simulating production behavior in the test.
 5. If the project has a `[tool.due-work-harness]` scan configuration, run `due-work-harness sites` and `due-work-harness in-transaction` with the project's environment. A scan result is a handoff candidate, not a bug. If configuration is absent, identify `production-packages` from the actual import roots before adding it. The scan covers specific Python handoff APIs; MongoDB writes, Prefect bodies, and Kafka offsets require their respective runtime bindings.
