@@ -4,7 +4,14 @@ from contextlib import contextmanager
 
 import pytest
 
-from pytest_obligation.contract import NotApplicable, ObligationContract, Profile, contract_cases
+from pytest_obligation.contract import (
+    ExtraProof,
+    NotApplicable,
+    ObligationContract,
+    Profile,
+    contract_cases,
+    contract_report,
+)
 from pytest_obligation.lifecycle import (
     LifecycleProof,
     assert_competing_transition_preserves_effects,
@@ -91,3 +98,19 @@ def test_existing_hosts_can_declare_the_same_proof_without_runtime_changes():
     LifecycleProof(binding=admission_example, proof=assert_pending_admission_preserves_effects)()
     with pytest.raises(AssertionError, match="shared lifecycle assertion"):
         LifecycleProof(binding=admission_example, proof=lambda example: None)()
+
+
+def test_report_distinguishes_missing_history_from_a_declared_extra():
+    contract = ObligationContract(
+        name="lifecycle specimen",
+        profiles={p: NotApplicable("No framework in this core specimen") for p in Profile},
+        extras=(
+            ExtraProof(
+                name="pending",
+                run=LifecycleProof(binding=admission_example, proof=assert_pending_admission_preserves_effects),
+            ),
+        ),
+    )
+    report = contract_report(contract)
+    assert "Admission overlap: extra:pending" in report
+    assert "Settlement interleaving: not declared; outside" in report

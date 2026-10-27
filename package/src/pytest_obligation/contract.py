@@ -180,6 +180,7 @@ from pytest_obligation.interleavings.adapters import integration as interleaving
 from pytest_obligation.interleavings.bindings import EvidenceConfluence, InFlightConvergence
 from pytest_obligation.lifecycle import (
     AdmissionOverlap,
+    LifecycleProof,
     SettlementInterleaving,
     assert_competing_transition_preserves_effects,
     assert_pending_admission_preserves_effects,
@@ -1878,12 +1879,28 @@ def contract_report(contract: ObligationContract) -> str:
             lines.extend(
                 f"    Handoff [{history.name}]: declared crash/recovery histories" for history in contract.handoffs
             )
-    for family, bindings in (
-        ("Admission overlap", contract.admission_overlaps),
-        ("Settlement interleaving", contract.settlement_interleavings),
+    for family, bindings, proofs in (
+        (
+            "Admission overlap",
+            contract.admission_overlaps,
+            (assert_pending_admission_preserves_effects, assert_settled_admission_preserves_effects),
+        ),
+        (
+            "Settlement interleaving",
+            contract.settlement_interleavings,
+            (assert_competing_transition_preserves_effects,),
+        ),
     ):
+        names = [
+            *bindings,
+            *(
+                f"extra:{extra.name}"
+                for extra in contract.extras
+                if isinstance(extra.run, LifecycleProof) and extra.run.proof in proofs
+            ),
+        ]
         lines.append(
-            f"  {family}: " + (", ".join(bindings) if bindings else "not declared; outside this contract's coverage")
+            f"  {family}: " + (", ".join(names) if names else "not declared; outside this contract's coverage")
         )
     for extra in contract.extras:
         note = f"known gap — {extra.gap}" if extra.gap else "applied"
