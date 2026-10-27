@@ -128,7 +128,8 @@ def test_partial_bitmap_must_cover_the_whole_selection(fault: str | None) -> Non
 
 
 @pytest.mark.parametrize("leading", ["available_at", "owner_id"])
-def test_a_range_on_a_later_key_needs_a_truly_narrowing_bitmap(leading: str) -> None:
+@pytest.mark.parametrize("ordered", [False, True], ids=["bitmap", "ordered-index"])
+def test_a_range_on_a_later_key_needs_a_truly_narrowing_alternative(leading: str, ordered: bool) -> None:
     from pytest_obligation.integrations.postgres_plans import bitmap_overturns_the_walk
 
     scan = {
@@ -140,9 +141,12 @@ def test_a_range_on_a_later_key_needs_a_truly_narrowing_bitmap(leading: str) -> 
     }
     arm = {
         **scan,
-        "Node Type": "Bitmap Index Scan",
+        "Node Type": "Index Scan" if ordered else "Bitmap Index Scan",
         "Catalog Index": {"Access Method": "btree", "Key Columns": [leading], "Predicate": None},
     }
-    del arm["Relation Name"]
-    bitmap = {"Node Type": "Bitmap Heap Scan", "Relation Name": "work", "Plans": [arm]}
-    assert bitmap_overturns_the_walk(scan, bitmap, table="work") is (leading == "available_at")
+    if ordered:
+        bitmap = arm
+    else:
+        del arm["Relation Name"]
+        bitmap = {"Node Type": "Bitmap Heap Scan", "Relation Name": "work", "Plans": [arm]}
+    assert bitmap_overturns_the_walk(walked=scan, bitmap=bitmap, table="work") is (leading == "available_at")
