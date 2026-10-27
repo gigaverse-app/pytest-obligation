@@ -1,6 +1,6 @@
 ---
 name: find-upstream-weaknesses
-description: Use to probe a real open-source project (an application first, or a framework) with due-work-harness, find background work that can be lost, repeated or misrecorded, and disclose it upstream as issues plus a PR that carries the harness contract. Triggers on "find problems in <project>", "probe <project>", "pick another app or library to test", "add a demo", "open an issue and a PR upstream", "disclose this finding", "adopt the harness in <project>", or any request to repeat the find-and-disclose cycle. Not for adopting the harness in the user's own repository (see ADOPTING.md).
+description: Use to probe a real open-source project (an application first, or a framework) with due-work-harness, find background work that can be lost, repeated or misrecorded, and disclose it upstream as issues plus a PR that carries the harness contract. Triggers on "find problems in the project", "probe the project", "pick another app or library to test", "add a demo", "open an issue and a PR upstream", "disclose this finding", "adopt the harness in the project", or any request to repeat the find-and-disclose cycle. Not for adopting the harness in the user's own repository (see ADOPTING.md).
 ---
 
 # Find weaknesses in a real project, then disclose them
@@ -33,8 +33,12 @@ gigaverse-backend's own due-work runtime and conformance instructions.
   Do it only with the user's authorization for this project in this session; if unsure, ask once, with
   the draft. Follow the target's own contribution rules over these: some ask for a human-written PR
   description or forbid AI-authored contributions, and then the user decides.
-- **Every comment you post opens with the self-identification line**
-  `> I'm {model}, AI can make mistakes. {a fresh 3-5 word joke}` (no joke on incident threads).
+- **Disclose assistance and affiliation briefly.** Follow the target's policy. Do not add repetitive
+  pitches or duplicate comments, and respect a maintainer's refusal.
+- **Prove the detector's sensitivity.** Read [contract validation](../../../package/docs/validating-contracts.md).
+  A claimed regression needs a passing baseline and a reverted fix or targeted bad behavior that fails
+  for the intended reason with unchanged observations and expectations. Separate declarations from
+  executed checks and use resources the test owns before erasing data.
 - **Every probe strengthens the harness.** A gap the probe hit becomes a general capability in the harness,
   released before the upstream PRs pin it.
 
@@ -72,7 +76,7 @@ Work in a scratch directory, not in a checkout that matters. Track the steps as 
    build it in the harness on its own branch (test it, in CI, on the stack it failed on), then run a DRY
    round from demo to application to integration to core. Release it (see RELEASING.md) and raise the pins.
 8. **Disclose.** One issue per finding (template `issue.md`), then one PR (`pr.md`) that links the magic
-   point at the pushed commit and shows the `--due-work-summary` capture, then the plain-language comments
+   point at the pushed commit and shows the `--due-work-summary` capture. Include the explanation
    with ASCII art (`eli5-issue.md`, `eli5-pr.md`) on each. Fill their template and policy first.
 9. **Keep it green.** Watch CI. The usual causes are in the playbook's table: lockfile, an environment that
    does not install the harness, a version-dependent table, a bot commit (merge, never rebase), workflows
@@ -87,5 +91,5 @@ Work in a scratch directory, not in a checkout that matters. Track the steps as 
 - [ ] `ObligationContract`, its decorated collected class, `Findings`, gaps, plain test, and the magic comment are in the pushed commit
 - [ ] generated node IDs were collected and executed; the PR links the declaration, class, and summary/artifact, with gaps counted separately
 - [ ] the harness gap (if any) is fixed, tested in CI on that stack, released, and the pins raised
-- [ ] issues, PR and plain-language comments are posted with the self-identification line, no fix offered
+- [ ] authorized reports reuse existing issues, disclose assistance briefly, and contain the reproduction without duplicate promotional comments
 - [ ] CI is green, or its red is explained with evidence

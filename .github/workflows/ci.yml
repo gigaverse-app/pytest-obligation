@@ -222,32 +222,20 @@ jobs:
       ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
           fromJSON(needs.select-tests.outputs.lanes).redis) }}
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
-      # The Celery broker-full fault sets maxmemory on its broker's whole server, so that broker gets its own.
-      redis-own-broker:
-        image: redis:7
-        ports: ["6380:6379"]
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      REDIS_URL: redis://localhost:6379/14
-      CELERY_OWN_BROKER_URL: redis://localhost:6380/0
     steps:
       - uses: actions/checkout@v7
       - uses: gigaverse-app/ci-esta/actions/setup-cached-uv@v1
         with:
           python-version: '3.14'
           sync-args: --all-packages --no-default-groups --extra rq --extra celery --extra exploration --group xdist
+      - run: sudo apt-get update && sudo apt-get install -y redis-server
       # Each xdist worker takes its own four Redis databases (tests/redis_databases.py), so cases that
       # empty theirs cannot wipe another worker's; four workers use all 16 of the service's databases.
-      - run: uv run --no-sync pytest package/tests/rq package/tests/celery_worker integration_tests/rq integration_tests/celery_worker -p no:django -rxX -n 4 --durations=10 --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-redis.json --junitxml=adopters-redis.xml
+      - run: uv run --no-sync python -m pytest_obligation.integrations.redis_server -- pytest package/tests/rq package/tests/celery_worker integration_tests/rq integration_tests/celery_worker -p no:django -rxX -n 4 --durations=10 --due-work-summary --due-work-explore=smoke --due-work-check-fixtures --due-work-require-assessed --due-work-profile-report=profiles-redis.json --junitxml=adopters-redis.xml
+      - name: Verify detector sensitivity against reverted Celery fixes
+        run: uv run --no-sync python scripts/check_celery_regressions.py
       # The framework tutorial's RQ example: its own pytest root and host, on the database REDIS_URL names.
-      - run: uv run --no-sync pytest --due-work-check-fixtures
+      - run: uv run --no-sync python -m pytest_obligation.integrations.redis_server -- pytest --due-work-check-fixtures
         working-directory: examples/rq_tutorial
 
       - name: Require the promised adopters and executed capabilities

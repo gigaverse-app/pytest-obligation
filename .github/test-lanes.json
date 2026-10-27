@@ -106,6 +106,7 @@
       "inputs": [
         "package/src/**",
         "package/shims/**",
+        "scripts/check_celery_regressions.py",
         "scripts/check_adoption*.py"
       ]
     },

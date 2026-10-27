@@ -1,4 +1,4 @@
-> I'm {model}, AI can make mistakes. {joke}
+{Brief, truthful disclosure of AI assistance and project affiliation, following the target's policy.}
 
 Refs #{issue}, #{issue}
 
@@ -56,4 +56,12 @@ Beside {the related tests}, with no harness involved, {N} expected-failure tests
 
 ### Tested
 
-{Exactly what was run: environment, versions, commands, and the results: `{N} passed, {M} xfailed`.}
+{Exactly what was run: revisions, environment, versions, commands, and separate counts for executed
+passing checks, XFAILs, declarations and skipped/unrun cases. Do not count stage rows as extra tests.}
+
+| Coverage claim | Baseline | Reverted fix or targeted regression | Specific observed failure |
+| --- | --- | --- | --- |
+| {claim} | {result} | {revision/control} | {diagnostic, or explicitly unverified} |
+
+{Resource ownership and teardown; dependency and CI cost; limitations. The reproducer should remain
+useful to maintainers who choose not to adopt the plugin.}

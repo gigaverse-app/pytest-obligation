@@ -19,6 +19,8 @@ It also reports contract completeness from setup/call/teardown evidence, naming
 unassessed guarantees and proofs omitted by selection. It does not change exit status.
 """
 
+import json
+from collections.abc import Generator
 from importlib import import_module
 from pathlib import Path
 
@@ -26,6 +28,7 @@ import pytest
 
 from pytest_obligation.coverage.config import load_config
 from pytest_obligation.coverage.scan import scan
+from pytest_obligation.history_evidence import capture_histories
 from pytest_obligation.host import Host, configure
 from pytest_obligation.recording import report, start_recording, stop_recording
 
@@ -137,7 +140,7 @@ class _SuitesRan:
         # a case skipped before its call never ran.
         executed = report.when == "call" or (report.when == "setup" and report.failed)
         parts = report.nodeid.split("::")
-        if executed and len(parts) >= 3:
+        if executed and not dict(report.user_properties).get("obligation_declaration") and len(parts) >= 3:
             self.ran.add(((self.root / parts[0]).resolve(), parts[1]))
 
     @pytest.hookimpl(tryfirst=True)
@@ -168,14 +171,22 @@ class _Summary:
     def __init__(self) -> None:
         #: suite (``file::Class``) -> [(outcome, case, gap reason)], in run order.
         self.suites: dict[str, list[tuple[str, str, str]]] = {}
+        self.histories: list[dict[str, str]] = []
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if report.when == "call":
+            payload = dict(report.user_properties).get("obligation_histories")
+            if isinstance(payload, str):
+                self.histories.extend(json.loads(payload))
         if "due_work" not in report.keywords:
             return
         if report.when == "call" or (report.when == "setup" and not report.passed):
             suite, _, case = report.nodeid.rpartition("::")
             reason = getattr(report, "wasxfail", "")
-            if reason and report.skipped:
+            declaration = dict(report.user_properties).get("obligation_declaration")
+            if isinstance(declaration, str) and report.passed:
+                outcome, reason = "DECLARED", declaration
+            elif reason and report.skipped:
                 outcome = "XFAIL"
             elif reason:
                 outcome = "XPASS"
@@ -185,7 +196,7 @@ class _Summary:
             self.suites.setdefault(suite, []).append((outcome, name, reason))
 
     def pytest_terminal_summary(self, terminalreporter: pytest.TerminalReporter) -> None:
-        if not self.suites:
+        if not self.suites and not self.histories:
             return
         terminalreporter.section("due-work-harness: what each suite generated")
         for suite, cases in self.suites.items():
@@ -197,10 +208,43 @@ class _Summary:
             for outcome, name, reason in cases:
                 gap = f"  ({_shorten(reason)})" if reason else ""
                 terminalreporter.line(f"  {outcome:<7} {name}{gap}")
+        if self.histories:
+            terminalreporter.section("obligation: observed history stages (diagnostics, not extra tests)")
+            for row in self.histories:
+                terminalreporter.line(f"  {row['history']} | {row['stage']}: {row['status']}")
 
 
 #: Outcomes in pytest's own order and words.
-_WORDS = {"PASSED": "passed", "FAILED": "failed", "SKIPPED": "skipped", "XFAIL": "xfailed", "XPASS": "xpassed"}
+_WORDS = {
+    "PASSED": "passed",
+    "FAILED": "failed",
+    "SKIPPED": "skipped",
+    "XFAIL": "xfailed",
+    "XPASS": "xpassed",
+    "DECLARED": "declared",
+}
+
+
+def pytest_report_teststatus(report: pytest.TestReport, config: pytest.Config) -> tuple[str, str, str] | None:
+    if (
+        config.getoption(SUMMARY)
+        and report.when == "call"
+        and report.passed
+        and dict(report.user_properties).get("obligation_declaration")
+    ):
+        return "declared", "D", "DECLARED"
+    return None
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Generator[None, None, None]:
+    with capture_histories() as evidence:
+        try:
+            yield
+        finally:
+            if evidence:
+                # User properties survive xdist and are also retained in JUnit artifacts.
+                item.user_properties.append(("obligation_histories", json.dumps(evidence)))
 
 
 def _shorten(reason: str, limit: int = 110) -> str:
