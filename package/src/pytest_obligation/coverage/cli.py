@@ -17,12 +17,13 @@ rollback, and exits 1 if there are any: the places to write a contract first.
 """
 
 import argparse
+import ast
 import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from pytest_obligation.coverage.config import baseline_from, load_config
+from pytest_obligation.coverage.config import LegacyBaseline, baseline_from, load_config
 from pytest_obligation.coverage.report import Site
 from pytest_obligation.coverage.scan import baseline_growth, scan, sites_in_transaction, unaccounted_baseline
 from pytest_obligation.coverage.transactions import publications_before_commit
@@ -32,7 +33,7 @@ class MissingBaseRef(ValueError):
     """The base ref is not in the local repository; a shallow checkout must fetch it."""
 
 
-def _previous_baseline(root: Path, ref: str) -> dict[str, int] | None:
+def _previous_baseline(root: Path, ref: str, legacy: LegacyBaseline | None = None) -> dict[str, int] | None:
     """The baseline at ``ref``, or ``None`` when the project had not adopted the harness there."""
     known = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
@@ -48,7 +49,46 @@ def _previous_baseline(root: Path, ref: str) -> dict[str, int] | None:
     shown = subprocess.run(
         ["git", "-C", str(root), "show", f"{ref}:./pyproject.toml"], capture_output=True, text=True, check=False
     )
-    return baseline_from(shown.stdout) if shown.returncode == 0 else None
+    previous = baseline_from(shown.stdout) if shown.returncode == 0 else None
+    if previous is not None or legacy is None:
+        return previous
+    source = subprocess.run(
+        ["git", "-C", str(root), "show", f"{ref}:./{legacy.path}"], capture_output=True, text=True, check=False
+    )
+    if source.returncode:
+        raise ValueError(f"reviewed legacy baseline {legacy.path} is unavailable at {ref}")
+    values: dict[str, ast.expr] = {}
+    for node in ast.parse(source.stdout).body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            values[node.target.id] = node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            values[node.targets[0].id] = node.value
+    result: dict[str, int] = {}
+    for name in (*legacy.mappings, *legacy.sets):
+        if name not in values:
+            raise ValueError(f"reviewed legacy baseline has no {name}")
+        value = values[name]
+        if (
+            name in legacy.sets
+            and isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id == "frozenset"
+        ):
+            if len(value.args) != 1 or value.keywords:
+                raise ValueError(f"{name} must be a literal frozen set")
+            value = value.args[0]
+        parsed = ast.literal_eval(value)
+        if name in legacy.sets and not isinstance(parsed, set | frozenset):
+            raise ValueError(f"{name} must be a literal set of source names")
+        counts = {key: 1 for key in parsed} if name in legacy.sets else parsed
+        if not isinstance(counts, dict) or any(
+            not isinstance(key, str) or type(count) is not int or count < 1 for key, count in counts.items()
+        ):
+            raise ValueError(f"{name} must contain literal source names and positive site counts")
+        if result.keys() & counts.keys():
+            raise ValueError("reviewed legacy baselines overlap")
+        result.update(counts)
+    return result
 
 
 def _check(root: Path, base_ref: str | None) -> int:
@@ -56,7 +96,7 @@ def _check(root: Path, base_ref: str | None) -> int:
     report = scan(config)
     problems = list(report.problems)
     if base_ref:
-        previous = _previous_baseline(config.root, base_ref)
+        previous = _previous_baseline(config.root, base_ref, config.legacy_baseline)
         if previous is not None:
             problems.extend(
                 f"{name} grew in the baseline since {base_ref} ({previous.get(name, 0)} -> {config.baseline[name]} "

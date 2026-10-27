@@ -33,6 +33,14 @@ from pytest_obligation.models import HarnessModel
 DEFAULT_EXCLUDE = (".venv*", "venv", "node_modules", "build", "dist", ".git", "__pycache__", ".tox", ".nox")
 
 
+class LegacyBaseline(HarnessModel):
+    """Read literal legacy policy from the reviewed Git revision during migration only."""
+
+    path: str
+    mappings: tuple[str, ...] = ()
+    sets: tuple[str, ...] = ()
+
+
 class CoverageConfig(HarnessModel):
     root: Path
     production_packages: tuple[str, ...]
@@ -42,10 +50,12 @@ class CoverageConfig(HarnessModel):
     exclude: tuple[str, ...] = ()
     #: Kinds scanned in addition to those production's imports enable.
     kinds: tuple[SiteKind, ...] = ()
+    detect_sites: bool = True
     bridges: Mapping[str, int] = Field(default_factory=dict)
     bridge_methods: frozenset[str] = frozenset()
     transaction_openers: frozenset[str] = frozenset()
     baseline: Mapping[str, int] = Field(default_factory=dict)
+    legacy_baseline: LegacyBaseline | None = None
     #: Explicitly reviewed application wrappers around a public suite decorator.
     #: This declares trust for static inventory; runtime collection still verifies the generated proofs.
     suite_aliases: Mapping[
@@ -103,9 +113,11 @@ def load_config(root: Path | str = ".") -> CoverageConfig:
         test_paths=_strings(table, "test-paths", (".",)),
         exclude=_strings(table, "exclude", ()),
         kinds=resolve_kinds(_strings(table, "sites", ())),
+        detect_sites=table.get("detect-sites", True),
         bridges=_counts(table, "bridges"),
         bridge_methods=frozenset(_strings(table, "bridge-methods", ())),
         baseline=_counts(table, "baseline"),
+        legacy_baseline=LegacyBaseline.model_validate(table["legacy-baseline"]) if "legacy-baseline" in table else None,
         transaction_openers=frozenset(_strings(table, "transaction-openers", ())),
         suite_aliases=table.get("suite-aliases", {}),
     )
