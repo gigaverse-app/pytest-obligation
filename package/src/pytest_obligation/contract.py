@@ -178,6 +178,13 @@ from pytest_obligation.helpers import entered_binding as _entered
 from pytest_obligation.host import current_host
 from pytest_obligation.interleavings.adapters import integration as interleaving_integration
 from pytest_obligation.interleavings.bindings import EvidenceConfluence, InFlightConvergence
+from pytest_obligation.lifecycle import (
+    AdmissionOverlap,
+    SettlementInterleaving,
+    assert_competing_transition_preserves_effects,
+    assert_pending_admission_preserves_effects,
+    assert_settled_admission_preserves_effects,
+)
 from pytest_obligation.models import MISSING, HarnessModel, ObligationContractDesignError, with_positional
 from pytest_obligation.poison import poison_gap, poison_gap_names, stop_gap, stop_gap_names
 from pytest_obligation.process_histories import ProcessHistory, assert_process_deaths_converge
@@ -693,6 +700,10 @@ class ObligationContract(HarnessModel):
 
     completions: Mapping[str, Binding[BoundedCompletion]] = {}
     delivery_replays: Mapping[str, Binding[DeliveryReplay]] = {}
+    # Named cumulative producer pairs and observation/settlement checkpoints.
+    # These are opt-in histories; ordinary profile claims do not imply coverage.
+    admission_overlaps: Mapping[str, Binding[AdmissionOverlap]] = {}
+    settlement_interleavings: Mapping[str, Binding[SettlementInterleaving]] = {}
 
     #: Production transitions that commit work and hand work off. Each
     #: generates one transactional case: with every notification lost, and with
@@ -1013,7 +1024,12 @@ def _eligibility_errors(contract: ObligationContract) -> list[str]:
 def _design_errors(contract: ObligationContract) -> list[str]:
     """Every way the declaration fails to describe a complete contract."""
     errors: list[str] = _eligibility_errors(contract)
-    for family, bindings in (("completion", contract.completions), ("delivery-replay", contract.delivery_replays)):
+    for family, bindings in (
+        ("completion", contract.completions),
+        ("delivery-replay", contract.delivery_replays),
+        ("admission-overlap", contract.admission_overlaps),
+        ("settlement-interleaving", contract.settlement_interleavings),
+    ):
         for name, factory in bindings.items():
             if not name.strip():
                 errors.append(f"{family} needs a nonempty name")
@@ -1492,6 +1508,9 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
     for family, bindings, proof in (
         ("completion", contract.completions, assert_completes_within),
         ("delivery-replay", contract.delivery_replays, assert_delivery_replay),
+        ("admission-overlap", contract.admission_overlaps, assert_pending_admission_preserves_effects),
+        ("admission-overlap", contract.admission_overlaps, assert_settled_admission_preserves_effects),
+        ("settlement-interleaving", contract.settlement_interleavings, assert_competing_transition_preserves_effects),
     ):
         for name, factory in bindings.items():
             case = ContractCase(
@@ -1859,6 +1878,13 @@ def contract_report(contract: ObligationContract) -> str:
             lines.extend(
                 f"    Handoff [{history.name}]: declared crash/recovery histories" for history in contract.handoffs
             )
+    for family, bindings in (
+        ("Admission overlap", contract.admission_overlaps),
+        ("Settlement interleaving", contract.settlement_interleavings),
+    ):
+        lines.append(
+            f"  {family}: " + (", ".join(bindings) if bindings else "not declared; outside this contract's coverage")
+        )
     for extra in contract.extras:
         note = f"known gap — {extra.gap}" if extra.gap else "applied"
         lines.append(f"  Extra {extra.name}: {note}")

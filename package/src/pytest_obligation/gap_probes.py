@@ -35,6 +35,11 @@ from pytest_obligation.binding import (
     assert_test_binding_delegates_to_production,
 )
 from pytest_obligation.helpers import BindingScopeError
+from pytest_obligation.lifecycle import (
+    AdmissionOverlap,
+    SettlementInterleaving,
+    assert_lifecycle_bindings_are_production_bound,
+)
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.automatic_recovery import (
     DueWorkSweep,
@@ -116,6 +121,8 @@ _SEMANTIC_BINDING_GUARDS: dict[type, Callable[[Any], None]] = {
     StateDerived: _derivation_guards,
     FixedEffectDerived: _derivation_guards,
     ReplaySafeEffect: assert_replay_transition_is_production_bound,
+    AdmissionOverlap: assert_lifecycle_bindings_are_production_bound,
+    SettlementInterleaving: assert_lifecycle_bindings_are_production_bound,
 }
 
 

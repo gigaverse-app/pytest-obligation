@@ -17,6 +17,17 @@ For an external open-source project that the user wants to probe or report upstr
 
 ## Map and test
 
+Inventory every production entry point for the same owner, including legacy
+retry tasks, webhooks and narrow repairs. Separate producer coverage is not
+composition coverage. Bind `ObligationContract.admission_overlaps` for cumulative
+scopes and `settlement_interleavings` at observation/settlement checkpoints where
+another path can commit product state before completing effects. Reuse
+[lifecycle proofs](https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/lifecycle-histories.md).
+Supply production commands and independent effect observations; never implement
+the scope union, settlement decision, or recovery loop in bindings. Verify a
+lost-effect regression with unchanged expectations. Document unbound pairs and
+checkpoints as outside coverage; A–J pass counts do not cover them implicitly.
+
 4. Inspect the installed pytest-obligation version, its Python requirements, extras and public API before writing a contract. Current source uses `pytest_obligation.ObligationContract`; older adopters may use the compatibility namespace. Match documentation to the installed release, and do not silently substitute unreleased source for a published dependency. If installation is authorized, add only the development extras needed for the integration. Use [integration boundaries](references/integrations.md) to choose a supported adapter; identify missing boundaries rather than simulating production behavior in the test.
 5. If the project has a `[tool.due-work-harness]` scan configuration, run `due-work-harness sites` and `due-work-harness in-transaction` with the project's environment. A scan result is a handoff candidate, not a bug. If configuration is absent, identify `production-packages` from the actual import roots before adding it. The scan covers specific Python handoff APIs; MongoDB writes, Prefect bodies, and Kafka offsets require their respective runtime bindings.
 6. Build one small history for the real transition and real recovery. Inject at the supported commit, publication, callback, offset acknowledgement, or external-call boundary. Pair the interrupted history with normal operation and a control that would expose a missing or repeated effect. For process-level work, use the package's process histories where its worker or engine cannot be reached in-process.
