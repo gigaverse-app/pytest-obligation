@@ -112,6 +112,8 @@ def _derivation_guards(derived: StateDerived | FixedEffectDerived) -> None:
 #: Each profile binding's full invariant-0 guard set — both halves, authorship
 #: and delegation — keyed by adapter type.
 _SEMANTIC_BINDING_GUARDS: dict[type, Callable[[Any], None]] = {
+    AdmissionOverlap: assert_lifecycle_bindings_are_production_bound,
+    SettlementInterleaving: assert_lifecycle_bindings_are_production_bound,
     DueWorkSweep: _sweep_guards,
     FencedOwnership: _ownership_guards,
     AmbiguityAware: _ambiguity_guards,
@@ -121,8 +123,6 @@ _SEMANTIC_BINDING_GUARDS: dict[type, Callable[[Any], None]] = {
     StateDerived: _derivation_guards,
     FixedEffectDerived: _derivation_guards,
     ReplaySafeEffect: assert_replay_transition_is_production_bound,
-    AdmissionOverlap: assert_lifecycle_bindings_are_production_bound,
-    SettlementInterleaving: assert_lifecycle_bindings_are_production_bound,
 }
 
 
