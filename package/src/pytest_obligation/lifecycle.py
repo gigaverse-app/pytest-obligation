@@ -50,8 +50,39 @@ class SettlementInterleaving(HarnessModel):
     expected: Any
 
 
-def assert_lifecycle_bindings_are_production_bound(example: AdmissionOverlap | SettlementInterleaving) -> None:
-    fields = ("first", "later", "recover") if isinstance(example, AdmissionOverlap) else ("run", "compete", "recover")
+class PartialProgress(HarnessModel):
+    """Recovery after a definite failure leaves some effects completed.
+
+    Arrange admitted work with notifications held. The failure context installs
+    only an external fault and yields its cumulative hit counter. Run drives the
+    first real attempt; recover advances a bounded clock if needed and drives
+    registered recovery, with the fault removed. Both expectations must come
+    from the product promise. Observe every effect in the declared scope.
+
+    completed_effects optionally snapshots successful effect call counts.
+    Supply it when the workflow promises to checkpoint successful groups. Raw
+    replay-safe effects may legitimately run again; do not impose this stronger
+    efficiency guarantee on those workflows.
+    """
+
+    run: Callable[[], object]
+    recover: Callable[[], object]
+    failure: Callable[[], AbstractContextManager[Callable[[], int]]]
+    observe: Callable[[], Any]
+    expected_partial: Any
+    expected: Any
+    completed_effects: Callable[[], Any] | None = None
+
+
+def assert_lifecycle_bindings_are_production_bound(
+    example: AdmissionOverlap | SettlementInterleaving | PartialProgress,
+) -> None:
+    if isinstance(example, AdmissionOverlap):
+        fields = ("first", "later", "recover")
+    elif isinstance(example, SettlementInterleaving):
+        fields = ("run", "compete", "recover")
+    else:
+        fields = ("run", "recover")
     for field in fields:
         assert_binding_reaches_production(
             adopter="lifecycle history",
@@ -122,6 +153,28 @@ def assert_competing_transition_preserves_effects(example: SettlementInterleavin
     assert example.observe() == example.expected, "competing transition discarded or duplicated admitted effects"
 
 
+def assert_partial_progress_recovers(example: PartialProgress) -> None:
+    assert_lifecycle_bindings_are_production_bound(example)
+    assert example.expected_partial != example.expected, "partial expectations hide the remaining effects"
+    initial = example.observe()
+    assert initial != example.expected_partial, "partial progress already exists before the attempt"
+    assert initial != example.expected, "partial progress already has its terminal outcome"
+    with example.failure() as hits:
+        before = hits()
+        example.run()
+        assert hits() > before, "production operation never reached the injected failure"
+    assert example.observe() == example.expected_partial, "failed attempt missed its declared partial outcome"
+    completed = example.completed_effects() if example.completed_effects is not None else None
+    example.recover()
+    if example.completed_effects is not None:
+        assert example.completed_effects() == completed, "recovery repeated completed effect groups"
+    assert example.observe() == example.expected, "partial progress lost remaining promised effects"
+    example.recover()
+    if example.completed_effects is not None:
+        assert example.completed_effects() == completed, "settled recovery repeated completed effect groups"
+    assert example.observe() == example.expected, "settled recovery changed the declared outcome"
+
+
 class LifecycleProof(HarnessModel):
     """Configure a lifecycle proof through an existing host's ``ExtraProof`` API.
 
@@ -138,6 +191,7 @@ class LifecycleProof(HarnessModel):
             assert_pending_admission_preserves_effects,
             assert_settled_admission_preserves_effects,
             assert_competing_transition_preserves_effects,
+            assert_partial_progress_recovers,
         ), "LifecycleProof requires a shared lifecycle assertion"
         with entered_binding(self.binding) as example:
             self.proof(example)

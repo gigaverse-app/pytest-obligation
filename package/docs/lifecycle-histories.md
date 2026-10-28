@@ -73,5 +73,34 @@ behavior, require the intended missing/duplicate-effect assertion, and verify
 the restored baseline. Binding setup/cleanup errors are not detection.
 
 Record tested producer pairs and checkpoints alongside results. Missing pairs,
-partial-progress histories and independent worker races remain review questions;
+unbound failure boundaries and independent worker races remain review questions;
 these cases do not certify undisclosed entry points.
+
+
+## Partial progress and efficient recovery
+
+Declare named partial_progress bindings using PartialProgress and
+assert_partial_progress_recovers for each definite failure boundary in a
+multi-effect operation. Inventory preparation separately from publication:
+failure fetching a recipient or preparing a payload can be retried safely,
+while an accepted request with a lost response may be ambiguous.
+
+Bind run and recover to the real delivery and registered recovery entry
+points. The failure context yields a counter for calls that actually hit the
+external fault. The proof rejects an unreached fault, requires the independently
+declared expected_partial outcome, removes the fault and requires expected
+after recovery. It then runs recovery again to check the outcome stays settled.
+A direct second invocation of the business callback cannot prove that its
+durable owner retained the obligation.
+
+Optionally supply completed_effects, an independent snapshot of successful
+effect call counts, when the workflow checkpoints completed groups. Recovery
+must preserve that snapshot. Do not enforce this stronger efficiency property
+on raw effects whose safe replay is intentional. Counts must cover successful
+groups; the failed group must be allowed another attempt.
+
+Observe product state and external results for every group in the bound scope.
+A Boolean can hide duplicate work, and a work status cannot prove delivery.
+Include a sensitivity control that drops remaining work and another that
+repeats a completed group. Existing hosts use the same LifecycleProof extra.
+The library cannot discover an undeclared effect or choose its business policy.
