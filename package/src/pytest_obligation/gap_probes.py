@@ -37,6 +37,7 @@ from pytest_obligation.binding import (
 from pytest_obligation.helpers import BindingScopeError
 from pytest_obligation.lifecycle import (
     AdmissionOverlap,
+    PartialProgress,
     SettlementInterleaving,
     assert_lifecycle_bindings_are_production_bound,
 )
@@ -113,6 +114,7 @@ def _derivation_guards(derived: StateDerived | FixedEffectDerived) -> None:
 #: and delegation — keyed by adapter type.
 _SEMANTIC_BINDING_GUARDS: dict[type, Callable[[Any], None]] = {
     AdmissionOverlap: assert_lifecycle_bindings_are_production_bound,
+    PartialProgress: assert_lifecycle_bindings_are_production_bound,
     SettlementInterleaving: assert_lifecycle_bindings_are_production_bound,
     DueWorkSweep: _sweep_guards,
     FencedOwnership: _ownership_guards,

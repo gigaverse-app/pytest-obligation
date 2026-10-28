@@ -181,8 +181,10 @@ from pytest_obligation.interleavings.bindings import EvidenceConfluence, InFligh
 from pytest_obligation.lifecycle import (
     AdmissionOverlap,
     LifecycleProof,
+    PartialProgress,
     SettlementInterleaving,
     assert_competing_transition_preserves_effects,
+    assert_partial_progress_recovers,
     assert_pending_admission_preserves_effects,
     assert_settled_admission_preserves_effects,
 )
@@ -705,6 +707,7 @@ class ObligationContract(HarnessModel):
     # These are opt-in histories; ordinary profile claims do not imply coverage.
     admission_overlaps: Mapping[str, Binding[AdmissionOverlap]] = {}
     settlement_interleavings: Mapping[str, Binding[SettlementInterleaving]] = {}
+    partial_progress: Mapping[str, Binding[PartialProgress]] = {}
 
     #: Production transitions that commit work and hand work off. Each
     #: generates one transactional case: with every notification lost, and with
@@ -1030,6 +1033,7 @@ def _design_errors(contract: ObligationContract) -> list[str]:
         ("delivery-replay", contract.delivery_replays),
         ("admission-overlap", contract.admission_overlaps),
         ("settlement-interleaving", contract.settlement_interleavings),
+        ("partial-progress", contract.partial_progress),
     ):
         for name, factory in bindings.items():
             if not name.strip():
@@ -1512,6 +1516,7 @@ def contract_cases(contract: ObligationContract) -> list[Any]:
         ("admission-overlap", contract.admission_overlaps, assert_pending_admission_preserves_effects),
         ("admission-overlap", contract.admission_overlaps, assert_settled_admission_preserves_effects),
         ("settlement-interleaving", contract.settlement_interleavings, assert_competing_transition_preserves_effects),
+        ("partial-progress", contract.partial_progress, assert_partial_progress_recovers),
     ):
         for name, factory in bindings.items():
             case = ContractCase(
@@ -1890,6 +1895,7 @@ def contract_report(contract: ObligationContract) -> str:
             contract.settlement_interleavings,
             (assert_competing_transition_preserves_effects,),
         ),
+        ("Partial progress", contract.partial_progress, (assert_partial_progress_recovers,)),
     ):
         names = [
             *bindings,

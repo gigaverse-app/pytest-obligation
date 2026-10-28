@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 
-from pytest_obligation.lifecycle import AdmissionOverlap, SettlementInterleaving
+from pytest_obligation.lifecycle import AdmissionOverlap, PartialProgress, SettlementInterleaving
 
 
 def admission_example(fault=None):
@@ -72,4 +72,39 @@ def settlement_example(fault=None):
         recover=recover,
         observe=lambda: state["effects"],
         expected=1,
+    )
+
+
+def partial_progress_example(fault=None):
+    state = {"first": 0, "second": 0, "pending": True, "broken": False, "hits": 0}
+
+    @contextmanager
+    def failure():
+        state["broken"] = True
+        try:
+            yield lambda: state["hits"]
+        finally:
+            state["broken"] = False
+
+    def recover():
+        if not state["pending"]:
+            return
+        if not state["first"] or fault == "repeat":
+            state["first"] += 1
+        if state["broken"] and fault != "unreached":
+            state["hits"] += 1
+            if fault == "discard":
+                state["pending"] = False
+            return
+        state["second"] += 1
+        state["pending"] = False
+
+    return PartialProgress(
+        run=recover,
+        recover=recover,
+        failure=failure,
+        observe=lambda: (state["first"], state["second"]),
+        expected_partial=(1, 0),
+        expected=(1, 1),
+        completed_effects=lambda: state["first"],
     )
