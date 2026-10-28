@@ -5,6 +5,11 @@ This page explains why the contract is split into profiles, what a passing or
 failing case actually tells you, and what the proofs deliberately do not cover.
 Read it before you treat a green suite as a guarantee.
 
+Green isolated admission and replay cases do not establish that different
+producers compose or that a competing terminal transition preserves effects.
+Bind [lifecycle histories](lifecycle-histories.md) for those claims. Reports name
+declared pairs and checkpoints; empty mappings remain explicitly outside coverage.
+
 ## Why profiles, not one interface
 
 The part of durable background work worth sharing across codebases is the
