@@ -15,10 +15,11 @@ from pytest_obligation.contract import (
 from pytest_obligation.lifecycle import (
     LifecycleProof,
     assert_competing_transition_preserves_effects,
+    assert_partial_progress_recovers,
     assert_pending_admission_preserves_effects,
     assert_settled_admission_preserves_effects,
 )
-from pytest_obligation.references.lifecycle import admission_example, settlement_example
+from pytest_obligation.references.lifecycle import admission_example, partial_progress_example, settlement_example
 from pytest_obligation.regression_controls import RegressionControl
 
 
@@ -77,14 +78,15 @@ def test_generated_histories_have_separate_report_identities():
         profiles={p: NotApplicable("No framework in this core specimen") for p in Profile},
         admission_overlaps={"repair_then_full": admission_example},
         settlement_interleavings={"provider_read": settlement_example},
+        partial_progress={"prepare": partial_progress_example},
     )
     cases = [
         p.values[0]
         for p in contract_cases(contract)
-        if p.id.startswith(("admission-overlap-", "settlement-interleaving-"))
+        if p.id.startswith(("admission-overlap-", "settlement-interleaving-", "partial-progress-"))
     ]
-    assert len(cases) == 3
-    assert len({case.id for case in cases}) == 3
+    assert len(cases) == 4
+    assert len({case.id for case in cases}) == 4
     for case in cases:
         case.run()
 
@@ -115,12 +117,14 @@ def test_report_distinguishes_missing_history_from_a_declared_extra():
     report = contract_report(contract)
     assert "Admission overlap: extra:pending" in report
     assert "Settlement interleaving: not declared; outside" in report
+    assert "Partial progress: not declared; outside" in report
 
 
 @pytest.mark.parametrize(
     "factory, proof, regression, message",
     [
         (admission_example, assert_pending_admission_preserves_effects, "retain-first", "overlapping admissions lost"),
+        (partial_progress_example, assert_partial_progress_recovers, "discard", "lost remaining"),
         (
             settlement_example,
             assert_competing_transition_preserves_effects,
@@ -142,3 +146,26 @@ def test_shared_regression_control_accepts_lifecycle_bindings(factory, proof, re
             fault = None
 
     RegressionControl(binding=lambda: factory(fault), proof=proof, regression=mutate, match=message)()
+
+
+@pytest.mark.parametrize(
+    "fault, message",
+    [(None, None), ("discard", "lost remaining"), ("repeat", "repeated completed"), ("unreached", "never reached")],
+)
+def test_partial_progress_controls(fault, message):
+
+    example = partial_progress_example(fault)
+    if message is None:
+        assert_partial_progress_recovers(example)
+    else:
+        with pytest.raises(AssertionError, match=message):
+            assert_partial_progress_recovers(example)
+
+
+def test_partial_progress_rejects_a_hidden_failure_and_noop_recovery():
+
+    example = partial_progress_example()
+    with pytest.raises(AssertionError, match="production"):
+        assert_partial_progress_recovers(example.model_copy(update={"recover": lambda: None}))
+    with pytest.raises(AssertionError, match="hide"):
+        assert_partial_progress_recovers(example.model_copy(update={"expected_partial": example.expected}))
