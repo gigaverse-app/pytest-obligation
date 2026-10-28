@@ -1,6 +1,6 @@
 # Partial progress review
-- [ ] Shared proof rejects swallowed obligations, repeated completed effects and an unreached fault.
-- [ ] Backend real finalization recovers channel and owner preparation failures through registered Due recovery.
-- [ ] Restoring the swallowed preparation error fails the generated contract.
-- [ ] Successful effect groups remain unchanged across recovery; publication ambiguity retains its once-only claim.
-- [ ] Migration selection includes the newly merged buyer-coupon migration reader.
+- [x] Shared proof rejects swallowed obligations, repeated completed effects and an unreached fault.
+- [x] Backend real finalization recovers channel preparation failure through registered Due recovery.
+- [x] The original swallowed preparation error fails the generated contract.
+- [x] Successful effect groups remain unchanged across recovery; publication ambiguity retains its once-only claim.
+- [x] Migration selection includes the newly merged buyer-coupon migration reader.
