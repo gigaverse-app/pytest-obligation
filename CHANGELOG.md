@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+
+### Features
+
+* **contracts:** prove overlapping admissions and settlement interleavings ([#193](https://github.com/gigaverse-app/pytest-obligation/issues/193)) ([058358d](https://github.com/gigaverse-app/pytest-obligation/commit/058358d2ddf6c18821b1275c248aa4f69b864cf8))
+
+
+### Bug fixes
+
+* **reporting:** combine contract evidence from CI jobs ([#191](https://github.com/gigaverse-app/pytest-obligation/issues/191)) ([f5bf428](https://github.com/gigaverse-app/pytest-obligation/commit/f5bf4282638a0ad9ea2e153474ce787530e2f1fa))
+
 ## [0.24.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.23.0...v0.24.0) (2026-10-27)
 
 
