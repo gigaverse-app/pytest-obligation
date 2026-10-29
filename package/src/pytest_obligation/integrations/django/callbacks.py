@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 from django.db import DEFAULT_DB_ALIAS, connections
-from django.db.backends.base.base import BaseDatabaseWrapper
 
 from pytest_obligation.worker_death import CallbackFailed
 
@@ -44,13 +43,12 @@ def django_callback_breaker(fail_at: int | None) -> Iterator[DjangoCallbacks]:
     """Count after-commit callbacks on this thread's default connection; fail callback ``fail_at``."""
     target = connections[DEFAULT_DB_ALIAS]
     callbacks = DjangoCallbacks(fail_at)
-    original = type(target).on_commit
+    original = target.on_commit
 
-    def on_commit(connection: BaseDatabaseWrapper, func: Callable[[], Any], robust: bool = False) -> Any:
-        if connection is not target:
-            return original(connection, func, robust=robust)
-        return original(connection, lambda: callbacks.run(func), robust=robust)
+    def on_commit(func: Callable[[], Any], robust: bool = False) -> Any:
+        return original(lambda: callbacks.run(func), robust=robust)
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(type(target), "on_commit", on_commit)
+        # Preserve instance overrides and restore the exact original binding.
+        patch.setitem(vars(target), "on_commit", on_commit)
         yield callbacks

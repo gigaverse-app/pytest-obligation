@@ -68,13 +68,11 @@ def django_worker_killer(kill_after: int | None) -> Iterator[DjangoWorker]:
     require_postgresql(DEFAULT_DB_ALIAS, "the commit counter", "it reads transaction-id assignment")
     target = connections[DEFAULT_DB_ALIAS]
     worker = DjangoWorker(target, kill_after)
-    original_commit = type(target).commit
+    original_commit = target.commit
 
-    def commit(connection: BaseDatabaseWrapper) -> Any:
-        if connection is not target:
-            return original_commit(connection)
+    def commit() -> Any:
         worker.refuse_if_dead()
-        result = original_commit(connection)
+        result = original_commit()
         worker.committed()
         return result
 
@@ -92,7 +90,10 @@ def django_worker_killer(kill_after: int | None) -> Iterator[DjangoWorker]:
 
     try:
         with pytest.MonkeyPatch.context() as patch, target.execute_wrapper(statement):
-            patch.setattr(type(target), "commit", commit)
+            # Observe the effective method, including an adopter's instance
+            # override. Restoring the dictionary key preserves its exact binding
+            # or absence; setattr would leave a bound method shadowing the class.
+            patch.setitem(vars(target), "commit", commit)
             yield worker
     finally:
         if worker.dead:
