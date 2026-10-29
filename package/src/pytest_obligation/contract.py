@@ -138,7 +138,6 @@ index-served, replica routing) without fabricating a sweep around it — the
 honest shape for an index audit of a query that claims and runs work inline.
 """
 
-import inspect
 from collections.abc import Callable, Iterable, Mapping
 from enum import Enum
 from functools import partial, wraps
@@ -152,6 +151,7 @@ from pytest_obligation.binding import (
     assert_test_binding_delegates_to_production,
     authored_inversion_names,
     callable_code,
+    callable_source,
     is_harness_owned,
     is_test_authored,
     is_test_code,
@@ -418,7 +418,7 @@ def _adopter_annotation_defect(owner: str, binding: Callable[..., Any]) -> str |
     if is_harness_owned(code):
         return None
     try:
-        source = inspect.getsource(code)
+        source = callable_source(binding)
     except (OSError, TypeError):
         return f"{owner} source is unavailable, so its adopter evidence annotations cannot be verified"
     missing = missing_evidence_annotations(source)
