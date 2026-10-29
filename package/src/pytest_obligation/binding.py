@@ -539,7 +539,10 @@ def callable_source(binding: Callable[..., Any]) -> str:
     function = _function_of(binding)
     if function is None:
         raise TypeError("binding has no inspectable Python function")
-    return inspect.getsource(function)
+    # getsource() unwraps again, which can select a different function for a
+    # decorated callable's __call__. Keep the exact function callable_code uses.
+    lines, start = inspect.findsource(function)
+    return "".join(inspect.getblock(lines[start:]))
 
 
 def is_test_path(path: Path) -> bool:

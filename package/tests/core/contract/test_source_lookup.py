@@ -52,3 +52,28 @@ def test_binding_review_does_not_scan_unrelated_modules(tmp_path, monkeypatch, c
         names = authored_inversion_names(binding)
         assert ("AssertionError" in names) is (case == "swallowed")
     assert unrelated.reads == 0, "reviewing one binding scanned an unrelated module's filesystem path"
+
+
+def test_decorated_callable_reviews_the_same_wrapper_as_its_bytecode(tmp_path, monkeypatch):
+    path = tmp_path / "test_callable_source.py"
+    path.write_text(
+        "from functools import wraps\n\n"
+        "def annotated(original):\n"
+        "    @wraps(original)\n"
+        "    def wrapper(self):\n"
+        "        # ARRANGE\n        # REAL PRODUCTION\n        # EXTERNAL SEAM\n        # OBSERVE\n"
+        "        return original(self)\n"
+        "    return wrapper\n\n"
+        "class CallableProbe:\n"
+        "    @annotated\n"
+        "    def __call__(self):\n"
+        "        return 1\n"
+    )
+    spec = importlib.util.spec_from_file_location("callable_source_probe", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    # The callable resolver checks the __call__ wrapper's bytecode. Its source
+    # must not silently unwrap to the unannotated method below that wrapper.
+    assert _adopter_annotation_defect("callable probe", module.CallableProbe()) is None
