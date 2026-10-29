@@ -349,7 +349,7 @@ def _site(kind: str, code: CodeType, line: int) -> str:
     return f"{kind} at {Path(code.co_filename).name}:{line}" if line else f"{kind} in {code.co_qualname}"
 
 
-def _inversion_names(code: CodeType, namespace: Mapping[str, object]) -> set[str]:
+def _inversion_names(binding: Callable[..., Any], code: CodeType, namespace: Mapping[str, object]) -> set[str]:
     """
     The inversions a probe's code makes, each named as a reviewer can find it.
 
@@ -364,7 +364,7 @@ def _inversion_names(code: CodeType, namespace: Mapping[str, object]) -> set[str
         for name, inverter in _INVERTING_OBJECTS.items()
         if any(namespace.get(bound) is inverter for bound in names)
     }
-    tree = _source_tree(code)
+    tree = _source_tree(binding)
     if tree is not None and (escapes := _finally_escapes(tree)):
         # A return, break or continue leaving a finally discards the exception in flight, whatever was caught.
         found |= {"finally", "AssertionError"} | {_site("finally", code, _line(code, node)) for node in escapes}
@@ -373,9 +373,9 @@ def _inversion_names(code: CodeType, namespace: Mapping[str, object]) -> set[str
     return found
 
 
-def _source_tree(code: CodeType) -> ast.Module | None:
+def _source_tree(binding: Callable[..., Any]) -> ast.Module | None:
     try:
-        return ast.parse(textwrap.dedent(inspect.getsource(code)))
+        return ast.parse(textwrap.dedent(callable_source(binding)))
     except (OSError, TypeError, SyntaxError):
         return None
 
@@ -527,6 +527,22 @@ def callable_code(binding: Callable[..., Any]) -> CodeType | None:
     """
     function = _function_of(binding)
     return function.__code__ if function is not None else None
+
+
+def callable_source(binding: Callable[..., Any]) -> str:
+    """Inspect the same unwrapped function as the bytecode checks.
+
+    Retaining its module identity lets inspect locate source directly. A bare
+    code object can make inspect stat every imported module to recover that
+    identity. No source or validation result is cached here.
+    """
+    function = _function_of(binding)
+    if function is None:
+        raise TypeError("binding has no inspectable Python function")
+    # getsource() unwraps again, which can select a different function for a
+    # decorated callable's __call__. Keep the exact function callable_code uses.
+    lines, start = inspect.findsource(function)
+    return "".join(inspect.getblock(lines[start:]))
 
 
 def is_test_path(path: Path) -> bool:
@@ -853,7 +869,7 @@ def authored_inversion_names(binding: Callable[..., Any], *, seen: set[int] | No
     return {
         name
         for authored, code in _authored_bindings(binding, set() if seen is None else seen)
-        for name in _inversion_names(code, _namespace(authored))
+        for name in _inversion_names(authored, code, _namespace(authored))
     }
 
 
