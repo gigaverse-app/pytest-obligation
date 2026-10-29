@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.25.1...v0.25.2) (2026-10-29)
+
+
+### Performance
+
+* **binding:** retain function identity during source inspection ([37aecd6](https://github.com/gigaverse-app/pytest-obligation/commit/37aecd670855c63acbc768a09f719cb7825b7d32))
+
 ## [0.25.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.25.0...v0.25.1) (2026-10-29)
 
 
