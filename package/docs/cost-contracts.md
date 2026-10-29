@@ -41,6 +41,7 @@ from pytest_obligation import (
     statement_shapes,
 )
 
+
 def test_recovery_costs(request):
     root = request.config.rootpath
     # Everything one idle tick sends.
@@ -54,7 +55,8 @@ def test_recovery_costs(request):
 
 `marginal_statement_shapes` makes `small` rows owed and ticks, then `large` rows
 and ticks, and divides the difference. Each tick must take the rows it finds, and
-`large` must fit in one page. A per-row query (the N+1 that a bounded page hides,
+`large` must fit in one page. Pass `remaining=` (how many rows made owed still
+wait) so a tick that took nothing fails instead of recording an empty cost. A per-row query (the N+1 that a bounded page hides,
 because the damage per tick is capped) shows up here and nowhere else. The proof
 fails when the two ticks did different work rather than more of the same: the
 difference is not a whole per-row cost, or the larger backlog skipped a statement.

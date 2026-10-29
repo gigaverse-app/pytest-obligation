@@ -46,7 +46,8 @@ COST_BASELINE = Path("obligation_cost_baseline.yaml")
 #: Set to ``update`` to record each measured contract instead of checking it.
 COST_UPDATE_ENVIRONMENT = "OBLIGATION_COST_BASELINE"
 
-_DOC = "docs/cost-contracts.md"
+# Absolute, because the header is written into adopters' repositories.
+_DOC = "https://github.com/gigaverse-app/pytest-obligation/blob/main/package/docs/cost-contracts.md"
 _HEADER = f"""\
 # Cost contracts: the database statements each named path sends, by shape.
 #
@@ -177,6 +178,7 @@ def marginal_statement_shapes(
     run_tick: Callable[[], Any],
     small: int = 1,
     large: int = 3,
+    remaining: Callable[[], int] | None = None,
     selection: object | None = None,
 ) -> Counter[str]:
     """
@@ -187,6 +189,11 @@ def marginal_statement_shapes(
     fit in one page. Fails when the difference is not a whole per-row cost or
     the larger backlog skips a statement the smaller one sends, either of which
     means the two ticks did different work rather than more of the same.
+
+    A result can legitimately be empty: a set-based tick costs the same for
+    any backlog. So can a tick that took nothing, which proves nothing. Pass
+    ``remaining`` (how many rows made owed are still waiting) and every tick
+    must leave none.
     """
     assert 0 <= small < large, f"need 0 <= small < large, got small={small}, large={large}"
     costs: list[Counter[str]] = []
@@ -194,6 +201,11 @@ def marginal_statement_shapes(
         for _ in range(size):
             make_owed()
         costs.append(Counter(statement_shapes(run_tick, selection=selection)))
+        left = remaining() if remaining is not None else 0
+        assert left == 0, (
+            f"a tick over {size} owed rows left {left} waiting, so its cost is not the cost of taking them; "
+            "make each owed row dispatchable now and fit the rows in one page"
+        )
     skipped = costs[0] - costs[1]
     assert not skipped, f"a tick over {large} rows skipped statements a tick over {small} sent: {dict(skipped)}"
     rows = large - small

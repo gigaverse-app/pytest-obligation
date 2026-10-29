@@ -11,6 +11,7 @@ to answer; the linked guides and examples own the details.
 | Follow recovery through malformed rows and lost messages | [Recovery edge cases](recovery-edge-cases.md), [handoff API](../src/pytest_obligation/crash_histories.py) |
 | Exercise ordering and real process death | [Interleavings](interleavings.md), [process histories](../src/pytest_obligation/process_histories.py) |
 | Find unenrolled handoffs and source-policy debt | [Coverage](coverage.md), [source policies](source-policies.md) |
+| Hold a path's database round trips to a baseline | [Cost contracts](cost-contracts.md), [cost API](../src/pytest_obligation/costs.py) |
 | Test a Due work-table application | [Due authoring walkthrough](https://due.readthedocs.io/en/latest/package/docs/conformance/), [Due API and module map](https://due.readthedocs.io/en/latest/package/docs/conformance-api/) |
 | Migrate legacy package imports | [Package migration](package-migration.md) |
 | Change the harness itself | [Architecture](architecture.md), [contributing](https://github.com/gigaverse-app/pytest-obligation/blob/main/CONTRIBUTING.md), [upstream adopter playbook](https://github.com/gigaverse-app/pytest-obligation/blob/main/docs/upstream-playbook.md) |

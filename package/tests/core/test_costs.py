@@ -210,3 +210,26 @@ def test_a_marginal_cost_is_compared_with_its_counts(
     # One update per row is recorded; the counter carries two, which must not collapse to one shape.
     with pytest.raises(AssertionError, match="sends more than recorded: 1 × update work"):
         assert_statement_cost("per owed row", per_row, root=tmp_path)
+
+
+def test_a_tick_that_takes_nothing_cannot_pass_with_an_empty_marginal_cost(database: _ScriptedDatabase) -> None:
+    sweep = _Sweep(database)
+    waiting: list[None] = []
+
+    def make_owed_but_not_due() -> None:
+        waiting.append(None)
+
+    # The tick finds nothing it may take: both measurements are identical, so the marginal cost is empty.
+    assert marginal_statement_shapes(make_owed=make_owed_but_not_due, run_tick=sweep.run_tick) == Counter()
+    waiting.clear()
+    with pytest.raises(AssertionError, match="left 1 waiting"):
+        marginal_statement_shapes(
+            make_owed=make_owed_but_not_due, run_tick=sweep.run_tick, remaining=lambda: len(waiting)
+        )
+
+
+def test_a_tick_that_takes_its_rows_reports_none_remaining(database: _ScriptedDatabase) -> None:
+    sweep = _Sweep(database)
+    assert marginal_statement_shapes(
+        make_owed=sweep.make_owed, run_tick=sweep.run_tick, remaining=lambda: sweep.owed
+    ) == Counter({"lock work": 1, "update work": 1})
