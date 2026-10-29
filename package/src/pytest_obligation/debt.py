@@ -19,6 +19,8 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pytest_obligation._internal.baselines import refuse_concurrent_update, write_baseline, yaml_module
+
 #: Where the baseline lives, relative to the pytest root (a child session plants its own).
 BASELINE = Path("due_work_debt_baseline.yaml")
 
@@ -168,8 +170,8 @@ def _dump_entries(entries: list[DebtEntry], *, placeholder: bool = False) -> str
 
 def _update(suite: str, declared: list[DebtEntry], root: Path, *, baseline: Path) -> str | None:
     """Rewrite one suite's entries, keeping each surviving case's ticket; refuse concurrent writers."""
-    if os.environ.get("PYTEST_XDIST_WORKER"):
-        return f"{UPDATE_ENVIRONMENT}=update rewrites one file; run it without xdist workers (-p no:xdist)"
+    if refused := refuse_concurrent_update(UPDATE_ENVIRONMENT):
+        return refused
     recorded = load_baseline(root, baseline=baseline)
     tickets = {(entry.case, entry.kind): entry.ticket for entry in recorded.of(suite)}
     entries = [entry.model_copy(update={"ticket": tickets.get((entry.case, entry.kind))}) for entry in declared]
@@ -182,21 +184,13 @@ def _update(suite: str, declared: list[DebtEntry], root: Path, *, baseline: Path
             for item in sorted(items, key=lambda item: item.suite)
         ]
     }
-    path = root / baseline
-    path.parent.mkdir(parents=True, exist_ok=True)
     text = _HEADER + "\n" + _yaml().safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
-    # LF on every platform, so a Windows regeneration produces no line-ending diff.
-    path.write_text(text, encoding="utf-8", newline="\n")
+    write_baseline(root / baseline, text)
     return None
 
 
 def _yaml() -> Any:
-    # Optional serialization dependency: importing contracts must remain framework-free.
-    try:
-        import yaml
-    except ImportError as error:
-        raise RuntimeError("YAML debt baselines require pytest-obligation[debt]") from error
-    return yaml
+    return yaml_module("YAML debt baselines")
 
 
 def assert_debt_baseline(root: Path, *, baseline: Path = BASELINE, unticketed_ceiling: int = 0) -> None:

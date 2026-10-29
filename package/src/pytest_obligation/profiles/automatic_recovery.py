@@ -141,6 +141,7 @@ from pytest_obligation.binding import (
     assert_test_binding_forwards,
     is_real_reason,
 )
+from pytest_obligation.costs import statement_inspector
 from pytest_obligation.host import SelectionInspector, current_host
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
@@ -395,31 +396,6 @@ def _selected_identities(sweep: DueWorkSweep, *, limit: int | None = None) -> li
 
 def _inspector(selection: object, capability: str) -> SelectionInspector:
     return current_host().inspector_for(selection, capability=capability)
-
-
-def _statement_inspector(capability: str, selection: object | None) -> SelectionInspector:
-    """
-    The inspector that counts a tick's statements.
-
-    Statement counting is a property of the connection rather than of one
-    selection, so a proof that has no selection uses the host's only inspector;
-    with several configured, the caller names the selection whose database is
-    meant.
-    """
-    if selection is not None:
-        return _inspector(selection, capability)
-    inspectors = current_host().selection_inspectors
-    assert len(inspectors) == 1, (
-        f"{capability} counts database statements and needs exactly one SelectionInspector to ask, "
-        f"and the configured host has {len(inspectors)}. "
-        + (
-            "Pass `selection=` to choose the database whose statements are counted"
-            if inspectors
-            else "Use an integration's host (for example pytest_obligation.integrations.django.django_host) "
-            "or add an inspector"
-        )
-    )
-    return inspectors[0]
 
 
 def assert_the_adapter_does_not_author_the_selection(sweep: SelectionAdapter) -> None:
@@ -1198,7 +1174,7 @@ def assert_tick_cost_does_not_grow_with_the_backlog(
     mean the cost is in the selection rather than the loop. The host's inspector
     counts them; ``selection`` chooses the inspector when the host has several.
     """
-    inspector = _statement_inspector("assert_tick_cost_does_not_grow_with_the_backlog", selection)
+    inspector = statement_inspector("assert_tick_cost_does_not_grow_with_the_backlog", selection)
     for _ in range(2):
         make_owed()
     small_count = len(inspector.statements_during(run_tick))
@@ -1438,7 +1414,7 @@ def assert_idle_tick_is_cheap(
     The host's inspector counts the statements; ``selection`` chooses the
     inspector when the host has several.
     """
-    captured = _statement_inspector("assert_idle_tick_is_cheap", selection).statements_during(run_tick)
+    captured = statement_inspector("assert_idle_tick_is_cheap", selection).statements_during(run_tick)
 
     statements = "; ".join(sql[:100] for sql in captured)
     assert len(captured) <= max_queries, (
