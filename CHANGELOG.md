@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.25.0...v0.25.1) (2026-10-29)
+
+
+### Bug fixes
+
+* **django:** observe effective connection method overrides ([0cfa9bb](https://github.com/gigaverse-app/pytest-obligation/commit/0cfa9bbcf72c39509702e8e276036e9b77dd64a7))
+
 ## [0.25.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.24.0...v0.25.0) (2026-10-28)
 
 
