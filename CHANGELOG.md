@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.25.2...v0.26.0) (2026-11-04)
+
+
+### Features
+
+* **costs:** hold database round trips to a ratcheted baseline by statement shape ([#198](https://github.com/gigaverse-app/pytest-obligation/issues/198)) ([df429c4](https://github.com/gigaverse-app/pytest-obligation/commit/df429c4c961375acbdd2c43da1753fd5ddaff8c7))
+
 ## [0.25.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.25.1...v0.25.2) (2026-10-29)
 
 
