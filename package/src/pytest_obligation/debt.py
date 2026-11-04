@@ -15,7 +15,7 @@ import ast
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -33,6 +33,7 @@ UNTICKETED = "TODO"
 
 _TICKET = re.compile(r"(?:[A-Z][A-Z0-9]*-[0-9]+|https?://\S+)")
 _DOC = "docs/debt-baseline.md"
+_YAML_PURPOSE = "YAML debt baselines"
 _HEADER = f"""\
 # Durable-work expected failures: one entry per strict xfail a generated suite carries.
 #
@@ -94,7 +95,7 @@ def load_baseline(root: Path, *, baseline: Path = BASELINE) -> DebtBaseline:
     path = root / baseline
     if not path.is_file():
         return DebtBaseline()
-    return DebtBaseline.model_validate(_yaml().safe_load(path.read_text(encoding="utf-8")) or {})
+    return DebtBaseline.model_validate(yaml_module(_YAML_PURPOSE).safe_load(path.read_text(encoding="utf-8")) or {})
 
 
 def ticket_defects(entries: list[DebtEntry]) -> list[str]:
@@ -165,7 +166,7 @@ def _entry_document(entry: DebtEntry, *, placeholder: bool = False) -> dict[str,
 
 def _dump_entries(entries: list[DebtEntry], *, placeholder: bool = False) -> str:
     document = {"debt": [_entry_document(entry, placeholder=placeholder) for entry in entries]}
-    return _yaml().safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
+    return yaml_module(_YAML_PURPOSE).safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
 
 
 def _update(suite: str, declared: list[DebtEntry], root: Path, *, baseline: Path) -> str | None:
@@ -184,13 +185,11 @@ def _update(suite: str, declared: list[DebtEntry], root: Path, *, baseline: Path
             for item in sorted(items, key=lambda item: item.suite)
         ]
     }
-    text = _HEADER + "\n" + _yaml().safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
+    text = (
+        _HEADER + "\n" + yaml_module(_YAML_PURPOSE).safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
+    )
     write_baseline(root / baseline, text)
     return None
-
-
-def _yaml() -> Any:
-    return yaml_module("YAML debt baselines")
 
 
 def assert_debt_baseline(root: Path, *, baseline: Path = BASELINE, unticketed_ceiling: int = 0) -> None:

@@ -31,13 +31,15 @@ Canonical doc: docs/cost-contracts.md
 
 import os
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from pytest_obligation._internal.baselines import refuse_concurrent_update, write_baseline, yaml_module
+from pytest_obligation._internal.sql_shapes import UnclassifiedStatement as UnclassifiedStatement
+from pytest_obligation._internal.sql_shapes import statement_shape as statement_shape
 from pytest_obligation.host import SelectionInspector, current_host
 
 #: Where the cost baseline lives, relative to the pytest root.
@@ -58,88 +60,6 @@ _HEADER = f"""\
 #
 # Canonical doc: {_DOC}
 """
-
-_TRANSACTION_CONTROL = {
-    "BEGIN": "begin",
-    "START TRANSACTION": "begin",
-    "COMMIT": "commit",
-    "ROLLBACK": "rollback",
-}
-_LOCKS = (" FOR UPDATE", " FOR NO KEY UPDATE", " FOR SHARE", " FOR KEY SHARE")
-
-
-def statement_shape(sql: str) -> str:
-    """
-    What one SQL statement does, to which table: ``read orders``, ``lock work``, ``commit``.
-
-    Only the outermost statement is named: a subquery or a join reads within its
-    statement and is not a round trip of its own. A SELECT without a table names
-    its expression, with any nested parentheses elided, so ``SELECT
-    clock_timestamp()`` is ``select clock_timestamp()``.
-    """
-    text = " ".join(sql.split()).rstrip(";")
-    upper = text.upper()
-    if upper in _TRANSACTION_CONTROL:
-        return _TRANSACTION_CONTROL[upper]
-    for prefix, shape in (
-        ("RELEASE SAVEPOINT", "release savepoint"),
-        ("ROLLBACK TO SAVEPOINT", "rollback to savepoint"),
-        ("SAVEPOINT", "savepoint"),
-    ):
-        if upper.startswith(prefix):
-            return shape
-    for prefix, verb in (("UPDATE ", "update"), ("INSERT INTO ", "insert"), ("DELETE FROM ", "delete")):
-        if upper.startswith(prefix):
-            return f"{verb} {_table(text[len(prefix) :])}"
-    if upper.startswith(("SELECT ", "WITH ")):
-        outer = _outermost(text)
-        from_at = outer.upper().find(" FROM ")
-        if from_at < 0:
-            return "select " + _outermost(text[len("SELECT ") :]).lower()
-        table = _table(outer[from_at + len(" FROM ") :])
-        if any(lock in outer.upper() for lock in _LOCKS):
-            return f"lock {table}"
-        if "COUNT(" in upper or " GROUP BY " in upper:
-            return f"count {table}"
-        return f"read {table}"
-    return " ".join(text.split()[:2]).lower()
-
-
-def _outermost(text: str) -> str:
-    """The text with every parenthesized part elided, so only the outermost clause is searched."""
-    kept: list[str] = []
-    depth = 0
-    quoted = False
-    elided = False
-    for char in text:
-        if char == "'" and depth == 0:
-            quoted = not quoted
-        if quoted:
-            kept.append(char)
-            continue
-        if char == "(":
-            if depth == 0:
-                kept.append("(")
-                elided = False
-            depth += 1
-        elif char == ")":
-            depth = max(depth - 1, 0)
-            if depth == 0:
-                kept.append("…)" if elided else ")")
-        elif depth == 0:
-            kept.append(char)
-        elif not char.isspace():
-            elided = True
-    return "".join(kept)
-
-
-def _table(rest: str) -> str:
-    """The table a clause starts with: no schema, quotes, ``ONLY`` or alias."""
-    words = rest.split()
-    if words and words[0].upper() == "ONLY":
-        words = words[1:]
-    name = words[0] if words else "?"
-    return name.split(".")[-1].strip('"`[]')
 
 
 def statement_inspector(capability: str, selection: object | None = None) -> SelectionInspector:
@@ -166,23 +86,29 @@ def statement_inspector(capability: str, selection: object | None = None) -> Sel
     return inspectors[0]
 
 
-def statement_shapes(run: Callable[[], object], *, selection: object | None = None) -> list[str]:
-    """The shape of every statement ``run`` sends, in order, transaction control included."""
+def statement_shapes(run: Callable[[], object], *, selection: object | None = None, strict: bool = False) -> list[str]:
+    """
+    The shape of every statement ``run`` sends, in order, transaction control included.
+
+    ``strict`` raises :class:`UnclassifiedStatement` for a statement that has no
+    verb-and-table shape, instead of naming it by its first words.
+    """
     inspector = statement_inspector("statement_shapes", selection)
-    return [statement_shape(sql) for sql in inspector.statements_during(run)]
+    return [statement_shape(sql, strict=strict) for sql in inspector.statements_during(run)]
 
 
 def marginal_statement_shapes(
     *,
     make_owed: Callable[[], Any],
     run_tick: Callable[[], Any],
+    remaining: Callable[[], int] | None,
     small: int = 1,
     large: int = 3,
-    remaining: Callable[[], int] | None = None,
     selection: object | None = None,
+    strict: bool = False,
 ) -> Counter[str]:
     """
-    The statements one more owed row adds to a tick, exactly.
+    The statements one more owed row adds to a tick, as the difference of two backlog sizes.
 
     Makes ``small`` rows owed and ticks, then ``large`` rows and ticks, so each
     tick must take what it finds (claim, dispatch or settle it); ``large`` must
@@ -191,16 +117,18 @@ def marginal_statement_shapes(
     means the two ticks did different work rather than more of the same.
 
     A result can legitimately be empty: a set-based tick costs the same for
-    any backlog. So can a tick that took nothing, which proves nothing. Pass
-    ``remaining`` (how many rows made owed are still waiting) and every tick
-    must leave none.
+    any backlog. So can a tick that took nothing, which proves nothing, so
+    ``remaining`` is required: how many rows made owed are still waiting, and
+    every tick must leave none. Pass ``None`` only when another proof already
+    shows the tick takes its rows. Two sizes measure a linear per-row cost; a
+    cost that grows faster than the backlog reads as a larger per-row cost.
     """
     assert 0 <= small < large, f"need 0 <= small < large, got small={small}, large={large}"
     costs: list[Counter[str]] = []
     for size in (small, large):
         for _ in range(size):
             make_owed()
-        costs.append(Counter(statement_shapes(run_tick, selection=selection)))
+        costs.append(Counter(statement_shapes(run_tick, selection=selection, strict=strict)))
         left = remaining() if remaining is not None else 0
         assert left == 0, (
             f"a tick over {size} owed rows left {left} waiting, so its cost is not the cost of taking them; "
@@ -223,7 +151,7 @@ class CostEntry(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     contract: str = Field(min_length=1)
-    statements: dict[str, int]
+    statements: dict[str, PositiveInt]
 
 
 class CostBaseline(BaseModel):
@@ -252,7 +180,7 @@ def load_cost_baseline(root: Path, *, baseline: Path = COST_BASELINE) -> CostBas
 
 def assert_statement_cost(
     contract: str,
-    statements: Iterable[str] | Counter[str],
+    statements: Iterable[str] | Mapping[str, int],
     *,
     root: Path,
     baseline: Path = COST_BASELINE,
@@ -261,12 +189,13 @@ def assert_statement_cost(
     Hold ``contract`` to exactly the statements its baseline entry records.
 
     ``statements`` are shapes, one per statement as :func:`statement_shapes`
-    returns them, or a shape -> count ``Counter`` as
+    returns them, or a shape -> count mapping such as the ``Counter``
     :func:`marginal_statement_shapes` returns. A missing entry fails until it
     is recorded, so a new contract cannot pass by being absent.
     """
-    # Iterating a Counter yields each shape once; take its counts as they are.
-    measured = Counter(statements) if not isinstance(statements, Counter) else +statements
+    # Iterating a mapping yields each shape once; take its counts as they are.
+    measured = +Counter(dict(statements)) if isinstance(statements, Mapping) else Counter(statements)
+    _VISITED.append(contract)
     if os.environ.get(COST_UPDATE_ENVIRONMENT) == "update":
         refused = refuse_concurrent_update(COST_UPDATE_ENVIRONMENT)
         assert refused is None, refused
@@ -287,6 +216,35 @@ def assert_statement_cost(
     assert not sections, f"{contract}: " + "; ".join(sections) + f". Measured {_listing(measured)}. See {_DOC}."
 
 
+#: Contracts checked or recorded in this process since the plugin last drained them.
+_VISITED: list[str] = []
+
+
+def visited_contracts() -> list[str]:
+    """Drain the contracts measured since the last call; the plugin attaches them to each test's report."""
+    drained = list(_VISITED)
+    _VISITED.clear()
+    return drained
+
+
+def stale_cost_entries(root: Path, visited: Iterable[str], *, baseline: Path = COST_BASELINE) -> list[str]:
+    """Recorded contracts that no test measured: a renamed or retired path's leftover entry."""
+    seen = set(visited)
+    return sorted(
+        entry.contract for entry in load_cost_baseline(root, baseline=baseline).costs if entry.contract not in seen
+    )
+
+
+def prune_cost_entries(root: Path, stale: Iterable[str], *, baseline: Path = COST_BASELINE) -> None:
+    """Remove ``stale`` entries, as an update run that measured every contract does."""
+    removed = set(stale)
+    _write(
+        root,
+        [entry for entry in load_cost_baseline(root, baseline=baseline).costs if entry.contract not in removed],
+        baseline=baseline,
+    )
+
+
 def _listing(statements: Counter[str]) -> str:
     return ", ".join(f"{count} × {shape}" for shape, count in sorted(statements.items())) or "nothing"
 
@@ -294,10 +252,10 @@ def _listing(statements: Counter[str]) -> str:
 def _record(contract: str, measured: Counter[str], root: Path, *, baseline: Path) -> None:
     entries = [entry for entry in load_cost_baseline(root, baseline=baseline).costs if entry.contract != contract]
     entries.append(CostEntry(contract=contract, statements=dict(sorted(measured.items()))))
+    _write(root, entries, baseline=baseline)
+
+
+def _write(root: Path, entries: list[CostEntry], *, baseline: Path) -> None:
     document = {"costs": [entry.model_dump() for entry in sorted(entries, key=lambda entry: entry.contract)]}
-    text = (
-        _HEADER
-        + "\n"
-        + yaml_module("YAML cost baselines").safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
-    )
-    write_baseline(root / baseline, text)
+    dumped = yaml_module("YAML cost baselines").safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
+    write_baseline(root / baseline, _HEADER + "\n" + dumped)

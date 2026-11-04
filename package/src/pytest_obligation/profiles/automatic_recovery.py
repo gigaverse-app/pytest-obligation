@@ -121,6 +121,7 @@ selection begins; invariant 3 independently requires a production-started
 ``InFlightExecution`` for every delay value, including zero.
 """
 
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import timedelta
@@ -141,7 +142,7 @@ from pytest_obligation.binding import (
     assert_test_binding_forwards,
     is_real_reason,
 )
-from pytest_obligation.costs import statement_inspector
+from pytest_obligation.costs import statement_inspector, statement_shapes
 from pytest_obligation.host import SelectionInspector, current_host
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
@@ -1170,23 +1171,26 @@ def assert_tick_cost_does_not_grow_with_the_backlog(
     capped per tick and therefore never shows up as an outage — it just makes
     the scheduled job quietly expensive forever.
 
-    Compares statements for a small backlog against a larger one; equal counts
-    mean the cost is in the selection rather than the loop. The host's inspector
-    counts them; ``selection`` chooses the inspector when the host has several.
+    Compares the statements, by shape, of a tick over a small backlog with one over
+    a larger backlog (rows stay owed between them); equal shapes mean the cost is
+    in the selection rather than the loop, and a swap that keeps the count still
+    fails. ``selection`` chooses the inspector when the host has several. To hold
+    a tick's exact per-row cost to a committed baseline instead, use
+    :func:`pytest_obligation.costs.marginal_statement_shapes` with
+    :func:`pytest_obligation.costs.assert_statement_cost`.
     """
-    inspector = statement_inspector("assert_tick_cost_does_not_grow_with_the_backlog", selection)
     for _ in range(2):
         make_owed()
-    small_count = len(inspector.statements_during(run_tick))
+    small = Counter(statement_shapes(run_tick, selection=selection))
 
     for _ in range(6):
         make_owed()
-    large_count = len(inspector.statements_during(run_tick))
+    large = Counter(statement_shapes(run_tick, selection=selection))
 
-    assert large_count == small_count, (
-        f"{name}: a tick over 8 rows issued {large_count} queries against "
-        f"{small_count} for 2 rows, so cost grows per row rather than per tick. "
-        f"The bound caps the damage, which is why this never surfaces as an "
+    assert large == small, (
+        f"{name}: a tick over 8 rows issued {large.total()} queries against "
+        f"{small.total()} for 2 rows (added {dict(large - small)}, dropped {dict(small - large)}), so cost grows "
+        f"per row rather than per tick. The bound caps the damage, which is why this never surfaces as an "
         f"outage and stays expensive indefinitely"
     )
 

@@ -2,10 +2,10 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from types import ModuleType
 
 
-def yaml_module(purpose: str) -> Any:
+def yaml_module(purpose: str) -> ModuleType:
     """PyYAML, imported only when a baseline is read; importing contracts stays framework-free."""
     try:
         import yaml
