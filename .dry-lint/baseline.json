@@ -1,0 +1,328 @@
+{
+  "schema": 1,
+  "contract": "310f6cf8411bd76736e8586ec017db07c77d1819116dcfc127d80d9035b57ba0",
+  "started_at": "621705115b9af4734fedc85f5ab39dc90295808c",
+  "checked_at": "621705115b9af4734fedc85f5ab39dc90295808c",
+  "entries": [
+    {
+      "hashes": {
+        "package/src/pytest_obligation/contract.py::_selection_gaps": "da18a152d1c54e28",
+        "package/src/pytest_obligation/integrations/django/selection_completeness.py::gap_combination": "41cb71c1c7afaa2e"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/declarations.py::_declaration_candidates": "8efa26e643077d67",
+        "package/src/pytest_obligation/coverage/project.py::Project._walk": "b1dc5a828b1cecba"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/handoffs.py::_Sites._is_atomic": "7c40d05ea13ec67d",
+        "package/src/pytest_obligation/coverage/_internal/transactions.py::_PublicationReach._opens_transaction": "67d490993ca39def"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/commits.py::DjangoWorker.refuse_if_dead": "14abb87d90f1623b",
+        "package/src/pytest_obligation/worker_death.py::CommitWorker.refuse_if_dead": "ee0a5c524619f522"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/lock_order.py::_closing_parenthesis": "c5e7f02007509991",
+        "package/src/pytest_obligation/integrations/postgres_plans.py::_closing_paren": "407e23acfc92b39a"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/_internal/transactions.py::_PublicationReach._qualified": "790b5b444673867b",
+        "package/src/pytest_obligation/reporting/inventory.py::_Sources.qualified": "36158e1b5b2c1edc"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/lifecycle_references.py::_recover_with": "756e16a579b04f91",
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::recover": "39fab3f04e44fdc4"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/declarations.py::Declarations._qualified": "9fd3c576b43e0541",
+        "package/src/pytest_obligation/coverage/handoffs.py::_Sites._resolve": "1c69374c347cf4da"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/handoffs.py::_Sites.visit_ImportFrom": "83cbff9dfcb12c91",
+        "package/src/pytest_obligation/reporting/inventory.py::_Sources.imports": "c51ae92d68be44a8"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/commits.py::DjangoWorker.refuse_if_dead": "14abb87d90f1623b",
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::Ledger._refuse_if_dead": "82a7450e859f4804"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/commits.py::DjangoWorker.committed": "7f79179c3580e34e",
+        "package/src/pytest_obligation/worker_death.py::CommitWorker.committed": "7f79179c3580e34e"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/acknowledged_effects.py::_identity": "aa98080165f3651c",
+        "package/src/pytest_obligation/profiles/fact_derived_obligations.py::_same_identity": "aa98080165f3651c"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/fact_derived_obligations.py::_same_identity": "aa98080165f3651c",
+        "package/src/pytest_obligation/profiles/job_retry_limits.py::_identity": "aa98080165f3651c"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/project.py::top_level_imports": "1fa9c685f500cb06",
+        "package/src/pytest_obligation/reporting/inventory.py::_Sources.imports": "c51ae92d68be44a8"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/lifecycle_references.py::run_inert_recovery_tick": "e4fae3ca4c1cddcb",
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::run_inert_tick": "e4fae3ca4c1cddcb"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/owed_references.py::isolated_primitive": "2acf9d4ee824aed9",
+        "package/src/pytest_obligation/integrations/django/tables.py::model_tables": "e9bbe5bce0e62b18"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/acknowledged_effects.py::_identity": "aa98080165f3651c",
+        "package/src/pytest_obligation/profiles/job_retry_limits.py::_identity": "aa98080165f3651c"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::_LostReplies.committed": "466214c178f8761e",
+        "package/src/pytest_obligation/worker_death.py::LostCommitReplies.committed": "0f4019e7995e7b2b"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "ci_tests/test_documents.py::DocumentChecks.test_distribution_description_must_match_current_readme": "2c736c8dd55d52e6",
+        "ci_tests/test_metadata.py::MetadataTests.test_description_preserves_unicode_and_rejects_changed_readme": "b70058834400e2d9"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/project.py::defined_names": "fe02ebfb98dca2f3",
+        "package/src/pytest_obligation/coverage/_internal/transactions.py::_PublicationReach.__init__": "cb3b34d2fd7b9f99"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/crash_histories.py::_Worker.refuse_if_dead": "a7b358140544a741",
+        "package/src/pytest_obligation/integrations/django/commits.py::DjangoWorker.refuse_if_dead": "14abb87d90f1623b"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/crash_histories.py::_Worker.refuse_if_dead": "a7b358140544a741",
+        "package/src/pytest_obligation/worker_death.py::CommitWorker.refuse_if_dead": "ee0a5c524619f522"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/lifecycle_references.py::complete_attempt_notifying": "c8def05b68fe9539",
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::complete_notifying": "07ef9cf39070ca4a"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/owed_rows.py::_selected": "c2c726be607dada0",
+        "package/src/pytest_obligation/profiles/automatic_recovery.py::_selected_identities": "f55bb591598a23a0"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/owed_rows.py::_assert_the_next_poll_serves_the_healthy_row": "a2ea585b4785d509",
+        "package/src/pytest_obligation/poison.py::assert_poison_is_isolated": "7bff96e969817c60"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/mongodb.py::mongodb_reply_breaker": "89630b74051131a0",
+        "package/src/pytest_obligation/integrations/redis.py::redis_reply_breaker": "cb513e93a3d69196"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/acknowledged_effects.py::_is_owed": "40293ef27e230536",
+        "package/src/pytest_obligation/profiles/job_retry_limits.py::_is_due": "24a4a546c4ca92aa"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/automatic_recovery.py::assert_the_adapter_does_not_author_the_selection": "9dfaaf44ebaf2591",
+        "package/src/pytest_obligation/profiles/fact_derived_obligations.py::assert_outstanding_selection_is_production_bound": "cec888ef2c78ae40"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/fact_derived_obligations.py::assert_outstanding_selection_is_production_bound": "cec888ef2c78ae40",
+        "package/src/pytest_obligation/profiles/job_retry_limits.py::assert_retry_selection_is_production_bound": "acc1d8ee4eedca98"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::_LostReplies.committed": "466214c178f8761e",
+        "package/src/pytest_obligation/worker_death.py::LostCommitReplies.__init__": "59c1d756c727de83"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::Ledger._refuse_if_dead": "82a7450e859f4804",
+        "package/src/pytest_obligation/worker_death.py::CommitWorker.refuse_if_dead": "ee0a5c524619f522"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "demos/wagtail_tasks/test_wagtail_tasks.py::a_purge_owed": "2e5493f7316237d5",
+        "demos/wagtail_tasks/test_worker_rows.py::owed_purge": "64f7f87a5a2cbcb6"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/config.py::CoverageConfig.is_production": "147e1864d976c20e",
+        "package/src/pytest_obligation/coverage/sites.py::SiteKind.enabled_by": "1adc0c8b70427131"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/handoffs.py::_Sites.visit_Import": "1d289abe9362ec33",
+        "package/src/pytest_obligation/coverage/project.py::top_level_imports": "1fa9c685f500cb06"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/handoffs.py::_Sites.visit_ImportFrom": "83cbff9dfcb12c91",
+        "package/src/pytest_obligation/coverage/project.py::top_level_imports": "1fa9c685f500cb06"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/crash_histories.py::_Worker.refuse_if_dead": "a7b358140544a741",
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::Ledger._refuse_if_dead": "82a7450e859f4804"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/lifecycle_states.py::_queryset": "55eab168b50f07b2",
+        "package/src/pytest_obligation/integrations/django/selection.py::DjangoSelectionInspector._queryset": "a093101d6f8f5962"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/coverage/handoffs.py::_Sites.visit_Import": "1d289abe9362ec33",
+        "package/src/pytest_obligation/reporting/inventory.py::_Sources.imports": "c51ae92d68be44a8"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/integrations/django/lifecycle_references.py::complete_attempt_notifying": "c8def05b68fe9539",
+        "package/src/pytest_obligation/references/in_memory_handoffs.py::complete_notifying_async": "85e36698284de0db"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    },
+    {
+      "hashes": {
+        "package/src/pytest_obligation/profiles/crash_ambiguity.py::assert_ordinary_due_work_is_production_bound": "fa1558ed5b7660a6",
+        "package/src/pytest_obligation/profiles/fact_derived_obligations.py::assert_outstanding_selection_is_production_bound": "cec888ef2c78ae40"
+      },
+      "context_hash": "",
+      "state": "remaining"
+    }
+  ]
+}
