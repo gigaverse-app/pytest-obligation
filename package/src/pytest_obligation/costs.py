@@ -37,7 +37,12 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
-from pytest_obligation._internal.baselines import refuse_concurrent_update, write_baseline, yaml_module
+from pytest_obligation._internal.committed_files import (
+    dump_yaml,
+    read_baseline,
+    refuse_concurrent_update,
+    write_committed,
+)
 from pytest_obligation._internal.sql_shapes import UnclassifiedStatement as UnclassifiedStatement
 from pytest_obligation._internal.sql_shapes import statement_shape as statement_shape
 from pytest_obligation.host import SelectionInspector, current_host
@@ -171,11 +176,7 @@ class CostBaseline(BaseModel):
 
 
 def load_cost_baseline(root: Path, *, baseline: Path = COST_BASELINE) -> CostBaseline:
-    path = root / baseline
-    if not path.exists():
-        return CostBaseline()
-    document = yaml_module("YAML cost baselines").safe_load(path.read_text(encoding="utf-8")) or {}
-    return CostBaseline.model_validate(document)
+    return read_baseline(root / baseline, CostBaseline, purpose=_YAML_PURPOSE)
 
 
 def assert_statement_cost(
@@ -218,6 +219,7 @@ def assert_statement_cost(
 
 #: Contracts checked or recorded in this process since the plugin last drained them.
 _VISITED: list[str] = []
+_YAML_PURPOSE = "YAML cost baselines"
 
 
 def visited_contracts() -> list[str]:
@@ -257,5 +259,4 @@ def _record(contract: str, measured: Counter[str], root: Path, *, baseline: Path
 
 def _write(root: Path, entries: list[CostEntry], *, baseline: Path) -> None:
     document = {"costs": [entry.model_dump() for entry in sorted(entries, key=lambda entry: entry.contract)]}
-    dumped = yaml_module("YAML cost baselines").safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
-    write_baseline(root / baseline, _HEADER + "\n" + dumped)
+    write_committed(root / baseline, _HEADER + "\n" + dump_yaml(document, purpose=_YAML_PURPOSE))

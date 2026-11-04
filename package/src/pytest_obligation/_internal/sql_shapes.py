@@ -8,14 +8,13 @@ first. Quoted identifiers stay whole, dots and spaces included. Every structural
 decision then reads only the outermost level of the main statement.
 """
 
-import re
 from dataclasses import dataclass
 from typing import Literal
 
+from pytest_obligation.integrations._internal.postgres_sql import lexemes
+
 TokenKind = Literal["word", "name", "literal", "open", "close", "other"]
 
-_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
-_DOLLAR_TAG = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
 _LOCK_STRENGTH = {"UPDATE", "SHARE", "NO", "KEY"}
 _SET_OPERATIONS = {"UNION", "INTERSECT", "EXCEPT"}
 _MAIN_VERBS = {"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"}
@@ -39,67 +38,23 @@ class _Token:
         return self.text.upper() if self.kind == "word" else ""
 
 
-def _quoted_end(sql: str, start: int, quote: str, *, backslash: bool) -> int:
-    """The index after a quoted run opened at ``start``; a doubled quote is part of it."""
-    index = start + 1
-    while index < len(sql):
-        char = sql[index]
-        if backslash and char == "\\":
-            index += 2
-            continue
-        if char == quote:
-            if index + 1 < len(sql) and sql[index + 1] == quote:
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    return len(sql)
-
-
 def _tokens(sql: str) -> list[_Token]:
     tokens: list[_Token] = []
     depth = 0
-    index = 0
-    while index < len(sql):
-        char = sql[index]
-        if char.isspace():
-            index += 1
-            continue
+    for lexeme in lexemes(sql):
         # Comments are whitespace: a ``/* FOR UPDATE */`` locks nothing.
-        if sql.startswith("--", index):
-            newline = sql.find("\n", index)
-            index = len(sql) if newline < 0 else newline + 1
+        if lexeme.kind == "comment":
             continue
-        if sql.startswith("/*", index):
-            closing = sql.find("*/", index + 2)
-            index = len(sql) if closing < 0 else closing + 2
-            continue
-        start = index
-        kind: TokenKind
-        if char in "eE" and index + 1 < len(sql) and sql[index + 1] == "'":
-            index, kind = _quoted_end(sql, index + 1, "'", backslash=True), "literal"
-        elif char == "'":
-            index, kind = _quoted_end(sql, index, "'", backslash=False), "literal"
-        elif char == '"':
-            index, kind = _quoted_end(sql, index, '"', backslash=False), "name"
-        elif char == "$" and (tag := _DOLLAR_TAG.match(sql, index)):
-            closing = sql.find(tag.group(0), tag.end())
-            index, kind = (len(sql) if closing < 0 else closing + len(tag.group(0))), "literal"
-        elif match := _WORD.match(sql, index):
-            index, kind = match.end(), "word"
-        elif char == "(":
-            tokens.append(_Token("open", char, depth, start, start + 1))
+        text = sql[lexeme.start : lexeme.end]
+        kind: TokenKind = lexeme.kind
+        if kind == "other" and text == "(":
+            tokens.append(_Token("open", text, depth, lexeme.start, lexeme.end))
             depth += 1
-            index += 1
             continue
-        elif char == ")":
+        if kind == "other" and text == ")":
             depth = max(depth - 1, 0)
-            tokens.append(_Token("close", char, depth, start, start + 1))
-            index += 1
-            continue
-        else:
-            index, kind = index + 1, "other"
-        tokens.append(_Token(kind, sql[start:index], depth, start, index))
+            kind = "close"
+        tokens.append(_Token(kind, text, depth, lexeme.start, lexeme.end))
     return tokens
 
 

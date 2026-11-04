@@ -86,6 +86,8 @@ def database() -> Iterator[_ScriptedDatabase]:
         ("""SELECT "id" FROM "orders" WHERE "note" = E'a\\'b (' LIMIT 1""", "read orders"),
         ("""SELECT '2026-11-04T10:00:00+00:00'::timestamptz""", "select ?::timestamptz"),
         ('SELECT "id" FROM "orders" /* FOR UPDATE */', "read orders"),
+        # Block comments nest: the first */ does not end this one.
+        ('SELECT "id" FROM "orders" /* a /* nested */ FOR UPDATE */', "read orders"),
         ('SELECT "id" FROM "orders" -- FOR UPDATE\n', "read orders"),
         # The main statement of a WITH, whatever its CTEs are named.
         (
