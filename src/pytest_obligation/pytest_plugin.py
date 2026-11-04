@@ -63,6 +63,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "reject unassessed profiles and E families in collected contracts before filtering",
         ),
         ("--due-work-check-fixtures", "validate fixture resolution for retained tests, including skipped tests"),
+        (
+            "--obligation-cost-baseline-complete",
+            "fail on cost-baseline entries no test measured (full runs only; update mode removes them)",
+        ),
         (VERIFY, "fail unless every contract and exemption suite the coverage scan counts ran at least one case"),
         (
             RECORD,
@@ -74,10 +78,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    from pytest_obligation import _debt_plugin
+    from pytest_obligation import _cost_plugin, _debt_plugin
     from pytest_obligation._collection_coverage import CollectionCoverage
 
     config.pluginmanager.register(_debt_plugin, "due-work-debt")
+    config.pluginmanager.register(_cost_plugin, "obligation-costs")
+    if config.getoption("obligation_cost_baseline_complete") and not hasattr(config, "workerinput"):
+        config.pluginmanager.register(_cost_plugin.CostCompleteness(config), "obligation-cost-completeness")
     config.pluginmanager.register(CollectionCoverage(config), "obligation-required-cases")
     if config.getoption("due_work_check_fixtures"):
         config.pluginmanager.register(

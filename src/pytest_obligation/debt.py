@@ -15,9 +15,16 @@ import ast
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from pytest_obligation._internal.committed_files import (
+    dump_yaml,
+    read_baseline,
+    refuse_concurrent_update,
+    write_committed,
+)
 
 #: Where the baseline lives, relative to the pytest root (a child session plants its own).
 BASELINE = Path("due_work_debt_baseline.yaml")
@@ -31,6 +38,7 @@ UNTICKETED = "TODO"
 
 _TICKET = re.compile(r"(?:[A-Z][A-Z0-9]*-[0-9]+|https?://\S+)")
 _DOC = "docs/debt-baseline.md"
+_YAML_PURPOSE = "YAML debt baselines"
 _HEADER = f"""\
 # Durable-work expected failures: one entry per strict xfail a generated suite carries.
 #
@@ -89,10 +97,7 @@ class DebtBaseline(BaseModel):
 
 
 def load_baseline(root: Path, *, baseline: Path = BASELINE) -> DebtBaseline:
-    path = root / baseline
-    if not path.is_file():
-        return DebtBaseline()
-    return DebtBaseline.model_validate(_yaml().safe_load(path.read_text(encoding="utf-8")) or {})
+    return read_baseline(root / baseline, DebtBaseline, purpose=_YAML_PURPOSE)
 
 
 def ticket_defects(entries: list[DebtEntry]) -> list[str]:
@@ -163,13 +168,13 @@ def _entry_document(entry: DebtEntry, *, placeholder: bool = False) -> dict[str,
 
 def _dump_entries(entries: list[DebtEntry], *, placeholder: bool = False) -> str:
     document = {"debt": [_entry_document(entry, placeholder=placeholder) for entry in entries]}
-    return _yaml().safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
+    return dump_yaml(document, purpose=_YAML_PURPOSE)
 
 
 def _update(suite: str, declared: list[DebtEntry], root: Path, *, baseline: Path) -> str | None:
     """Rewrite one suite's entries, keeping each surviving case's ticket; refuse concurrent writers."""
-    if os.environ.get("PYTEST_XDIST_WORKER"):
-        return f"{UPDATE_ENVIRONMENT}=update rewrites one file; run it without xdist workers (-p no:xdist)"
+    if refused := refuse_concurrent_update(UPDATE_ENVIRONMENT):
+        return refused
     recorded = load_baseline(root, baseline=baseline)
     tickets = {(entry.case, entry.kind): entry.ticket for entry in recorded.of(suite)}
     entries = [entry.model_copy(update={"ticket": tickets.get((entry.case, entry.kind))}) for entry in declared]
@@ -182,21 +187,8 @@ def _update(suite: str, declared: list[DebtEntry], root: Path, *, baseline: Path
             for item in sorted(items, key=lambda item: item.suite)
         ]
     }
-    path = root / baseline
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = _HEADER + "\n" + _yaml().safe_dump(document, sort_keys=False, allow_unicode=True, width=110)
-    # LF on every platform, so a Windows regeneration produces no line-ending diff.
-    path.write_text(text, encoding="utf-8", newline="\n")
+    write_committed(root / baseline, _HEADER + "\n" + dump_yaml(document, purpose=_YAML_PURPOSE))
     return None
-
-
-def _yaml() -> Any:
-    # Optional serialization dependency: importing contracts must remain framework-free.
-    try:
-        import yaml
-    except ImportError as error:
-        raise RuntimeError("YAML debt baselines require pytest-obligation[debt]") from error
-    return yaml
 
 
 def assert_debt_baseline(root: Path, *, baseline: Path = BASELINE, unticketed_ceiling: int = 0) -> None:
