@@ -66,6 +66,14 @@ from pytest_obligation.contract import (
     scheduled_selection_suite,
     suite_cases,
 )
+from pytest_obligation.costs import (
+    COST_BASELINE,
+    COST_UPDATE_ENVIRONMENT,
+    assert_statement_cost,
+    marginal_statement_shapes,
+    statement_shape,
+    statement_shapes,
+)
 from pytest_obligation.crash_histories import (
     CallableDelivery,
     Delivery,
@@ -174,6 +182,13 @@ __all__ = [
     "DeliveryReplay",
     "assert_completes_within",
     "assert_delivery_replay",
+    # Cost contracts.
+    "COST_BASELINE",
+    "COST_UPDATE_ENVIRONMENT",
+    "assert_statement_cost",
+    "marginal_statement_shapes",
+    "statement_shape",
+    "statement_shapes",
     "AdmissionAtomicity",
     "AdmissionPublication",
     "__version__",

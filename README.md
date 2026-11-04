@@ -183,6 +183,7 @@ Open your application in Claude Code or Codex and ask:
 | Inspect transaction and schedule policy | [Handoff coverage](package/docs/coverage.md), [source-policy APIs and examples](package/docs/source-policies.md) |
 | Understand recovery and outcome evidence | [Recovery edge cases](package/docs/recovery-edge-cases.md), [what a green result means](package/docs/what-a-green-result-means.md) |
 | Enforce known gaps and selection completeness | [Debt baseline](package/docs/debt-baseline.md), [selection completeness](package/docs/selection-completeness.md) |
+| Hold a path's database round trips to a baseline | [Cost contracts](package/docs/cost-contracts.md) |
 | Probe another project | [Upstream playbook](docs/upstream-playbook.md), [framework integrations](package/docs/integrations.md) |
 | Replace the backend harness | [Completed port and ownership map](package/docs/backend-harness-port.md) |
 | Edit the library inside an adopter checkout | [Package ownership and subtree development](package/docs/development.md) |

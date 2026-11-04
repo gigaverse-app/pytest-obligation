@@ -121,6 +121,7 @@ selection begins; invariant 3 independently requires a production-started
 ``InFlightExecution`` for every delay value, including zero.
 """
 
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import timedelta
@@ -141,6 +142,7 @@ from pytest_obligation.binding import (
     assert_test_binding_forwards,
     is_real_reason,
 )
+from pytest_obligation.costs import statement_inspector, statement_shapes
 from pytest_obligation.host import SelectionInspector, current_host
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
@@ -395,31 +397,6 @@ def _selected_identities(sweep: DueWorkSweep, *, limit: int | None = None) -> li
 
 def _inspector(selection: object, capability: str) -> SelectionInspector:
     return current_host().inspector_for(selection, capability=capability)
-
-
-def _statement_inspector(capability: str, selection: object | None) -> SelectionInspector:
-    """
-    The inspector that counts a tick's statements.
-
-    Statement counting is a property of the connection rather than of one
-    selection, so a proof that has no selection uses the host's only inspector;
-    with several configured, the caller names the selection whose database is
-    meant.
-    """
-    if selection is not None:
-        return _inspector(selection, capability)
-    inspectors = current_host().selection_inspectors
-    assert len(inspectors) == 1, (
-        f"{capability} counts database statements and needs exactly one SelectionInspector to ask, "
-        f"and the configured host has {len(inspectors)}. "
-        + (
-            "Pass `selection=` to choose the database whose statements are counted"
-            if inspectors
-            else "Use an integration's host (for example pytest_obligation.integrations.django.django_host) "
-            "or add an inspector"
-        )
-    )
-    return inspectors[0]
 
 
 def assert_the_adapter_does_not_author_the_selection(sweep: SelectionAdapter) -> None:
@@ -1194,23 +1171,26 @@ def assert_tick_cost_does_not_grow_with_the_backlog(
     capped per tick and therefore never shows up as an outage — it just makes
     the scheduled job quietly expensive forever.
 
-    Compares statements for a small backlog against a larger one; equal counts
-    mean the cost is in the selection rather than the loop. The host's inspector
-    counts them; ``selection`` chooses the inspector when the host has several.
+    Compares the statements, by shape, of a tick over a small backlog with one over
+    a larger backlog (rows stay owed between them); equal shapes mean the cost is
+    in the selection rather than the loop, and a swap that keeps the count still
+    fails. ``selection`` chooses the inspector when the host has several. To hold
+    a tick's exact per-row cost to a committed baseline instead, use
+    :func:`pytest_obligation.costs.marginal_statement_shapes` with
+    :func:`pytest_obligation.costs.assert_statement_cost`.
     """
-    inspector = _statement_inspector("assert_tick_cost_does_not_grow_with_the_backlog", selection)
     for _ in range(2):
         make_owed()
-    small_count = len(inspector.statements_during(run_tick))
+    small = Counter(statement_shapes(run_tick, selection=selection))
 
     for _ in range(6):
         make_owed()
-    large_count = len(inspector.statements_during(run_tick))
+    large = Counter(statement_shapes(run_tick, selection=selection))
 
-    assert large_count == small_count, (
-        f"{name}: a tick over 8 rows issued {large_count} queries against "
-        f"{small_count} for 2 rows, so cost grows per row rather than per tick. "
-        f"The bound caps the damage, which is why this never surfaces as an "
+    assert large == small, (
+        f"{name}: a tick over 8 rows issued {large.total()} queries against "
+        f"{small.total()} for 2 rows (added {dict(large - small)}, dropped {dict(small - large)}), so cost grows "
+        f"per row rather than per tick. The bound caps the damage, which is why this never surfaces as an "
         f"outage and stays expensive indefinitely"
     )
 
@@ -1438,7 +1418,7 @@ def assert_idle_tick_is_cheap(
     The host's inspector counts the statements; ``selection`` chooses the
     inspector when the host has several.
     """
-    captured = _statement_inspector("assert_idle_tick_is_cheap", selection).statements_during(run_tick)
+    captured = statement_inspector("assert_idle_tick_is_cheap", selection).statements_during(run_tick)
 
     statements = "; ".join(sql[:100] for sql in captured)
     assert len(captured) <= max_queries, (

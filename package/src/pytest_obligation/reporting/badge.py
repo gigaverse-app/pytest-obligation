@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from pytest_obligation._internal.committed_files import write_committed
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SuiteCoverage
 
@@ -59,6 +60,5 @@ def write(path: Path, value: Badge) -> bool:
     text = value.model_dump_json(by_alias=True, indent=2) + "\n"
     if path.exists() and path.read_text(encoding="utf-8") == text:
         return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    write_committed(path, text)
     return True

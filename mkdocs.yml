@@ -81,6 +81,7 @@ extra:
   - package/docs/completion.md
   - package/docs/coverage.md
   - package/docs/debt-baseline.md
+  - package/docs/cost-contracts.md
   - package/docs/false-greens.md
   - package/docs/github-action-report.md
   - package/docs/harness-guide.md
@@ -135,6 +136,7 @@ nav:
   - What a green result means: package/docs/what-a-green-result-means.md
   - Avoid false greens: package/docs/false-greens.md
   - Track known test debt: package/docs/debt-baseline.md
+  - Hold database round trips to a baseline: package/docs/cost-contracts.md
 - Integrations:
   - Framework overview: package/docs/integrations.md
   - aiokafka: package/docs/aiokafka.md
