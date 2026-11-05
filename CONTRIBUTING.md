@@ -186,6 +186,14 @@ The `dry-lint-trailers` hook runs at `prepare-commit-msg`: duplicates fixed befo
 recorded in the commit message and counted by the PR sticky. The hook environment uses Python 3.13,
 independently of the project's runtime environments.
 
+Model duplication review also runs by default in the staged hook and PR check, starting with dry-lint 1.4.0.
+Keep the pinned hook release current: the Action's floating `@v1` does not upgrade local hook environments.
+With our Sonnet setup, model candidates require source review; Sonnet judges functions, and no TypeSafe key
+is required for model detection. Review declarations and consumers before accepting or dismissing a pair.
+The function baseline and weekly function sweep do not certify the existing model inventory. Follow
+[model adoption](https://github.com/gigaverse-app/dry-lint/blob/main/docs/model-adoption.md) for its separate
+reviewed baseline. The explicit opt-out is `--no-models` locally or `models: false` on the Action.
+
 The required judged `dry-lint` check rejects new blocking duplicates, incomplete judging and baseline
 widening. Forks first run `dry-lint detect`, then a trusted workflow judges the artifact. Read both
 functions in a finding: reuse the existing owner for the same concept, preserving behavior and running
