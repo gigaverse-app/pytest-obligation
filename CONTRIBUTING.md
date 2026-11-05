@@ -187,7 +187,8 @@ recorded in the commit message and counted by the PR sticky. The hook environmen
 independently of the project's runtime environments.
 
 Model duplication review also runs by default in the staged hook and PR check, starting with dry-lint 1.4.0.
-Keep the pinned hook release current: the Action's floating `@v1` does not upgrade local hook environments.
+Use `rev: v1` for hooks and `@v1` for the Action and CLI installs. If a cached hook environment still runs an
+older version, run `uvx pre-commit clean` and rerun the hook.
 With our Sonnet setup, model candidates require source review; Sonnet judges functions, and no TypeSafe key
 is required for model detection. Review declarations and consumers before accepting or dismissing a pair.
 The function baseline and weekly function sweep do not certify the existing model inventory. Follow
