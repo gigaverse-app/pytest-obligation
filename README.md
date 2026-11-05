@@ -206,15 +206,13 @@ CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
 See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
 environment caches, required gates and real dependency critical-path reports.
 
+### Duplicates kept out
+
+The local hooks and required PR check prevent new copies; the weekly audit records progress against the
+accepted backlog. [Contributor setup and cleanup workflow](CONTRIBUTING.md#duplication).
+
 <!-- dry-lint-progress:start -->
-[![dry-lint cleanup progress](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fgigaverse-app%2Fpytest-obligation%2Fmain%2F.dry-lint%2Fprogress.json)](https://github.com/gigaverse-app/dry-lint)
+<a href="https://github.com/gigaverse-app/dry-lint"><picture><source media="(prefers-color-scheme: dark)" srcset="https://dry-lint-counter.gigaverse-oss.workers.dev/v1/sign.svg?theme=dark&amp;key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;cleaned=8&amp;remaining=32&amp;dismissed=0"><img alt="dry-lint in gigaverse-app/pytest-obligation: new duplicates kept out of its pull requests, 8 old duplicates cleaned up, 32 remaining" src="https://dry-lint-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;cleaned=8&amp;remaining=32&amp;dismissed=0" width="100%"></picture></a>
 
-**Cleaning up duplication with dry-lint.** CI checks new changes against the accepted backlog.
-
-| Duplicate pairs cleaned | Remaining | Dismissed |
-| ---: | ---: | ---: |
-| 0 | 40 | 0 |
-
-[Accepted backlog](.dry-lint/baseline.json). Counts cover judged pairs in the configured scope, not lines of code; dismissals do not count as cleanup.
-[Read the audit](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/dry-lint-audit.yml) to choose the next refactor.
+[Accepted backlog](.dry-lint/baseline.json) · [Weekly audit](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/dry-lint-audit.yml)
 <!-- dry-lint-progress:end -->

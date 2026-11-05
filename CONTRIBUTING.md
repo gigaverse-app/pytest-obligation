@@ -172,23 +172,49 @@ history or failed planning must execute the full affected lanes and fail the
 required planning gate. Ordinary PRs and pushes use selection; manual/release/scheduled/full overrides
 remain complete checkpoints.
 
-## Duplication audit
+## Duplication
 
-The required `dry-lint` check accepts existing pairs recorded in `.dry-lint/baseline.json`
-and fails on new blocking duplicates or incomplete judging. The weekly **dry-lint audit**
-workflow publishes a read-only audit in its job summary and artifacts. Humans and agents
-choose refactors and open their own PRs; dry-lint does not change application code or open PRs.
-
-With your Anthropic credential in `ANTHROPIC_API_KEY`, install dry-lint from `main` until its v1 launch:
+Install both hooks once in each clone:
 
 ```bash
-uv tool install 'dry-lint[anthropic] @ git+https://github.com/gigaverse-app/dry-lint@main'
-dry-lint sweep --budget-usd 5 --report audit.json --output audit.md
-# Review findings, refactor selected code, and run its tests before updating the baseline.
-dry-lint sweep --update --budget-usd 5 --readme README.md --repository gigaverse-app/pytest-obligation
+uvx pre-commit install
 ```
 
-Commit the baseline, progress JSON and README with the refactor. Do not commit the raw audit
-files; CI retains reports as artifacts. Cleanup counts are duplicate pairs, not lines of code.
-Suppressed findings are counted as dismissed, and never credited as cleanup. See the
-[dry-lint sweep guide](https://github.com/gigaverse-app/dry-lint/blob/main/docs/sweeps.md).
+The staged `dry-lint` hook uses Sonnet and the same `.dry-lint/baseline.json` as CI. Set your own
+`ANTHROPIC_API_KEY` in the shell or an untracked `.env`. Missing credentials fail strict judging.
+The `dry-lint-trailers` hook runs at `prepare-commit-msg`: duplicates fixed before the first push are
+recorded in the commit message and counted by the PR sticky. The hook environment uses Python 3.13,
+independently of the project's runtime environments.
+
+The required judged `dry-lint` check rejects new blocking duplicates, incomplete judging and baseline
+widening. Forks first run `dry-lint detect`, then a trusted workflow judges the artifact. Read both
+functions in a finding: reuse the existing owner for the same concept, preserving behavior and running
+the affected tests; for different concepts, add a narrow `# dry-lint: distinct-from path::function`
+with the reason. Do not mechanically refactor from a score or add blanket ignores.
+
+The PR sticky tracks fixes across pushes, accepted-backlog cleanup and local-hook credit. Default-branch
+runs fold merged PRs into the repository's cumulative ledger. The README sign shows new duplicates kept
+out separately from old debt cleaned up; these are pair counts, not lines or estimated time savings.
+The cache-backed ledger restarts its counting period if evicted. Dismissals never earn cleanup credit.
+
+The weekly/manual **dry-lint audit** retains its complete report as an artifact, then opens or updates
+one `dry-lint/ratchet` PR containing only baseline, progress JSON and README metadata. It uses the inherited
+`GV_CI_CROSS_REPO_TOKEN` so normal PR checks run. Missing authentication, incomplete judgment or new debt
+fails visibly. A human or agent chooses and tests application refactors; the workflow does not edit application code.
+
+To inspect and record cleanup locally:
+
+```bash
+uv tool install --no-config --python 3.13 'dry-lint[anthropic] @ git+https://github.com/gigaverse-app/dry-lint@v1'
+dry-lint sweep --budget-usd 5 --report audit.json --output audit.md
+# Review findings, refactor selected code, and run its tests before updating the baseline.
+dry-lint sweep --update --budget-usd 5 --readme README.md --repository gigaverse-app/pytest-obligation --repository-id 1389937039
+```
+
+Commit the metadata with the refactor, or dispatch the weekly workflow after the cleanup merges. Preserve
+the existing baseline and its history; never reinitialize or broaden it. Keep raw reports and verdict caches
+out of Git. No-change audits leave metadata unchanged. The scope currently uses dry-lint defaults, excluding
+tests and migrations; changing the detection contract requires a reviewed migration.
+
+See the [full adoption playbook](https://github.com/gigaverse-app/dry-lint/blob/main/docs/adoption-playbook.md)
+and [sweep semantics](https://github.com/gigaverse-app/dry-lint/blob/main/docs/sweeps.md).
