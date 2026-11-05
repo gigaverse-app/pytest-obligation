@@ -140,6 +140,9 @@ def classify_retryable_failure(pk: int) -> None:
 
 def reconcile_attempt(pk: int) -> None:
     """The per-identity worker: advance active work, hand off a retry that is still owed."""
+    # dry-lint: distinct-from package/src/pytest_obligation/references/in_memory_handoffs.py::reconcile
+    # This PostgreSQL control starts successors and heartbeats live rows for the timed recovery tests.
+    # The framework-free control only creates a successor; its next delivery owns that transition.
     attempt = LifecycleAttempt.objects.get(pk=pk)
     if attempt.status == Status.REQUESTED:
         LifecycleAttempt.objects.filter(pk=pk, status=Status.REQUESTED).update(status=Status.RUNNING)
@@ -396,6 +399,9 @@ def complete_attempt_notifying_async(pk: int) -> None:
 
 def complete_attempt_notifying_deferred(pk: int) -> None:
     """Notify through a sync method that returns the deferred effect, then record completion."""
+    # dry-lint: distinct-from package/src/pytest_obligation/references/in_memory_handoffs.py::complete_notifying_deferred
+    # Parallel self-test controls: this completion must cross a real observed PostgreSQL commit;
+    # the framework-free control crosses its simulated ledger commit. Keep each failure site explicit.
     asyncio.run(RECIPIENT.deferred_notify(pk))
     LifecycleAttempt.objects.filter(pk=pk).update(status=Status.COMPLETE)
 
