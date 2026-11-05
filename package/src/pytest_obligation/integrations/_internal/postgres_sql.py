@@ -124,3 +124,13 @@ def bare_identifiers(sql: str) -> str:
         return quoted if quoted.isidentifier() else " " * len(match.group(0))
 
     return _NAME.sub(bare, blank_literals_and_comments(sql))
+
+
+def closing_parenthesis(text: str, start: int = 1) -> int:
+    """Close an already-open group in normalized SQL, or return len(text)."""
+    depth = 1
+    for index in range(start, len(text)):
+        depth += {"(": 1, ")": -1}.get(text[index], 0)
+        if depth == 0:
+            return index
+    return len(text)

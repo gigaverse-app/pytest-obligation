@@ -11,6 +11,7 @@ from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
+from pytest_obligation._internal.python_source import import_bindings
 from pytest_obligation.coverage.config import CoverageConfig
 from pytest_obligation.coverage.project import (
     Module,
@@ -18,7 +19,6 @@ from pytest_obligation.coverage.project import (
     defined_names,
     dotted_parts,
     qualified_name,
-    relative_source,
     terminal_name,
 )
 from pytest_obligation.coverage.report import MODULE_LEVEL, Site
@@ -267,6 +267,9 @@ class _Sites(ast.NodeVisitor):
 
     def _is_atomic(self, expression: ast.expr) -> bool:
         """``transaction.atomic``, ``atomic(using=...)``: the transaction block, as a decorator or a context."""
+        # dry-lint: distinct-from package/src/pytest_obligation/coverage/_internal/transactions.py::_PublicationReach._opens_transaction
+        # Handoff ownership needs the resolved Django atomic, excluding unrelated methods named atomic.
+        # Publication reach intentionally recognizes any .atomic scope and configured project openers.
         return self._resolve(expression.func if isinstance(expression, ast.Call) else expression) == ATOMIC
 
     @contextmanager
@@ -368,17 +371,11 @@ class _Sites(ast.NodeVisitor):
             self.scopes[-1].names[target.id] = resolved
         return False
 
-    def visit_Import(self, node: ast.Import) -> None:
+    def visit_Import(self, node: ast.Import | ast.ImportFrom) -> None:
         if len(self.scopes) > 1:  # module-level imports are the module's own table
-            for alias in node.names:
-                local = alias.asname or alias.name.split(".", 1)[0]
-                self.scopes[-1].names[local] = alias.name if alias.asname else local
+            self.scopes[-1].names.update(import_bindings(node, self.module))
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if len(self.scopes) > 1:
-            source = relative_source(node, self.module)
-            for alias in node.names:
-                self.scopes[-1].names[alias.asname or alias.name] = f"{source}.{alias.name}" if source else alias.name
+    visit_ImportFrom = visit_Import
 
     def visit_Assign(self, node: ast.Assign) -> None:
         if len(node.targets) == 1 and self._bind(node.targets[0], node.value):

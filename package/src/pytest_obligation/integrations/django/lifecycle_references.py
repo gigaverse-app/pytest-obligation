@@ -34,6 +34,8 @@ from django.utils import timezone
 from pytest_obligation.crash_histories import CallableDelivery
 from pytest_obligation.host import current_host
 from pytest_obligation.references.in_memory_handoffs import Recipient
+from pytest_obligation.references.in_memory_handoffs import run_inert_tick as run_inert_recovery_tick
+from pytest_obligation.references.recovery import recovery_round
 
 with isolate_apps("pytest_obligation"):
 
@@ -113,11 +115,6 @@ def run_recovery_tick() -> int:
     return len(due)
 
 
-def run_inert_recovery_tick() -> int:
-    """A tick that selects and publishes nothing: recovery that recovers no work."""
-    return 0
-
-
 def _create_successor(predecessor: LifecycleAttempt) -> None:
     if not LifecycleAttempt.objects.filter(retry_of=predecessor).exists():
         LifecycleAttempt.objects.create(status=Status.REQUESTED, retry_of=predecessor)
@@ -170,9 +167,7 @@ def _recover_with(tick: Callable[[], int]) -> Callable[[], None]:
         for round_number in range(1, 4):
             moment = timezone.now() + (RECOVERY_DELAY + timedelta(hours=1)) * round_number
             with current_host().require("frozen_clock")(moment):
-                drain_outbox()
-                tick()
-                drain_outbox()
+                recovery_round(drain_outbox, tick)
 
     return recover
 

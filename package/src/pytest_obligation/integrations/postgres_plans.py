@@ -25,6 +25,7 @@ from typing import Any, TypeAlias
 
 from pytest_obligation.host import ReadCost
 from pytest_obligation.integrations._internal.postgres_sql import bare_identifiers, blank_literals_and_comments
+from pytest_obligation.integrations._internal.postgres_sql import closing_parenthesis as _closing_paren
 
 #: Plan keys proving an index narrowed the rows a scan node returned.
 CATALOG_INDEX = "Catalog Index"
@@ -165,16 +166,6 @@ def _conjuncts(expression: str) -> list[str]:
             start = index + len(" AND ")
     clauses.append(text[start:])
     return [clause.strip() for clause in clauses if clause.strip()]
-
-
-def _closing_paren(text: str) -> int:
-    """The index of the parenthesis closing the one ``text`` opens with."""
-    depth = 0
-    for index, char in enumerate(text):
-        depth += {"(": 1, ")": -1}.get(char, 0)
-        if depth == 0:
-            return index
-    return -1
 
 
 def _borrowed_from_a_join(access: dict[str, Any], own: frozenset[str]) -> bool:

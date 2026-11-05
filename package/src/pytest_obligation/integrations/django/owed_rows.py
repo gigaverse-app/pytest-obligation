@@ -25,22 +25,15 @@ from pytest_obligation.integrations.django.lifecycle_states import (
 )
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
-    PoisonDropped,
     PoisonedHistory,
-    PoisonStalled,
     assert_a_stop_request_ends_the_tick,
     assert_poison_is_isolated,
-    assert_poison_is_reported,
 )
 from pytest_obligation.profiles.automatic_recovery import (
     DueWorkSweep,
     declared_recovery_delay,
 )
-
-
-def _selected(selection: Callable[[], Iterable[Any]], identity_of: Callable[[Any], Any]) -> list[Any]:
-    """One evaluation of the production selection, in its order, as identities."""
-    return [identity_of(row) for row in selection()]
+from pytest_obligation.selection import selected_identities as _selected
 
 
 class _OwedPair(HarnessModel):
@@ -710,27 +703,12 @@ def _assert_the_next_poll_serves_the_healthy_row(
 ) -> None:
     """The tick after a poisoned one, on a polling selection: the healthy row is served again, nothing dropped."""
     history = _poisoned_tick(name, selection, rows, arranged)
-    escaped: Exception | None = None
-    with history["poison"] as fired:
-        try:
-            rows.run_tick()
-        except Exception as error:  # noqa: BLE001 - a reported failure is allowed; starving the healthy row is not
-            escaped = error
-    if not history["progressed"]():
-        raise PoisonStalled(
-            f"{name}: on the tick after a poisoned one, a polling selection did not serve the healthy row behind the "
-            f"poisoned one again (the tick raised {escaped!r}). The selection still returns it, so a loop that backs "
-            f"off the whole tick after a failure, or resumes after the last row it served, starves every polled row "
-            f"behind one poisoned identity"
-        ) from escaped
-    if not history["still_owed"]():
-        raise PoisonDropped(
-            f"{name}: the poisoned row of a polling selection is no longer selected after a second tick. Isolation "
-            f"must leave a failing identity selectable (or held with backoff), not drop, settle or retire it"
-        ) from escaped
-    # A per-identity backoff may defer the poison. If it fires again, silence is never isolation.
-    if fired():
-        assert_poison_is_reported(name, escaped)
+    assert_poison_is_isolated(
+        name=f"{name}: on the tick after a poisoned one",
+        run_tick=rows.run_tick,
+        allow_backoff=True,
+        **history,
+    )
 
 
 def _owed_next(name: str, still_owed: Callable[[Any], bool], row: Any, settled: Any) -> bool:

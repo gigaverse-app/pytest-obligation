@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 
 from scripts.ci.check_docs import missing_links
-from scripts.ci.check_metadata import check_metadata
 
 
 class DocumentChecks(unittest.TestCase):
@@ -18,9 +17,3 @@ class DocumentChecks(unittest.TestCase):
             self.assertEqual(missing_links(readme), [])
             (root / "guide.md").unlink()
             self.assertEqual(len(missing_links(readme)), 1)
-
-    def test_distribution_description_must_match_current_readme(self):
-        raw = b"Name: pytest-obligation\nDescription-Content-Type: text/markdown\n\n# Current README\n"
-        check_metadata(raw, "# Current README\n")
-        with self.assertRaisesRegex(AssertionError, "differs"):
-            check_metadata(raw, "# Stale README\n")

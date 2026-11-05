@@ -26,6 +26,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from pytest_obligation._internal.python_source import within_packages
 from pytest_obligation.coverage.sites import SiteKind, resolve_kinds
 from pytest_obligation.models import HarnessModel
 
@@ -64,7 +65,7 @@ class CoverageConfig(HarnessModel):
 
     def is_production(self, qualified: str) -> bool:
         """Whether a dotted name lies inside one of the production packages."""
-        return any(qualified == package or qualified.startswith(f"{package}.") for package in self.production_packages)
+        return within_packages(qualified, self.production_packages)
 
 
 def _table(pyproject: Path) -> dict[str, Any] | None:

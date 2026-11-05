@@ -50,6 +50,7 @@ through ``getattr`` with a computed name, made on a task class instance
 
 from collections.abc import Collection, Iterable
 
+from pytest_obligation._internal.python_source import within_packages
 from pytest_obligation.models import HarnessModel
 
 
@@ -76,7 +77,7 @@ class SiteKind(HarnessModel):
 
     def enabled_by(self, imported: str) -> bool:
         """Whether importing the dotted name ``imported`` enables this kind."""
-        return any(imported == package or imported.startswith(f"{package}.") for package in self.packages)
+        return within_packages(imported, self.packages)
 
 
 DJANGO = SiteKind(name="django", packages=frozenset({"django"}), calls=frozenset({"on_commit"}))

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pydantic import Field
 
+from pytest_obligation._internal.python_source import Module, qualified_name, top_level_imports
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SourceLocation
 
@@ -41,27 +42,16 @@ class _Sources:
         return self.trees[path]
 
     def imports(self, path: Path) -> dict[str, str]:
-        aliases = {}
-        package = path.relative_to(self.root).with_suffix("").parts[:-1]
-        for node in self.tree(path).body:
-            if isinstance(node, ast.ImportFrom):
-                prefix = list(package[: len(package) - node.level + 1]) if node.level else []
-                prefix += node.module.split(".") if node.module else []
-                for alias in node.names:
-                    aliases[alias.asname or alias.name] = ".".join([*prefix, alias.name])
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    aliases[alias.asname or alias.name.split(".")[0]] = (
-                        alias.name if alias.asname else alias.name.split(".")[0]
-                    )
-        return aliases
+        relative = path.relative_to(self.root)
+        parts = list(relative.with_suffix("").parts)
+        package = parts[-1] == "__init__"
+        if package:
+            parts.pop()
+        module = Module(name=".".join(parts), path=path, relative=relative.as_posix(), package=package)
+        return top_level_imports(self.tree(path), module)
 
     def qualified(self, expression: ast.expr, path: Path) -> str:
-        if isinstance(expression, ast.Name):
-            return self.imports(path).get(expression.id, expression.id)
-        if isinstance(expression, ast.Attribute):
-            return f"{self.qualified(expression.value, path)}.{expression.attr}"
-        return ""
+        return qualified_name(expression, "", self.imports(path), set(), allow_unbound=True) or ""
 
     def contract_name(self, expression: ast.expr, path: Path, seen: set[tuple[Path, str]]) -> str | None:
         if isinstance(expression, ast.Call):

@@ -130,9 +130,11 @@ from pytest_obligation.integrations.django.owed_rows import (
     worker_transaction,
 )
 from pytest_obligation.profiles.automatic_recovery import DueWorkSweep
+from pytest_obligation.selection import SELECTION_COMPLETENESS_PROOF as PROOF_NAME
+from pytest_obligation.selection import gap_combination as gap_combination
 
 #: The case id, and the prefix of a declared per-combination gap.
-PROOF_NAME = "assert_selection_is_complete"
+
 
 #: Generated examples per contract in PR CI, beyond the fixed ones.
 PR_EXAMPLES = 25
@@ -288,20 +290,6 @@ def parse_combination(key: str, paths: Mapping[str, StatePath]) -> StateCombinat
 def gap_key(combination: Mapping[str, str]) -> str:
     """``assert_selection_is_complete[path:value,...]``, the paths in sorted order."""
     return f"{PROOF_NAME}[{','.join(f'{path}:{value}' for path, value in sorted(combination.items()))}]"
-
-
-def gap_combination(gap: str) -> str | None:
-    """The combination inside a gap key, or None when ``gap`` is not a selection-completeness gap."""
-    prefix = f"{PROOF_NAME}["
-    if not (gap.startswith(prefix) and gap.endswith("]")):
-        return None
-    inner = gap[len(prefix) : -1]
-    parts = [part.partition(":") for part in inner.split(",")]
-    assert inner and all(path and value and "|" not in value for path, _, value in parts), (
-        f"{gap!r}: a selection-completeness gap names one value per state path, "
-        f"'{PROOF_NAME}[path:value,path:value]'; a gap on the whole proof would hide every combination"
-    )
-    return inner
 
 
 @dataclass(frozen=True)

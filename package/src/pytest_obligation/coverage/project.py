@@ -11,20 +11,29 @@ import ast
 import fnmatch
 import os
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from functools import cached_property
 from pathlib import Path
 
+from pytest_obligation._internal.python_source import (
+    Module as Module,
+)
+from pytest_obligation._internal.python_source import (
+    defined_names as defined_names,
+)
+from pytest_obligation._internal.python_source import (
+    dotted_parts as dotted_parts,
+)
+from pytest_obligation._internal.python_source import (
+    python_files,
+    relative_source,
+    top_level_imports,
+)
+from pytest_obligation._internal.python_source import (
+    qualified_name as qualified_name,
+)
 from pytest_obligation.binding import is_test_path
 from pytest_obligation.coverage.config import DEFAULT_EXCLUDE, CoverageConfig
-from pytest_obligation.models import HarnessModel
-
-
-class Module(HarnessModel):
-    name: str
-    path: Path
-    relative: str
-    package: bool
 
 
 def is_excluded(name: str, patterns: tuple[str, ...]) -> bool:
@@ -59,7 +68,7 @@ class Project:
         for root in config.source_roots:
             base = (config.root / root).resolve()
             if base.is_dir():
-                for path in self._walk(base):
+                for path in python_files(base, self._skipped, self._skipped):
                     self._add(path)
 
     def _relative(self, path: Path) -> Path:
@@ -91,15 +100,6 @@ class Project:
                 self.hidden.append(self._relative(path).as_posix())
             return True
         return is_excluded(path.name, DEFAULT_EXCLUDE) and not self._holds_production(path)
-
-    def _walk(self, base: Path) -> Iterator[Path]:
-        """Every ``.py`` file under ``base`` the walk does not skip."""
-        for directory, subdirectories, files in os.walk(base):
-            here = Path(directory)
-            subdirectories[:] = [name for name in sorted(subdirectories) if not self._skipped(here / name)]
-            yield from (
-                here / name for name in sorted(files) if name.endswith(".py") and not self._skipped(here / name)
-            )
 
     def _add(self, path: Path) -> None:
         relative = self._relative(path)
@@ -201,33 +201,6 @@ def terminal_name(expression: ast.expr) -> str | None:
     return None
 
 
-def relative_source(node: ast.ImportFrom, module: Module) -> str:
-    source = node.module or ""
-    if not node.level:
-        return source
-    package = module.name if module.package else module.name.rpartition(".")[0]
-    parts = package.split(".") if package else []
-    anchor = parts[: max(len(parts) - node.level + 1, 0)]
-    return ".".join([*anchor, source] if source else anchor)
-
-
-def top_level_imports(tree: ast.Module, module: Module) -> dict[str, str]:
-    """Local name -> the qualified name it refers to, from the module's top-level imports."""
-    imported: dict[str, str] = {}
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom):
-            source = relative_source(node, module)
-            for alias in node.names:
-                imported[alias.asname or alias.name] = f"{source}.{alias.name}" if source else alias.name
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.asname:
-                    imported[alias.asname] = alias.name
-                else:
-                    imported[alias.name.split(".", 1)[0]] = alias.name.split(".", 1)[0]
-    return imported
-
-
 def imported_names(tree: ast.Module, module: Module) -> Iterator[str]:
     """Every dotted name the module imports, at any depth, relative imports resolved."""
     for node in ast.walk(tree):
@@ -237,32 +210,3 @@ def imported_names(tree: ast.Module, module: Module) -> Iterator[str]:
             source = relative_source(node, module)
             for alias in node.names:
                 yield f"{source}.{alias.name}" if source else alias.name
-
-
-def defined_names(tree: ast.Module) -> set[str]:
-    return {node.name for node in tree.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)}
-
-
-def dotted_parts(expression: ast.expr) -> tuple[str, list[str]] | None:
-    """``a.b.c`` -> ("a", ["b", "c"]); anything else -> None."""
-    parts: list[str] = []
-    while isinstance(expression, ast.Attribute):
-        parts.append(expression.attr)
-        expression = expression.value
-    if not isinstance(expression, ast.Name):
-        return None
-    return expression.id, list(reversed(parts))
-
-
-def qualified_name(expression: ast.expr, module: str, imported: Mapping[str, str], defined: set[str]) -> str | None:
-    dotted = dotted_parts(expression)
-    if dotted is None:
-        return None
-    base, rest = dotted
-    if base in imported:
-        head = imported[base]
-    elif base in defined:
-        head = f"{module}.{base}"
-    else:
-        return None
-    return ".".join([head, *rest])

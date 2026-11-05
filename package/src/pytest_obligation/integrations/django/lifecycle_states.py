@@ -89,6 +89,7 @@ from pytest_obligation.binding import (
     is_real_reason,
 )
 from pytest_obligation.host import current_host
+from pytest_obligation.integrations.django.selection import require_queryset
 from pytest_obligation.integrations.django.writes import row_write
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
 
@@ -179,12 +180,10 @@ def _lifecycle(sweep: DueWorkSweep) -> Lifecycle:
 
 
 def _queryset(sweep: DueWorkSweep) -> QuerySet[Any]:
-    selection = sweep.due_work()
-    assert isinstance(selection, QuerySet), (
-        f"{sweep.name}: lifecycle proofs read the selection's WHERE clause, so due_work must return a Django "
-        f"QuerySet, not {type(selection).__name__}"
+    return require_queryset(
+        sweep.due_work(),
+        f"{sweep.name}: lifecycle proofs read the selection's WHERE clause, so due_work must return a Django QuerySet, not",
     )
-    return selection
 
 
 def _ages(sweep: DueWorkSweep) -> tuple[timedelta, timedelta]:

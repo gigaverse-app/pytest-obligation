@@ -6,10 +6,9 @@ only when it is the harness's own; see :mod:`.scan` for the rules.
 """
 
 import ast
-import os
-from collections.abc import Iterator
 from pathlib import Path
 
+from pytest_obligation._internal.python_source import python_files
 from pytest_obligation.binding import MINIMUM_REASON_LENGTH
 from pytest_obligation.coverage.config import DEFAULT_EXCLUDE, CoverageConfig
 from pytest_obligation.coverage.project import (
@@ -44,7 +43,11 @@ def declaration_modules(config: CoverageConfig) -> list[Module]:
         base = (config.root / test_path).resolve()
         if not base.exists():
             continue
-        paths = [base] if base.is_file() else _declaration_candidates(config, base)
+        paths = (
+            [base]
+            if base.is_file()
+            else python_files(base, lambda path: is_excluded(path.name, (*DEFAULT_EXCLUDE, *config.exclude)))
+        )
         for path in paths:
             if path in seen or not path.name.startswith("test_") and not path.stem.endswith("_test"):
                 continue
@@ -55,14 +58,6 @@ def declaration_modules(config: CoverageConfig) -> list[Module]:
                     Module(name=name, path=path, relative=relative_path(config, path).as_posix(), package=False)
                 )
     return found
-
-
-def _declaration_candidates(config: CoverageConfig, base: Path) -> Iterator[Path]:
-    for directory, subdirectories, files in os.walk(base):
-        subdirectories[:] = sorted(
-            name for name in subdirectories if not is_excluded(name, (*DEFAULT_EXCLUDE, *config.exclude))
-        )
-        yield from (Path(directory) / name for name in sorted(files) if name.endswith(".py"))
 
 
 def _binds(statement: ast.stmt, name: str) -> bool:
