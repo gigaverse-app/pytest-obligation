@@ -34,22 +34,15 @@ from pytest_obligation.integrations.django.writes import (
     leading_keyword,
     require_postgresql,
 )
-from pytest_obligation.worker_death import WorkerDied
+from pytest_obligation.worker_death import CommitWorker, WorkerDied
 
 
-class DjangoWorker:
+class DjangoWorker(CommitWorker):
     """The worker a crash history interrupts: its commit count and whether it died."""
 
     def __init__(self, connection: BaseDatabaseWrapper, kill_after: int | None) -> None:
+        super().__init__(kill_after)
         self._connection = connection
-        self._kill_after = kill_after
-        self.commits = 0
-        self.dead = False
-
-    def committed(self) -> None:
-        self.commits += 1
-        if self.commits == self._kill_after:
-            self.kill_now(f"worker died right after commit {self.commits}")
 
     def kill_now(self, reason: str) -> None:
         self.dead = True
