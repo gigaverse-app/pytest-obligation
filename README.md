@@ -206,6 +206,11 @@ CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
 See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
 environment caches, required gates and real dependency critical-path reports.
 
+### Duplicates kept out
+
+The local hooks and required PR check prevent new copies; the weekly audit records progress against the
+accepted backlog. [Contributor setup and cleanup workflow](CONTRIBUTING.md#duplication).
+
 <!-- dry-lint-progress:start -->
 [![dry-lint cleanup progress](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fgigaverse-app%2Fpytest-obligation%2Fmain%2F.dry-lint%2Fprogress.json)](https://github.com/gigaverse-app/dry-lint)
 
