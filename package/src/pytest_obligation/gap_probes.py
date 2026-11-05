@@ -93,6 +93,9 @@ def _ownership_guards(ownership: FencedOwnership) -> None:
 
 
 def _ambiguity_guards(ambiguity: AmbiguityAware) -> None:
+    # dry-lint: distinct-from package/src/pytest_obligation/profiles/crash_ambiguity.py::assert_ambiguity_contract
+    # Guards validate authorship/delegation before interpreting a declared gap's expected failure.
+    # The full contract also executes state-changing invariants; calling it here would reject valid gaps.
     assert_ambiguity_transitions_are_production_bound(ambiguity)
     assert_ordinary_due_work_is_production_bound(ambiguity)
     assert_ambiguity_bindings_are_production_bound(ambiguity)

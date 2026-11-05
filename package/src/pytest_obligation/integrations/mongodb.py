@@ -24,11 +24,12 @@ is supplied separately by mongodb_selection and enabled by mongodb_host.
 from collections.abc import Callable, Collection, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
+from functools import partial
 from typing import Any
 
 from pytest_obligation.host import Host
 from pytest_obligation.models import ObligationContractDesignError
-from pytest_obligation.worker_death import CommitWorker, LostCommitReplies
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker
 
 # Anything not positively known to be read-only counts conservatively. Aggregation
 # has its own rule because $out/$merge are writes despite using a read-shaped API.
@@ -192,13 +193,7 @@ class MongoDBLostReplies(LostCommitReplies):
 
 
 def mongodb_reply_breaker(client: Any) -> Callable[[int | None], AbstractContextManager[MongoDBLostReplies]]:
-    @contextmanager
-    def breaker(lose_at: int | None) -> Iterator[MongoDBLostReplies]:
-        replies = MongoDBLostReplies(lose_at)
-        with _watching(client, lambda: None, replies.committed):
-            yield replies
-
-    return breaker
+    return counted_reply_breaker(partial(_watching, client), MongoDBLostReplies)
 
 
 def mongodb_host(client: Any, production_packages: Collection[str]) -> Host:

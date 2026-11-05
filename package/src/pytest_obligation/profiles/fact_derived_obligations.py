@@ -82,10 +82,7 @@ from pytest_obligation.binding import (
     assert_test_binding_forwards,
 )
 from pytest_obligation.models import HarnessModel
-
-
-def _same_identity(identity: Any) -> Any:
-    return identity
+from pytest_obligation.selection import identity as _same_identity
 
 
 class _DerivedObligation(HarnessModel):

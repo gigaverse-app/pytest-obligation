@@ -25,6 +25,7 @@ from typing import Any, TypeAlias
 
 from pytest_obligation.host import ReadCost
 from pytest_obligation.integrations._internal.postgres_sql import bare_identifiers, blank_literals_and_comments
+from pytest_obligation.integrations._internal.postgres_sql import closing_parenthesis as _closing_paren
 
 #: Plan keys proving an index narrowed the rows a scan node returned.
 CATALOG_INDEX = "Catalog Index"
@@ -167,16 +168,6 @@ def _conjuncts(expression: str) -> list[str]:
     return [clause.strip() for clause in clauses if clause.strip()]
 
 
-def _closing_paren(text: str) -> int:
-    """The index of the parenthesis closing the one ``text`` opens with."""
-    depth = 0
-    for index, char in enumerate(text):
-        depth += {"(": 1, ")": -1}.get(char, 0)
-        if depth == 0:
-            return index
-    return -1
-
-
 def _borrowed_from_a_join(access: dict[str, Any], own: frozenset[str]) -> bool:
     """
     Whether every clause of ``access``'s Index Cond compares a key with another relation's column.
@@ -309,6 +300,9 @@ _IDENTIFIER = re.compile(r'"([^"]+)"|\b([A-Za-z_][A-Za-z0-9_$]*)\b')
 
 def referenced_columns(expression: str, candidates: Collection[str]) -> set[str]:
     """Which of ``candidates`` an expression PostgreSQL printed names, outside its string literals."""
+    # dry-lint: distinct-from package/src/pytest_obligation/integrations/_internal/postgres_sql.py::bare_identifiers
+    # Column membership includes quoted names containing spaces. bare_identifiers instead rewrites SQL
+    # for word-pattern comparison and must blank those names so a substring cannot become a column.
     text = blank_literals_and_comments(expression)
     names = {quoted or bare for quoted, bare in _IDENTIFIER.findall(text)}
     return names & set(candidates)

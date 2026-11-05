@@ -74,6 +74,7 @@ from pytest_obligation.integrations.django_tasks import RUNS_ONCE, TaskOutcome, 
 from pytest_obligation.profiles.catalog import ConvergenceFamily
 
 from . import cdn
+from .arrangements import enqueue_purge
 from .test_feature_detection import focal_point_replay, focal_point_snapshot
 
 # The workers production runs, in batch mode: every ready task, then stop.
@@ -263,7 +264,7 @@ def task_failure_limit(kind: str) -> Iterator[BoundedRetry]:
     if kind == "purge":
 
         def prepare() -> str:
-            return str(purge_urls_from_cache_task.enqueue(["http://localhost/retry/"]).id)
+            return enqueue_purge("http://localhost/retry/")
 
         owner, attribute = cdn.RecordingCDN, "purge"
     elif kind == "feature":
@@ -514,7 +515,7 @@ URL = "http://localhost/opening-hours/"
 def a_purge_owed() -> str:
     # ARRANGE: a frontend cache purge enqueued by Wagtail's own task, ready for a worker.
     cdn.PURGED.clear()
-    return str(purge_urls_from_cache_task.enqueue([URL]).id)
+    return enqueue_purge(URL)
 
 
 def purges(_task_id: str) -> int:

@@ -68,6 +68,7 @@ from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from pydantic import PrivateAttr
 
 from pytest_obligation.integrations._internal.postgres_sql import blank_literals_and_comments
+from pytest_obligation.integrations._internal.postgres_sql import closing_parenthesis as _closing_parenthesis
 from pytest_obligation.integrations.django.writes import statement_text
 from pytest_obligation.models import HarnessModel, MutableHarnessModel
 
@@ -175,18 +176,6 @@ def _locked_by_ctes(text: str) -> list[RowLock]:
         position = comma.end()
     locked.extend(_locks(text[position:].strip()))
     return locked
-
-
-def _closing_parenthesis(text: str, start: int) -> int:
-    depth = 1
-    for index in range(start, len(text)):
-        if text[index] == "(":
-            depth += 1
-        elif text[index] == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-    return len(text)
 
 
 def _distinct(tables: Iterable[str]) -> tuple[str, ...]:

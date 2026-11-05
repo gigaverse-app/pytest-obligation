@@ -2,7 +2,7 @@
   "schema": 1,
   "contract": "fbf56a4a852e47539b956057d11e9f3ee56a986bbb3b26ac209dc491d4b45f6e",
   "started_at": "621705115b9af4734fedc85f5ab39dc90295808c",
-  "checked_at": "970af5b88ab27508a14726ac22fc58063fc00cca",
+  "checked_at": "d9a31a23aeb51f591dbd7e64c3b04bcdc9cabe54",
   "entries": [
     {
       "hashes": {
@@ -10,7 +10,7 @@
         "package/src/pytest_obligation/integrations/django/selection_completeness.py::gap_combination": "41cb71c1c7afaa2e"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -18,7 +18,7 @@
         "package/src/pytest_obligation/coverage/project.py::Project._walk": "b1dc5a828b1cecba"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -26,7 +26,7 @@
         "package/src/pytest_obligation/coverage/_internal/transactions.py::_PublicationReach._opens_transaction": "67d490993ca39def"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "dismissed"
     },
     {
       "hashes": {
@@ -34,7 +34,7 @@
         "package/src/pytest_obligation/worker_death.py::CommitWorker.refuse_if_dead": "ee0a5c524619f522"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -42,7 +42,7 @@
         "package/src/pytest_obligation/integrations/postgres_plans.py::_closing_paren": "407e23acfc92b39a"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -50,7 +50,7 @@
         "package/src/pytest_obligation/reporting/inventory.py::_Sources.qualified": "36158e1b5b2c1edc"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -58,7 +58,7 @@
         "package/src/pytest_obligation/references/in_memory_handoffs.py::recover": "39fab3f04e44fdc4"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -74,7 +74,7 @@
         "package/src/pytest_obligation/reporting/inventory.py::_Sources.imports": "c51ae92d68be44a8"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -82,7 +82,7 @@
         "package/src/pytest_obligation/references/in_memory_handoffs.py::Ledger._refuse_if_dead": "82a7450e859f4804"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -98,7 +98,7 @@
         "package/src/pytest_obligation/profiles/fact_derived_obligations.py::_same_identity": "aa98080165f3651c"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -106,7 +106,7 @@
         "package/src/pytest_obligation/profiles/job_retry_limits.py::_identity": "aa98080165f3651c"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -114,7 +114,7 @@
         "package/src/pytest_obligation/reporting/inventory.py::_Sources.imports": "c51ae92d68be44a8"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -122,7 +122,7 @@
         "package/src/pytest_obligation/references/in_memory_handoffs.py::run_inert_tick": "e4fae3ca4c1cddcb"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -130,7 +130,7 @@
         "package/src/pytest_obligation/integrations/django/tables.py::model_tables": "e9bbe5bce0e62b18"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -138,7 +138,7 @@
         "package/src/pytest_obligation/profiles/job_retry_limits.py::_identity": "aa98080165f3651c"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -146,7 +146,7 @@
         "package/src/pytest_obligation/worker_death.py::LostCommitReplies.committed": "0f4019e7995e7b2b"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -154,7 +154,7 @@
         "ci_tests/test_metadata.py::MetadataTests.test_description_preserves_unicode_and_rejects_changed_readme": "b70058834400e2d9"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -162,7 +162,7 @@
         "package/src/pytest_obligation/coverage/_internal/transactions.py::_PublicationReach.__init__": "cb3b34d2fd7b9f99"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -170,7 +170,7 @@
         "package/src/pytest_obligation/integrations/django/commits.py::DjangoWorker.refuse_if_dead": "14abb87d90f1623b"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -178,7 +178,7 @@
         "package/src/pytest_obligation/worker_death.py::CommitWorker.refuse_if_dead": "ee0a5c524619f522"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -194,7 +194,7 @@
         "package/src/pytest_obligation/profiles/automatic_recovery.py::_selected_identities": "f55bb591598a23a0"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -202,7 +202,7 @@
         "package/src/pytest_obligation/poison.py::assert_poison_is_isolated": "7bff96e969817c60"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -210,7 +210,7 @@
         "package/src/pytest_obligation/integrations/redis.py::redis_reply_breaker": "cb513e93a3d69196"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -218,7 +218,7 @@
         "package/src/pytest_obligation/profiles/job_retry_limits.py::_is_due": "24a4a546c4ca92aa"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -242,7 +242,7 @@
         "package/src/pytest_obligation/worker_death.py::LostCommitReplies.__init__": "59c1d756c727de83"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -250,7 +250,7 @@
         "package/src/pytest_obligation/worker_death.py::CommitWorker.refuse_if_dead": "ee0a5c524619f522"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -266,7 +266,7 @@
         "package/src/pytest_obligation/coverage/sites.py::SiteKind.enabled_by": "1adc0c8b70427131"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -274,7 +274,7 @@
         "package/src/pytest_obligation/coverage/project.py::top_level_imports": "1fa9c685f500cb06"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -282,7 +282,7 @@
         "package/src/pytest_obligation/coverage/project.py::top_level_imports": "1fa9c685f500cb06"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -290,7 +290,7 @@
         "package/src/pytest_obligation/references/in_memory_handoffs.py::Ledger._refuse_if_dead": "82a7450e859f4804"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -298,7 +298,7 @@
         "package/src/pytest_obligation/integrations/django/selection.py::DjangoSelectionInspector._queryset": "a093101d6f8f5962"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {
@@ -306,7 +306,7 @@
         "package/src/pytest_obligation/reporting/inventory.py::_Sources.imports": "c51ae92d68be44a8"
       },
       "context_hash": "",
-      "state": "remaining"
+      "state": "cleaned"
     },
     {
       "hashes": {

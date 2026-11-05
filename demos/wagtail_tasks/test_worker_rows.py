@@ -9,11 +9,12 @@ from uuid import UUID, uuid4
 from django_tasks_db.compat import BaseTaskResult, TaskResultStatus, task_finished, task_started
 from django_tasks_db.management.commands.db_worker import Worker
 from django_tasks_db.models import DBTaskResult, DBTaskResultQuerySet
-from wagtail.contrib.frontend_cache.tasks import purge_urls_from_cache_task
 
 from pytest_obligation import Adoption, ScheduledSelection, scheduled_selection_suite
 from pytest_obligation.integrations.django.owed_rows import EdgeFamily, OwedRows
 from pytest_obligation.poison import PoisonSwitch
+
+from .arrangements import enqueue_purge
 
 
 def worker() -> Worker:
@@ -55,8 +56,7 @@ def ready_selection() -> DBTaskResultQuerySet:
 
 def owed_purge() -> DBTaskResult:
     """Enqueue through Wagtail, so the payload and task registration are production-owned."""
-    task = purge_urls_from_cache_task.enqueue([f"https://example.test/owed/{uuid4()}/"])
-    return DBTaskResult.objects.get(pk=task.id)
+    return DBTaskResult.objects.get(pk=enqueue_purge(f"https://example.test/owed/{uuid4()}/"))
 
 
 @contextmanager

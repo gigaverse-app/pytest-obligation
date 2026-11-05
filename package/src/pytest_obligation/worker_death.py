@@ -1,4 +1,6 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from typing import TypeVar
 
 
 class WorkerDied(BaseException):
@@ -27,10 +29,17 @@ class ReceiverFailed(Exception):  # noqa: N818 - named for what happened, like W
     """
 
 
+def refuse_dead_worker(dead: bool, message: str) -> None:
+    """Fence operations regardless of how a host records death."""
+    if dead:
+        raise WorkerDied(message)
+
+
 class CommitWorker:
     """Count a client's durable writes and fence every later operation after death."""
 
-    def __init__(self, kill_after: int | None) -> None:
+    def __init__(self, kill_after: int | None, *, on_death: Callable[[], None] | None = None) -> None:
+        self._on_death = on_death
         self._kill_after = kill_after
         self.commits = 0
         self.dead = False
@@ -42,11 +51,12 @@ class CommitWorker:
 
     def kill_now(self, reason: str) -> None:
         self.dead = True
+        if self._on_death is not None:
+            self._on_death()
         raise WorkerDied(reason)
 
     def refuse_if_dead(self) -> None:
-        if self.dead:
-            raise WorkerDied("the worker is dead; its connection sends nothing more")
+        refuse_dead_worker(self.dead, "the worker is dead; its connection sends nothing more")
 
 
 class LostCommitReplies:
@@ -63,3 +73,21 @@ class LostCommitReplies:
         if self.count == self._lose_at:
             self.failure = self._failure(self.count)
             raise self.failure
+
+
+_Replies = TypeVar("_Replies", bound=LostCommitReplies)
+
+
+def counted_reply_breaker(
+    watch: Callable[[Callable[[], None], Callable[[], None]], AbstractContextManager[object]],
+    replies_factory: Callable[[int | None], _Replies],
+) -> Callable[[int | None], AbstractContextManager[_Replies]]:
+    """Keep the observer installed through the body, restoring it even when the reply is lost."""
+
+    @contextmanager
+    def breaker(lose_at: int | None) -> Iterator[_Replies]:
+        replies = replies_factory(lose_at)
+        with watch(lambda: None, replies.committed):
+            yield replies
+
+    return breaker

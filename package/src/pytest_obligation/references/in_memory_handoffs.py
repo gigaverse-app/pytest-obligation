@@ -29,36 +29,21 @@ import pydantic
 
 from pytest_obligation.crash_histories import CallableDelivery
 from pytest_obligation.models import MutableHarnessModel
-from pytest_obligation.worker_death import WorkerDied
-
-
-class _Death(MutableHarnessModel):
-    commits: int = 0
-    dead: bool = False
-    kill_after: int | None = None
-
-    def kill_now(self, reason: str) -> None:
-        self.dead = True
-        raise WorkerDied(reason)
+from pytest_obligation.references.recovery import recover_handoffs
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, WorkerDied
 
 
 class LedgerConnectionError(Exception):
     """The ledger's connection dropped after a write landed, before its answer arrived."""
 
 
-class _LostReplies:
-    """The ledger's commits as a reply breaker counts them (a ``CountedFaults``)."""
+class _LostReplies(LostCommitReplies):
+    """Lose a committed ledger reply using its connection error."""
 
     def __init__(self, lose_at: int | None) -> None:
-        self._lose_at = lose_at
-        self.count = 0
-        self.failure: LedgerConnectionError | None = None
-
-    def committed(self) -> None:
-        self.count += 1
-        if self.count == self._lose_at:
-            self.failure = LedgerConnectionError(f"the reply to commit {self.count} was lost; the write landed")
-            raise self.failure
+        super().__init__(
+            lose_at, lambda count: LedgerConnectionError(f"the reply to commit {count} was lost; the write landed")
+        )
 
 
 class Ledger(MutableHarnessModel):
@@ -67,7 +52,7 @@ class Ledger(MutableHarnessModel):
     _next_id: int = pydantic.PrivateAttr(default=1)
     _pending: list[tuple[int, dict[str, Any]]] | None = pydantic.PrivateAttr(default=None)
     _after_commit: list[Callable[[], None]] = pydantic.PrivateAttr(default_factory=list)
-    _worker: _Death | None = pydantic.PrivateAttr(default=None)
+    _worker: CommitWorker | None = pydantic.PrivateAttr(default=None)
     _replies: _LostReplies | None = pydantic.PrivateAttr(default=None)
 
     def insert(self, **values: Any) -> int:
@@ -134,25 +119,22 @@ class Ledger(MutableHarnessModel):
     def _committed(self) -> None:
         worker = self._worker
         if worker is not None:
-            worker.commits += 1
-            if worker.commits == worker.kill_after:
-                self._after_commit.clear()
-                worker.kill_now(f"worker died right after commit {worker.commits}")
+            worker.committed()
         if self._replies is not None:
             self._replies.committed()
 
     def _refuse_if_dead(self) -> None:
-        if self._worker is not None and self._worker.dead:
-            raise WorkerDied("the worker is dead; its connection runs nothing more")
+        if self._worker is not None:
+            self._worker.refuse_if_dead()
 
 
 LEDGER = Ledger()
 
 
 @contextmanager
-def ledger_killer(kill_after: int | None) -> Iterator[_Death]:
+def ledger_killer(kill_after: int | None) -> Iterator[CommitWorker]:
     """The ledger's WorkerKiller: count commits, die right after commit ``kill_after``."""
-    worker = _Death(kill_after=kill_after)
+    worker = CommitWorker(kill_after, on_death=lambda: LEDGER._after_commit.clear())
     LEDGER._worker = worker
     try:
         yield worker
@@ -282,10 +264,7 @@ def drain_outbox() -> None:
 
 
 def recover() -> None:
-    for _round in range(3):
-        drain_outbox()
-        run_tick()
-        drain_outbox()
+    recover_handoffs(drain_outbox, run_tick)
 
 
 def recover_nothing() -> None:
