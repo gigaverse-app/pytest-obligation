@@ -40,8 +40,7 @@ class _Registrations:
         if not kind.task_decorator_modules:
             return True
         target = expression.func if isinstance(expression, ast.Call) else expression
-        qualified = qualified_name(target, self.module.name, self.imported, self.defined)
-        qualified = None if qualified is None else self.project.canonical(qualified)
+        qualified = self.project.resolve(target, self.module, self.imported, self.defined)
         return qualified is not None and any(
             qualified == module or qualified.startswith(f"{module}.") for module in kind.task_decorator_modules
         )

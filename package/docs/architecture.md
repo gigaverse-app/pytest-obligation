@@ -37,12 +37,13 @@ Django `atomic` function, while publication reach also recognizes arbitrary
 
 `selection.py` owns identity comparison, bounded ordered selection and the
 selection-completeness gap grammar. Both the framework-free contract and Django
-proofs use that grammar. Django's `require_queryset` owns the framework boundary.
+proofs use that grammar. Django's `require_queryset` owns the framework boundary,
+and `row_values.persisted_values` reads the current row through its base manager.
 
 `worker_death.py` owns commit counting, dead-worker fencing and lost-reply
 counting. Hosts supply death cleanup and driver error construction. Cleanup
 resolves the current callback collection when death occurs, since transactions
-may replace it. Redis and MongoDB install their own wire observers through the
+may replace it. Redis, MongoDB and aiokafka install their own wire observers through the
 same reply-breaker lifetime; the observer implementations remain backend-specific.
 Reference recovery shares delivery ordering while each adapter retains its clock.
 

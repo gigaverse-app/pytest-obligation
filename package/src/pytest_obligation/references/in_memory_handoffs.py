@@ -29,7 +29,7 @@ import pydantic
 
 from pytest_obligation.crash_histories import CallableDelivery
 from pytest_obligation.models import MutableHarnessModel
-from pytest_obligation.references.recovery import recovery_round
+from pytest_obligation.references.recovery import recover_handoffs
 from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, WorkerDied
 
 
@@ -264,8 +264,7 @@ def drain_outbox() -> None:
 
 
 def recover() -> None:
-    for _round in range(3):
-        recovery_round(drain_outbox, run_tick)
+    recover_handoffs(drain_outbox, run_tick)
 
 
 def recover_nothing() -> None:

@@ -300,6 +300,9 @@ _IDENTIFIER = re.compile(r'"([^"]+)"|\b([A-Za-z_][A-Za-z0-9_$]*)\b')
 
 def referenced_columns(expression: str, candidates: Collection[str]) -> set[str]:
     """Which of ``candidates`` an expression PostgreSQL printed names, outside its string literals."""
+    # dry-lint: distinct-from package/src/pytest_obligation/integrations/_internal/postgres_sql.py::bare_identifiers
+    # Column membership includes quoted names containing spaces. bare_identifiers instead rewrites SQL
+    # for word-pattern comparison and must blank those names so a substring cannot become a column.
     text = blank_literals_and_comments(expression)
     names = {quoted or bare for quoted, bare in _IDENTIFIER.findall(text)}
     return names & set(candidates)

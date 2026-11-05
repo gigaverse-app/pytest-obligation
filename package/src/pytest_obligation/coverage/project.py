@@ -11,7 +11,7 @@ import ast
 import fnmatch
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from functools import cached_property
 from pathlib import Path
 
@@ -132,6 +132,13 @@ class Project:
         if module.name not in self._imports:
             self._imports[module.name] = top_level_imports(self.tree(module), module)
         return self._imports[module.name]
+
+    def resolve(
+        self, expression: ast.expr, module: Module, imported: Mapping[str, str], defined: set[str]
+    ) -> str | None:
+        """Resolve a Python name and follow this project's re-exports."""
+        qualified = qualified_name(expression, module.name, imported, defined)
+        return None if qualified is None else self.canonical(qualified)
 
     def canonical(self, qualified: str) -> str:
         """Follow re-exports to the module that defines a name: ``shop.OrderService`` -> ``shop.orders.OrderService``."""

@@ -93,8 +93,7 @@ class Declarations:
         self.defects: list[str] = []
 
     def _qualified(self, expression: ast.expr) -> str | None:
-        qualified = qualified_name(expression, self.module.name, self.imported, self.defined)
-        return None if qualified is None else self.project.canonical(qualified)
+        return self.project.resolve(expression, self.module, self.imported, self.defined)
 
     def _harness(self, expression: ast.expr) -> str | None:
         """The pytest_obligation name an expression refers to, or None when it is not the harness's."""

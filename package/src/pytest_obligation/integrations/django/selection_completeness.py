@@ -129,12 +129,11 @@ from pytest_obligation.integrations.django.owed_rows import (
     serve_row,
     worker_transaction,
 )
+from pytest_obligation.integrations.django.row_values import persisted_values
 from pytest_obligation.profiles.automatic_recovery import DueWorkSweep
 from pytest_obligation.selection import SELECTION_COMPLETENESS_PROOF as PROOF_NAME
 from pytest_obligation.selection import gap_combination as gap_combination
-
-#: The case id, and the prefix of a declared per-combination gap.
-
+from pytest_obligation.selection import selected_identities
 
 #: Generated examples per contract in PR CI, beyond the fixed ones.
 PR_EXAMPLES = 25
@@ -445,7 +444,7 @@ def _write(binding: CompletenessBinding, declaration: _Declaration, row: Model, 
 
 def _states(declaration: _Declaration, row: Model) -> dict[str, str | None]:
     """Each declared state as the database holds it; None for every path once the row is gone."""
-    values = type(row)._base_manager.filter(pk=row.pk).values(*declaration.paths).first()
+    values = persisted_values(type(row), row.pk, declaration.paths)
     return {path: None if values is None or values[path] is None else str(values[path]) for path in declaration.paths}
 
 
@@ -454,7 +453,7 @@ def _describe(assignment: Assignment) -> str:
 
 
 def _selected(binding: CompletenessBinding) -> set[Any]:
-    return {binding.identity_of(row) for row in binding.selection()}
+    return set(selected_identities(binding.selection, binding.identity_of))
 
 
 def _selected_later(binding: CompletenessBinding, identity: Any) -> bool:

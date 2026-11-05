@@ -23,6 +23,7 @@ from pytest_obligation.integrations.django.lifecycle_states import (
     observed_effects,
     resolve_state_path,
 )
+from pytest_obligation.integrations.django.row_values import persisted_values as _persisted
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.poison import (
     PoisonedHistory,
@@ -55,12 +56,6 @@ def _two_owed_in_selection_order(
     )
     head, behind = order
     return _OwedPair(rows=rows, head=head, behind=behind)
-
-
-def _persisted(model: type[Model], pk: Any) -> dict[str, Any] | None:
-    """Every concrete column of the row as the database holds it; None once it is deleted."""
-    columns = [field.attname for field in model._meta.concrete_fields]
-    return model._base_manager.filter(pk=pk).values(*columns).first()
 
 
 def _rows_as_persisted(rows: tuple[Model, ...]) -> tuple[dict[str, Any] | None, ...]:
