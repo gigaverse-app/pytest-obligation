@@ -5,13 +5,14 @@ from typing import Any, ClassVar
 
 import pytest
 from celery.exceptions import SoftTimeLimitExceeded
-from django.db import connection, models
+from django.db import models
 from django.db.models import QuerySet
 from django.test.utils import isolate_apps
 
 from pytest_obligation.host import hosted
 from pytest_obligation.integrations.celery import celery_handoffs, celery_publications
 from pytest_obligation.integrations.django import django_host
+from pytest_obligation.integrations.django.tables import model_tables
 from pytest_obligation.models import HarnessModel
 
 with isolate_apps("pytest_obligation"):
@@ -40,23 +41,18 @@ def owed_owners() -> QuerySet[PrimitiveOwner]:
 
 @pytest.fixture
 def isolated_primitive(transactional_db: None) -> Iterator[None]:
-    with connection.schema_editor() as editor:
-        editor.create_model(PrimitiveOwner)
-        editor.create_model(PrimitiveWork)
-    try:
-        with hosted(
+    with (
+        model_tables(PrimitiveOwner, PrimitiveWork),
+        hosted(
             django_host(
                 {"tests.django.automatic_recovery.owed_reference"},
                 publication_recorder=celery_publications,
                 handoff_runner=celery_handoffs,
                 stop_exception=SoftTimeLimitExceeded,
             )
-        ):
-            yield
-    finally:
-        with connection.schema_editor() as editor:
-            editor.delete_model(PrimitiveWork)
-            editor.delete_model(PrimitiveOwner)
+        ),
+    ):
+        yield
 
 
 def settle(owner_id: int) -> None:

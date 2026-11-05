@@ -26,6 +26,32 @@ framework-free. Frameworks reach them only through one small interface, the
    tripwires in `binding.py` reject test-authored selections and transitions.
    What counts as production is the host's `production_packages`.
 
+## Shared analysis and fault policy
+
+`_internal/python_source.py` owns source walking, module identity, import bindings
+and qualified Python names for coverage and report inventory. Callers supply
+exclusion policy and decide whether unresolved names are meaningful; these
+helpers never import the application. Handoff ownership requires the resolved
+Django `atomic` function, while publication reach also recognizes arbitrary
+`.atomic` scopes and configured transaction openers. Those remain separate policies.
+
+`selection.py` owns identity comparison, bounded ordered selection and the
+selection-completeness gap grammar. Both the framework-free contract and Django
+proofs use that grammar. Django's `require_queryset` owns the framework boundary,
+and `row_values.persisted_values` reads the current row through its base manager.
+
+`worker_death.py` owns commit counting, dead-worker fencing and lost-reply
+counting. Hosts supply death cleanup and driver error construction. Cleanup
+resolves the current callback collection when death occurs, since transactions
+may replace it. Redis, MongoDB and aiokafka install their own wire observers through the
+same reply-breaker lifetime; the observer implementations remain backend-specific.
+Reference recovery shares delivery ordering while each adapter retains its clock.
+
+Poison isolation has one progress, owed-work and reporting oracle. The first
+tick must reach the poison as a positive control. A subsequent polling tick may
+back off that identity, but must still progress healthy work and report any
+poison it encounters again.
+
 ## Models
 
 Structured values are Pydantic models built on `pytest_obligation.models`, never

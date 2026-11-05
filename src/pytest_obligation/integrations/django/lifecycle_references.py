@@ -20,7 +20,7 @@ import asyncio
 import functools
 import gc
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import timedelta
 from typing import Any
 
@@ -34,6 +34,8 @@ from django.utils import timezone
 from pytest_obligation.crash_histories import CallableDelivery
 from pytest_obligation.host import current_host
 from pytest_obligation.references.in_memory_handoffs import Recipient
+from pytest_obligation.references.in_memory_handoffs import run_inert_tick as run_inert_recovery_tick
+from pytest_obligation.references.recovery import recover_handoffs
 
 with isolate_apps("pytest_obligation"):
 
@@ -113,12 +115,11 @@ def run_recovery_tick() -> int:
     return len(due)
 
 
-def run_inert_recovery_tick() -> int:
-    """A tick that selects and publishes nothing: recovery that recovers no work."""
-    return 0
-
-
 def _create_successor(predecessor: LifecycleAttempt) -> None:
+    # dry-lint: distinct-from package/src/pytest_obligation/references/in_memory_handoffs.py::_create_successor
+    # Independent reference controls: this write crosses an observed PostgreSQL transaction;
+    # the ledger write uses simulated commits. Sharing the control's persistence decisions
+    # would couple the two implementations used to validate crash-boundary observations.
     if not LifecycleAttempt.objects.filter(retry_of=predecessor).exists():
         LifecycleAttempt.objects.create(status=Status.REQUESTED, retry_of=predecessor)
 
@@ -164,17 +165,13 @@ def drain_outbox() -> None:
         _WORKERS[task](pk)
 
 
-def _recover_with(tick: Callable[[], int]) -> Callable[[], None]:
-    def recover() -> None:
-        # Three rounds, each past the recovery delay: enough to select, deliver and advance a successor.
-        for round_number in range(1, 4):
-            moment = timezone.now() + (RECOVERY_DELAY + timedelta(hours=1)) * round_number
-            with current_host().require("frozen_clock")(moment):
-                drain_outbox()
-                tick()
-                drain_outbox()
+def _recovery_clock(round_number: int) -> AbstractContextManager[object]:
+    moment = timezone.now() + (RECOVERY_DELAY + timedelta(hours=1)) * round_number
+    return current_host().require("frozen_clock")(moment)
 
-    return recover
+
+def _recover_with(tick: Callable[[], int]) -> Callable[[], None]:
+    return functools.partial(recover_handoffs, drain_outbox, tick, _recovery_clock)
 
 
 recover = _recover_with(run_recovery_tick)
@@ -408,6 +405,9 @@ def complete_attempt_notifying_deferred(pk: int) -> None:
 
 def complete_attempt_notifying_once(pk: int) -> None:
     """The same, with an idempotency key the recipient honours."""
+    # dry-lint: distinct-from package/src/pytest_obligation/references/in_memory_handoffs.py::complete_notifying
+    # This keyed real-commit positive control must remain independent of the unkeyed ledger
+    # counterfeit: sharing notification policy could make the replay-safety oracle self-confirming.
     RECIPIENT.notify_once(pk)
     LifecycleAttempt.objects.filter(pk=pk).update(status=Status.COMPLETE)
 

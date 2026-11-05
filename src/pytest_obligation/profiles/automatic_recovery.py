@@ -125,7 +125,6 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import timedelta
-from itertools import islice
 from types import ModuleType
 from typing import Any, Protocol
 from unittest import mock
@@ -151,6 +150,7 @@ from pytest_obligation.poison import (
     assert_a_stop_request_ends_the_tick,
     assert_poison_is_isolated,
 )
+from pytest_obligation.selection import selected_identities
 
 
 class OwedWorkVariant(HarnessModel):
@@ -392,7 +392,7 @@ def _page_size(sweep: DueWorkSweep) -> int:
 
 def _selected_identities(sweep: DueWorkSweep, *, limit: int | None = None) -> list[Any]:
     """One evaluation of the production selection, in its order, as identities."""
-    return [sweep.identity_of(row) for row in islice(sweep.due_work(), limit)]
+    return selected_identities(sweep.due_work, sweep.identity_of, limit=limit)
 
 
 def _inspector(selection: object, capability: str) -> SelectionInspector:

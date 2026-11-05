@@ -256,10 +256,13 @@ class DjangoSelectionInspector(HarnessModel):
 
     @staticmethod
     def _queryset(selection: object) -> QuerySet[Any]:
-        assert isinstance(selection, QuerySet), (
-            f"DjangoSelectionInspector reads QuerySets; the selection is {type(selection).__name__}"
-        )
-        return selection
+        return require_queryset(selection, "DjangoSelectionInspector reads QuerySets; the selection is")
+
+
+def require_queryset(selection: object, context: str) -> QuerySet[Any]:
+    """Validate the selection once where Django query inspection begins."""
+    assert isinstance(selection, QuerySet), f"{context} {type(selection).__name__}"
+    return selection
 
 
 def selection_built_by(tick: Callable[[], object], model: type[Model]) -> QuerySet[Any]:

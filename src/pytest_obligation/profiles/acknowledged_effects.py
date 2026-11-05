@@ -38,10 +38,8 @@ from pytest_obligation.binding import (
     assert_binding_reaches_production,
 )
 from pytest_obligation.models import HarnessModel
-
-
-def _identity(value: Any) -> Any:
-    return value
+from pytest_obligation.selection import identity as _identity
+from pytest_obligation.selection import is_selected
 
 
 class AcknowledgedEffect(HarnessModel):
@@ -91,8 +89,7 @@ class AcknowledgedEffect(HarnessModel):
 
 
 def _is_owed(effect: AcknowledgedEffect, operation: Any) -> bool:
-    identity = effect.identity_of(operation)
-    return any(effect.identity_of(item) == identity for item in effect.owed_work())
+    return is_selected(operation, effect.owed_work, effect.identity_of)
 
 
 def _fresh(effect: AcknowledgedEffect) -> Any:

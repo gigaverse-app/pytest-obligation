@@ -198,6 +198,7 @@ def assert_poison_is_isolated(
     run_tick: Callable[[], object],
     progressed: Callable[[], bool],
     still_owed: Callable[[], bool],
+    allow_backoff: bool = False,
 ) -> BaseException | None:
     """
     Run one tick with one identity poisoned, and require the four observations above.
@@ -206,6 +207,8 @@ def assert_poison_is_isolated(
     ``progressed`` and ``still_owed`` observe the healthy and the poisoned
     identity after the tick. Returns what the tick raised, for checks a caller
     adds on top (a later phase ran, a paging phase deferred the identity).
+    On a later polling tick, ``allow_backoff`` permits an already-proven poison
+    to be deferred. If it fires again, reporting remains mandatory.
     """
     escaped: BaseException | None = None
     with poison as fired:
@@ -214,7 +217,7 @@ def assert_poison_is_isolated(
         except Exception as error:  # noqa: BLE001 - the report under test, judged below
             escaped = error
     # POSITIVE CONTROL: a poison the tick never met proves nothing about isolation.
-    assert fired() >= 1, (
+    assert allow_backoff or fired() >= 1, (
         f"{name}: the poison never fired, so this proves nothing about isolation. The binding "
         f"patched a seam the tick does not call for the poisoned identity; poison the per-identity "
         f"seam the production tick actually runs (raised: {escaped!r})"
@@ -232,7 +235,8 @@ def assert_poison_is_isolated(
             f"{name}: the poisoned identity is no longer owed after the tick. Isolation must leave a "
             f"failing identity selectable (or held with backoff), not drop, settle or retire it"
         ) from escaped
-    assert_poison_is_reported(name, escaped)
+    if fired():
+        assert_poison_is_reported(name, escaped)
     return escaped
 
 

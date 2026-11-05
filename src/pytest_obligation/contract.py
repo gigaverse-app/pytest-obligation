@@ -255,6 +255,7 @@ from pytest_obligation.profiles.job_retry_limits import (
     ClassifiedFailure,
     PersistentRetry,
 )
+from pytest_obligation.selection import SELECTION_COMPLETENESS_PROOF, gap_combination
 
 
 class Adoption(Enum):
@@ -2219,15 +2220,14 @@ def _selection_gaps(gaps: Mapping[str, str]) -> tuple[tuple[str, ...], list[str]
     named: list[str] = []
     malformed: list[str] = []
     for gap in gaps:
-        if not gap.startswith("assert_selection_is_complete["):
+        if not gap.startswith(f"{SELECTION_COMPLETENESS_PROOF}["):
             continue
-        inner = gap[len("assert_selection_is_complete[") : -1]
-        parts = [part.partition(":") for part in inner.split(",")]
-        if (
-            not gap.endswith("]")
-            or not inner
-            or not all(path and value and "|" not in value for path, _, value in parts)
-        ):
+        try:
+            combination = gap_combination(gap)
+        except AssertionError as error:
+            malformed.append(str(error))
+            continue
+        if combination is None:
             malformed.append(f"{gap!r}: a selection-completeness gap names one value per state path")
             continue
         named.append(gap)

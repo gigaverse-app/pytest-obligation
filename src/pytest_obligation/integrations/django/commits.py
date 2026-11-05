@@ -34,25 +34,15 @@ from pytest_obligation.integrations.django.writes import (
     leading_keyword,
     require_postgresql,
 )
-from pytest_obligation.worker_death import CommitWorker, WorkerDied
+from pytest_obligation.worker_death import CommitWorker
 
 
 class DjangoWorker(CommitWorker):
     """The worker a crash history interrupts: its commit count and whether it died."""
 
     def __init__(self, connection: BaseDatabaseWrapper, kill_after: int | None) -> None:
-        super().__init__(kill_after)
-        self._connection = connection
-
-    def kill_now(self, reason: str) -> None:
-        self.dead = True
-        # The process dies before any after-commit callback runs.
-        self._connection.run_on_commit.clear()
-        raise WorkerDied(reason)
-
-    def refuse_if_dead(self) -> None:
-        if self.dead:
-            raise WorkerDied("the worker is dead; its connection runs nothing more")
+        # Drop callbacks before the death escapes the commit boundary.
+        super().__init__(kill_after, on_death=lambda: connection.run_on_commit.clear())
 
 
 @contextmanager

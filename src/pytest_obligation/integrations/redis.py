@@ -36,11 +36,12 @@ and that has no database for the harness to watch.
 
 from collections.abc import Callable, Collection, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from functools import partial
 from typing import Any
 
 from pytest_obligation.host import Host, PublicationBreaker, ReceiverBreaker
 from pytest_obligation.integrations.clocks import time_machine_clock
-from pytest_obligation.worker_death import CommitWorker, LostCommitReplies
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker
 
 #: Commands whose writes the server cannot report in advance.
 SCRIPT_COMMANDS = frozenset({"EVAL", "EVALSHA", "FCALL"})
@@ -180,13 +181,7 @@ class LostReplies(LostCommitReplies):
 def redis_reply_breaker(client: Any) -> Callable[[int | None], AbstractContextManager[LostReplies]]:
     """A reply breaker for every client and pipeline sharing ``client``'s connection pool."""
 
-    @contextmanager
-    def breaker(lose_at: int | None) -> Iterator[LostReplies]:
-        replies = LostReplies(lose_at)
-        with _watching(client, lambda: None, replies.committed):
-            yield replies
-
-    return breaker
+    return counted_reply_breaker(partial(_watching, client), LostReplies)
 
 
 def redis_host(

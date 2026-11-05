@@ -52,10 +52,8 @@ from pytest_obligation.binding import (
     assert_binding_reaches_production,
 )
 from pytest_obligation.models import HarnessModel
-
-
-def _identity(value: Any) -> Any:
-    return value
+from pytest_obligation.selection import identity as _identity
+from pytest_obligation.selection import is_selected
 
 
 class RetryLifecycle(HarnessModel):
@@ -146,8 +144,7 @@ def assert_retry_selection_is_production_bound(retry: RetryLifecycle) -> None:
 
 
 def _is_due(retry: RetryLifecycle, operation: Any) -> bool:
-    identity = retry.identity_of(operation)
-    return any(retry.identity_of(selected) == identity for selected in retry.due_work())
+    return is_selected(operation, retry.due_work, retry.identity_of)
 
 
 def _assert_one_failure_attempt(

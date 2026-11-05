@@ -10,10 +10,11 @@ faults, not Kafka transaction or producer-delivery proofs.
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from functools import partial
 from typing import Any
 
 from pytest_obligation.models import ObligationContractDesignError
-from pytest_obligation.worker_death import CommitWorker, LostCommitReplies
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker
 
 
 @contextmanager
@@ -95,10 +96,4 @@ class AIOKafkaLostOffsetReplies(LostCommitReplies):
 def aiokafka_offset_reply_breaker(
     consumer: Any,
 ) -> Callable[[int | None], AbstractContextManager[AIOKafkaLostOffsetReplies]]:
-    @contextmanager
-    def breaker(lose_at: int | None) -> Iterator[AIOKafkaLostOffsetReplies]:
-        replies = AIOKafkaLostOffsetReplies(lose_at)
-        with _watching(consumer, lambda: None, replies.committed):
-            yield replies
-
-    return breaker
+    return counted_reply_breaker(partial(_watching, consumer), AIOKafkaLostOffsetReplies)

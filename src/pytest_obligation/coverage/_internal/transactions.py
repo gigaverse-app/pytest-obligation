@@ -8,7 +8,14 @@ import ast
 from collections import Counter
 from dataclasses import dataclass
 
-from pytest_obligation.coverage.project import Module, Project, dotted_parts, qualified_name, terminal_name
+from pytest_obligation.coverage.project import (
+    Module,
+    Project,
+    defined_names,
+    dotted_parts,
+    qualified_name,
+    terminal_name,
+)
 
 _PUBLICATION_METHODS = {"delay", "apply_async", "send_task"}
 #: Imported names that open a transaction as a decorator or a ``with`` block. Any
@@ -53,9 +60,7 @@ class _PublicationReach(ast.NodeVisitor):
         tree = project.tree(module)
         self.imported = project.imports(module)
         self.openers = _TRANSACTION_OPENERS | project.config.transaction_openers
-        self.module_names = {
-            node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        }
+        self.module_names = defined_names(tree)
         self.scopes: list[str] = []
         self.frames: list[_Frame] = []
         self.defined: set[str] = set()

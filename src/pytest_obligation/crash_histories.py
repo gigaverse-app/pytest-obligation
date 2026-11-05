@@ -128,7 +128,7 @@ from pytest_obligation.models import (
 )
 from pytest_obligation.outcomes import ExpectedOutcome, _ExpectedOutcome, assert_expected_outcome
 from pytest_obligation.recording import current_recorder
-from pytest_obligation.worker_death import WorkerDied
+from pytest_obligation.worker_death import WorkerDied, refuse_dead_worker
 
 
 class ExternalCall(HarnessModel):
@@ -463,8 +463,7 @@ class _Worker:
             raise WorkerDied(reason)
 
     def refuse_if_dead(self) -> None:
-        if self.dead:
-            raise WorkerDied("the worker is dead; it calls nothing more")
+        refuse_dead_worker(self.dead, "the worker is dead; it calls nothing more")
 
 
 #: Which family's occurrence to fail in a run: (the family, the 1-based occurrence).
