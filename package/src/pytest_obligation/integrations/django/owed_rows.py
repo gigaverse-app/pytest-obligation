@@ -488,6 +488,9 @@ _POLLING_KEEPS_ITS_ROWS = (
 
 def _did_work(served: ServedRow, rows: RowExecution, row: Any, calls_before: int) -> bool:
     """A write or created row in the chain, or an external effect counted for this row."""
+    # dry-lint: distinct-from package/src/pytest_obligation/integrations/django/lifecycle_states.py::_Effects.did_work
+    # serve_row already populates served.worked from effects.did_work. This adds only the
+    # adopter's per-row external-effect counter delta; it does not repeat the effects oracle.
     return served.worked or (rows.effect_calls_for is not None and rows.effect_calls_for(row) > calls_before)
 
 

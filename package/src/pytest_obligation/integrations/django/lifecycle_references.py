@@ -116,6 +116,10 @@ def run_recovery_tick() -> int:
 
 
 def _create_successor(predecessor: LifecycleAttempt) -> None:
+    # dry-lint: distinct-from package/src/pytest_obligation/references/in_memory_handoffs.py::_create_successor
+    # Independent reference controls: this write crosses an observed PostgreSQL transaction;
+    # the ledger write uses simulated commits. Sharing the control's persistence decisions
+    # would couple the two implementations used to validate crash-boundary observations.
     if not LifecycleAttempt.objects.filter(retry_of=predecessor).exists():
         LifecycleAttempt.objects.create(status=Status.REQUESTED, retry_of=predecessor)
 

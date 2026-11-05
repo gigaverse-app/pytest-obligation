@@ -37,8 +37,10 @@ again. Ruff and Pyrefly on modified sources pass. Existing controls exercise cal
 post-death fencing, lost-reply identity, import resolution, SQL parsing, selection grammar,
 ordered/bounded identities, and healthy progress during poison backoff.
 
-The complete sweep evaluates 613 candidate pairs: 99 resolved by rules and 514 judged or
-reused from the verdict cache, with zero reported duplicates. Repeating the ratchet leaves
+The local complete sweep reported zero duplicates. The independent GitHub sweep also found
+repeated Wagtail purge arrangement, now shared by its demo bindings. Two further pair-specific
+explanations preserve independent persistence controls and document an effects oracle that
+was already reused through `ServedRow.worked`. Repeating the ratchet leaves
 baseline, progress and README bytes unchanged and makes no new judge calls.
 
 [PR #206](https://github.com/gigaverse-app/pytest-obligation/pull/206) carries current-head CI,
