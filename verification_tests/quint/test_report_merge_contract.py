@@ -10,7 +10,6 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-
 from pytest_quint_connect import HistoryContext, quint_contract
 
 TOPIC = Path(__file__).resolve().parents[2] / "docs" / "quint" / "report-merge"
