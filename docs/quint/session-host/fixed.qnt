@@ -1,28 +1,65 @@
-// Ini configuration is a scope over the process's prior raw host or factory.
+// Maintained contract: actual pytest ini ownership and lazy host resolution.
 module session_host_fixed {
-  var s: { phase: int, host: str, previous: str, configured: bool }
-  action init = s' = { phase: 0, host: "manual", previous: "manual", configured: false }
+  var phase: int
+  var event: { op: str, kind: str }
+  var observed: { host: str, manualCalls: int, applicationCalls: int }
+  var previous: str
+  action initFactory = all {
+    phase' = 0, previous' = "manual_factory", event' = { op: "init", kind: "factory" },
+    observed' = { host: "manual_factory", manualCalls: 0, applicationCalls: 0 }
+  }
+  action initManual = all {
+    phase' = 0, previous' = "manual", event' = { op: "init", kind: "host" },
+    observed' = { host: "manual", manualCalls: 0, applicationCalls: 0 }
+  }
+  action init = any { initFactory, initManual }
   action configureA = all {
-    s.phase == 0,
-    s' = { ...s, phase: 1, previous: s.host, host: "A", configured: true }
+    phase == 0, phase' = 1, previous' = previous,
+    event' = { op: "configureA", kind: "ini" },
+    observed' = { ...observed, host: "application_factory" }
   }
-  // Config cleanup runs after success or collection failure; session B has no ini host.
-  action nextSession = all {
-    s.phase == 1,
-    s' = { ...s, phase: 2, host: s.previous, configured: false }
+  action resolveApplication = all {
+    phase == 1, phase' = 2, previous' = previous,
+    event' = { op: "resolveApplication", kind: "api" },
+    observed' = { ...observed, host: "A", applicationCalls: 1 }
   }
-  action manualSessionWithoutIni = all {
-    s.phase == 0, s' = { ...s, phase: 3 }
+  action cleanupA = all {
+    Set(1, 2).contains(phase), phase' = 3, previous' = previous,
+    event' = { op: "cleanupA", kind: "cleanup" },
+    observed' = { ...observed, host: previous }
   }
-  action stay = s' = s
+  action configureWithoutIni = all {
+    Set(0, 3).contains(phase), phase' = 4, previous' = previous,
+    event' = { op: "configureWithoutIni", kind: "no-ini" }, observed' = observed
+  }
+  action resolveManual = all {
+    phase == 4, phase' = 5, previous' = previous,
+    event' = { op: "resolveManual", kind: "api" },
+    observed' = { ...observed, host: "manual", manualCalls: if (previous == "manual_factory") 1 else 0 }
+  }
+  action cleanupB = all {
+    Set(4, 5).contains(phase), phase' = 6, previous' = previous,
+    event' = { op: "cleanupB", kind: "cleanup" }, observed' = observed
+  }
+  action inspect = all {
+    phase' = phase, previous' = previous,
+    event' = { op: "inspect", kind: "observation" }, observed' = observed
+  }
   action step = any {
-    configureA, nextSession, manualSessionWithoutIni,
-    all { s.phase >= 2, stay }
+    configureA, resolveApplication, cleanupA, configureWithoutIni,
+    resolveManual, cleanupB, all { phase == 6, inspect }
   }
-  val sessionIsolated = s.phase != 2 or (s.host == "manual" and not(s.configured))
-  val manualPreserved = s.phase != 3 or s.host == "manual"
-  run independentSessionRestoresTest = init.then(configureA).then(nextSession)
-    .then(all { assert(sessionIsolated), stay })
-  run manualConfigurationControlTest = init.then(manualSessionWithoutIni)
-    .then(all { assert(manualPreserved), stay })
+  val sessionIsolated = phase != 3 or observed.host == previous
+  val lazyPrevious = phase > 4 or observed.manualCalls == 0
+  val maintained = sessionIsolated and lazyPrevious
+  run unusedFactoryRestorationTest = initFactory.then(configureA).then(cleanupA)
+    .then(configureWithoutIni).then(resolveManual).then(cleanupB)
+    .then(all { assert(observed.host == "manual" and observed.manualCalls == 1), inspect })
+  run resolvedFactoryRestorationTest = initFactory.then(configureA).then(resolveApplication)
+    .then(cleanupA).then(configureWithoutIni).then(resolveManual).then(cleanupB)
+    .then(all { assert(observed.applicationCalls == 1 and observed.manualCalls == 1), inspect })
+  run manualConfigurationControlTest = initManual.then(configureWithoutIni).then(resolveManual)
+    .then(cleanupB).then(all { assert(observed.host == "manual" and observed.manualCalls == 0), inspect })
+  run manualRestorationControlTest = initManual.then(configureA).then(resolveApplication).then(cleanupA)
+    .then(all { assert(sessionIsolated), inspect })
 }

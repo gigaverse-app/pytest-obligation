@@ -14,3 +14,7 @@ profiles-*.json
 # Built documentation
 /site/
 /.venv-docs/
+
+# Maintained Quint tool cache and replay evidence
+/scripts/quint/node_modules/
+/.artifacts/

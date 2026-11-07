@@ -46,4 +46,28 @@ Executed with Quint 0.33.1: both files typechecked; the historical witness and f
 
 The fixed model represents a prior host or factory by an opaque identity (`manual`) and two sessions; it does not execute imports, lazy factories or pytest cleanup. Runtime regressions establish exact object restoration, absence of eager factory resolution, and cleanup after collection failure. Direct manual configure calls remain process-wide. The historical audit file also contains the separate baseline-deletion finding; only the host invariant/witness selected in the commands above belongs to this PR.
 
-These are handwritten state-machine abstractions, **not runtime contracts or a proof that Python/YAML refines the model**. Bounded sampling is not exhaustive model checking or a liveness proof. The linked runtime regressions independently exercise the implementation boundary; the `.qnt` files are reviewable evidence, not part of the installed package or automatic PR CI.
+These are handwritten state-machine abstractions, **not runtime contracts or a proof that Python/YAML refines the model**. Bounded sampling is not exhaustive model checking or a liveness proof. The linked runtime regressions independently exercise the implementation boundary; the `.qnt` files are reviewable evidence, not part of the installed package.
+
+
+## Maintained model-to-code replay
+
+The current `fixed.qnt` exports ITF `event` and `observed` records. Its registered
+[manifest](manifest.json) maps operations to the [production adapter](adapter.py),
+pins witness/bounded generation and semantic controls, and protects historical
+`audit.qnt` with its original hash. CI now replays the generated events against
+real pytest configuration/cleanup and host APIs in the current checkout.
+
+Run the [one-command bridge](../../../scripts/quint/README.md) from the repository
+root. The independent projection reads the raw host identity and actual manual
+and application factory counters after every event. Host resolution is an
+explicit `current_host()` event; observing through that API would itself change
+lazy state. Inputs cover manual hosts and unresolved factories, used/unused ini
+hosts, cleanup and a following configuration without host settings. The bridge
+must reject omitted restoration and eager previous-factory resolution using the
+same generated traces.
+
+The adapter unitizes `Config._do_configure` / `_ensure_unconfigure` and host APIs;
+it does not collect full test sessions. Existing `pytest.main()` regressions
+retain full lifecycle and collection-failure coverage. These serial bounded
+histories do not cover arbitrary nested or concurrent embedded sessions. Review
+implementation, model, adapter and manifest together; do not weaken a mismatch.
