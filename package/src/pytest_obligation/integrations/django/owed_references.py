@@ -119,9 +119,11 @@ class ResourceProvider:
 
     def __init__(self) -> None:
         self.resources: dict[str, ProviderResource] = {}
+        self._created = 0
 
     def create(self) -> ProviderResource:
-        resource = ProviderResource(name=f"resource-{len(self.resources) + 1:04d}")
+        self._created += 1
+        resource = ProviderResource(name=f"resource-{self._created:04d}")
         self.resources[resource.name] = resource
         return resource
 
