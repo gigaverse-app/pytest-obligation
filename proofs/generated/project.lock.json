@@ -1,0 +1,130 @@
+{
+  "artifacts": {
+    "report-merge.dfy": "c2624f5845728fc4313b437ad733892f540b7df1ab72250d5e225ee428ff553a",
+    "report-merge.map.json": "b69357fc4f7e650c712b60c104ee705b50777a031bb0066fbbf4198b1ae13576"
+  },
+  "compiler": "f2d59dd5f3501ac4f69a60602fd03ffc743b20438f3d915e01dd9c83ba9ef789",
+  "contracts": {
+    "report-merge": {
+      "annotations": [
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='SuiteCoverage', ctx=Load())], ctx=Load()), ctx=Load())",
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='str', ctx=Load())], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load())",
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='str', ctx=Load())], ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load())",
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='SuiteCoverage', ctx=Load())], ctx=Load()), ctx=Load())",
+        "Subscript(value=Name(id='list', ctx=Load()), slice=Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='CaseEvidence', ctx=Load()), Name(id='CaseEvidence', ctx=Load())], ctx=Load()), ctx=Load()), ctx=Load())",
+        "Attribute(value=Name(id='pytest', ctx=Load()), attr='Session', ctx=Load())",
+        "Attribute(value=Name(id='pytest', ctx=Load()), attr='Config', ctx=Load())",
+        "Name(id='str', ctx=Load())",
+        "Name(id='str', ctx=Load())",
+        "Name(id='bool', ctx=Load())",
+        "Attribute(value=Name(id='pytest', ctx=Load()), attr='Config', ctx=Load())",
+        "Subscript(value=Name(id='list', ctx=Load()), slice=Attribute(value=Name(id='pytest', ctx=Load()), attr='Item', ctx=Load()), ctx=Load())",
+        "Attribute(value=Name(id='pytest', ctx=Load()), attr='Item', ctx=Load())",
+        "Subscript(value=Attribute(value=Name(id='pytest', ctx=Load()), attr='CallInfo', ctx=Load()), slice=Name(id='Any', ctx=Load()), ctx=Load())",
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='SuiteCoverage', ctx=Load())], ctx=Load()), ctx=Load())",
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='SuiteCoverage', ctx=Load())], ctx=Load()), ctx=Load())",
+        "Name(id='Any', ctx=Load())",
+        "Name(id='object', ctx=Load())",
+        "Attribute(value=Name(id='pytest', ctx=Load()), attr='Session', ctx=Load())",
+        "Name(id='CaseEvidence', ctx=Load())",
+        "Attribute(value=Name(id='pytest', ctx=Load()), attr='TerminalReporter', ctx=Load())",
+        "Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='CaseEvidence', ctx=Load())], ctx=Load()), ctx=Load())",
+        "Name(id='Disposition', ctx=Load())",
+        "Constant(value=None)",
+        "Constant(value=None)",
+        "Subscript(value=Name(id='Generator', ctx=Load()), slice=Constant(value=None), ctx=Load())",
+        "Subscript(value=Name(id='Generator', ctx=Load()), slice=Tuple(elts=[Constant(value=None), Attribute(value=Name(id='pytest', ctx=Load()), attr='TestReport', ctx=Load()), Attribute(value=Name(id='pytest', ctx=Load()), attr='TestReport', ctx=Load())], ctx=Load()), ctx=Load())",
+        "Constant(value=None)",
+        "Constant(value=None)",
+        "Constant(value=None)",
+        "Name(id='str', ctx=Load())",
+        "Constant(value=None)",
+        "Name(id='Assessment', ctx=Load())"
+      ],
+      "clauses": [
+        {
+          "clauses": [
+            [
+              "verified",
+              ""
+            ]
+          ],
+          "function": "merge_reports"
+        }
+      ],
+      "heap_schema": {
+        "types": {
+          "CaseEvidence": {
+            "fields": {
+              "collected": "bool",
+              "debt": "opaque",
+              "declaration": "opaque",
+              "durations": "list[float]",
+              "failures": "list[opaque]",
+              "family": "str",
+              "outcomes": "dict[str, list[str]]",
+              "selected": "bool"
+            }
+          },
+          "ProfileCoverage": {
+            "fields": {
+              "assessment": "opaque",
+              "cases": "dict[str, CaseEvidence]",
+              "families": "opaque",
+              "title": "str"
+            }
+          },
+          "SuiteCoverage": {
+            "fields": {
+              "exploration": "dict[str, CaseEvidence] | None",
+              "name": "str",
+              "profiles": "dict[str, ProfileCoverage]",
+              "source": "opaque"
+            },
+            "pure_methods": {
+              "case_groups": "iter[dict[str, CaseEvidence]]"
+            }
+          }
+        }
+      },
+      "sidecar": "// Checked proof additions are preserved separately from generated source effects.\n// The rejection-frame theorem is generated from the current production AST.\n// No axiom, extern method, or assumed atomicity contract is supplied here.\n"
+    }
+  },
+  "dafny_version": "4.11.0+fcb2042d6d043a2634f0854338c08feeaaaf4ae2",
+  "enrollment": {
+    "required_targets": [
+      "report-merge"
+    ],
+    "sources": [
+      "package/src/pytest_obligation/profiles/reporting.py"
+    ],
+    "targets": [
+      {
+        "backend": "dafny-heap",
+        "dependencies": [
+          "package/src/pytest_obligation/profiles/coverage.py",
+          "package/src/pytest_obligation/profiles/failures.py",
+          "package/src/pytest_obligation/models.py",
+          "package/src/pytest_obligation/debt.py"
+        ],
+        "functions": [
+          "merge_reports"
+        ],
+        "id": "report-merge",
+        "sidecar": "package/src/pytest_obligation/profiles/reporting.proofs.dfy",
+        "source": "package/src/pytest_obligation/profiles/reporting.py"
+      }
+    ]
+  },
+  "inputs": {
+    "package/src/pytest_obligation/debt.py": "46a07f8aff3012754d3160ebf703db4f51c5c21b8fdc6a3e17b5918a844c9050",
+    "package/src/pytest_obligation/models.py": "4064ddc4293560c02b1baadf7dcdc5926825b2c7901b771c5af93679262f0db0",
+    "package/src/pytest_obligation/profiles/coverage.py": "7915a00ddacb35fe31aff4789bb3f1d2b1a22beea7de4a11cb86bb32251ccfcb",
+    "package/src/pytest_obligation/profiles/failures.py": "76e054f4a0e972bd40b4913ba97c90da26bd18033dcd503c9d2cc28e5bf529ab",
+    "package/src/pytest_obligation/profiles/reporting.proofs.dfy": "15b5e9eab699186ebfc6375701cfb95f98cacb971b8fe0a86d0d7c4c3dc0091b",
+    "package/src/pytest_obligation/profiles/reporting.py": "3fc0d6437b03a46592e1f646bd83cb5709ffc90bc71c7348986e29cc6781e8f3"
+  },
+  "schema": "veripy-project-lock/1",
+  "type_policy": {},
+  "typechecker_version": "1.39.9"
+}

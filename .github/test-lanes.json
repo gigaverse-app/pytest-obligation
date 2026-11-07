@@ -18,7 +18,8 @@
       "examples/adopter",
       "examples/checkout_tutorial",
       "examples/rq_tutorial",
-      "demos"
+      "demos",
+      "verification_tests"
     ],
     "pytest_policy": {
       "demos/dbos_transactional_outbox/pyproject.toml": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
@@ -235,7 +236,25 @@
         "package/src/pytest_obligation/**",
         "docs/quint/**",
         "scripts/quint/**",
-        "ci_tests/test_quint_routing.py"
+        "ci_tests/test_quint_routing.py",
+        "scripts/source_contracts/mutations.py"
+      ]
+    },
+    "source_contracts": {
+      "roots": [
+        "verification_tests/source_contracts"
+      ],
+      "inputs": [
+        "package/src/pytest_obligation/**",
+        "scripts/source_contracts/**",
+        "scripts/bootstrap_source_verifier.py",
+        "tooling/source-contracts/**",
+        "veripy-project.json",
+        "proofs/generated/**",
+        "package/src/pytest_obligation/profiles/reporting.proofs.dfy",
+        "docs/source-contracts/**",
+        "docs/quint/report-merge/**",
+        "scripts/quint/**"
       ]
     }
   },

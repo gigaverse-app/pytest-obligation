@@ -18,3 +18,7 @@ profiles-*.json
 # Maintained Quint tool cache and replay evidence
 /scripts/quint/node_modules/
 /.artifacts/
+
+# Pinned source verifier tool cache and install receipts
+/.source-contract-tooling/
+/test-results/source-verifier/

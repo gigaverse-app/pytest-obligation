@@ -1,6 +1,7 @@
 """Replay Quint events through the current checkout's real report merge API."""
 
 import ast
+import importlib.util
 import inspect
 import sys
 from pathlib import Path
@@ -44,6 +45,24 @@ def create(root: Path, work: Path, mutant: str | None = None):
         source.write_text(ast.unparse(tree) + "\n")
         namespace = dict(reporting.__dict__)
         exec(compile(tree, str(source), "exec"), namespace)
+        merge = namespace["merge_reports"]
+    elif mutant in (
+        "early-evidence-write",
+        "replace-retained-case",
+        "remove-compatibility-guards",
+        "omit-evidence-commit",
+    ):
+        module_path = root / "scripts/source_contracts/mutations.py"
+        spec = importlib.util.spec_from_file_location("report_source_mutations", module_path)
+        assert spec is not None and spec.loader is not None
+        mutations = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mutations)
+        source_text = mutations.mutate_source(expected.read_text(), mutant)
+        work.mkdir(parents=True, exist_ok=True)
+        source = work / f"{mutant}.py"
+        source.write_text(source_text)
+        namespace = dict(reporting.__dict__)
+        exec(compile(source_text, str(source), "exec"), namespace)
         merge = namespace["merge_reports"]
     elif mutant not in (None, "replace-case-identity"):
         raise ValueError(f"unknown implementation mutant: {mutant}")

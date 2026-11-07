@@ -8,7 +8,8 @@
   "sources": [
     "package/src/pytest_obligation/profiles/reporting.py",
     "package/src/pytest_obligation/profiles/coverage.py",
-    "package/src/pytest_obligation/debt.py"
+    "package/src/pytest_obligation/debt.py",
+    "scripts/source_contracts/mutations.py"
   ],
   "actions": {
     "init": "Construct real SuiteCoverage / ProfileCoverage / CaseEvidence fixtures; no production merge guard patched",
@@ -25,7 +26,11 @@
   ],
   "mutants": [
     "incremental-admission",
-    "replace-case-identity"
+    "replace-case-identity",
+    "early-evidence-write",
+    "replace-retained-case",
+    "remove-compatibility-guards",
+    "omit-evidence-commit"
   ],
   "bounds": {
     "seed": 20261107,
@@ -39,7 +44,8 @@
     "Object identity is checked for previously retained suite/case objects; no transaction, threading or full xdist session proof.",
     "incremental-admission compiles a mutation of the real merge_reports source moving commit inside validation.",
     "replace-case-identity is an explicit post-call output mutation replacing a CaseEvidence object with an equal deep copy; not claimed as original production source.",
-    "Historical audit.qnt remains unchanged; broader audit models are not connected contracts."
+    "Historical audit.qnt remains unchanged; broader audit models are not connected contracts.",
+    "Additional source mutants compile current merge AST: preflight evidence write, retained case replacement, compatibility guard removal and omitted commit; runtime rejection/accumulation checks complement the conditional source effect theorem."
   ],
   "historical_sha256": "1d2a1941bc98e48a0f0151e8490b7639c4fcf495dff15b93ce7c8c619b878375"
 }

@@ -182,7 +182,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_runtest_makereport(
-    item: pytest.Item, call: pytest.CallInfo
+    item: pytest.Item, call: pytest.CallInfo[Any]
 ) -> Generator[None, pytest.TestReport, pytest.TestReport]:
     """Read the final normalized outcome, including teardown and strict known failures."""
     report = yield
@@ -207,6 +207,42 @@ def pytest_runtest_makereport(
     return report
 
 
+# heap-schema: {
+# heap-schema:   "types": {
+# heap-schema:     "SuiteCoverage": {
+# heap-schema:       "fields": {
+# heap-schema:         "source": "opaque",
+# heap-schema:         "exploration": "dict[str, CaseEvidence] | None",
+# heap-schema:         "name": "str",
+# heap-schema:         "profiles": "dict[str, ProfileCoverage]"
+# heap-schema:       },
+# heap-schema:       "pure_methods": {
+# heap-schema:         "case_groups": "iter[dict[str, CaseEvidence]]"
+# heap-schema:       }
+# heap-schema:     },
+# heap-schema:     "ProfileCoverage": {
+# heap-schema:       "fields": {
+# heap-schema:         "title": "str",
+# heap-schema:         "assessment": "opaque",
+# heap-schema:         "families": "opaque",
+# heap-schema:         "cases": "dict[str, CaseEvidence]"
+# heap-schema:       }
+# heap-schema:     },
+# heap-schema:     "CaseEvidence": {
+# heap-schema:       "fields": {
+# heap-schema:         "debt": "opaque",
+# heap-schema:         "family": "str",
+# heap-schema:         "declaration": "opaque",
+# heap-schema:         "collected": "bool",
+# heap-schema:         "selected": "bool",
+# heap-schema:         "outcomes": "dict[str, list[str]]",
+# heap-schema:         "failures": "list[opaque]",
+# heap-schema:         "durations": "list[float]"
+# heap-schema:       }
+# heap-schema:     }
+# heap-schema:   }
+# heap-schema: }
+# @ verified
 def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCoverage]) -> None:
     """Merge distributed evidence only when workers agree on the same declaration and expected cases."""
     additions: dict[str, SuiteCoverage] = {}

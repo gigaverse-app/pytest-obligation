@@ -55,3 +55,17 @@ All topic files are executable-contract inputs despite living under `docs/`; `.g
 ## Limits
 
 This contract covers two cases per suite, two existing suites and one optional new suite, six incompatibility shapes, and three phase-payload shapes in finite histories. Failure diagnostic **content**, arbitrary profile matrices, hostile Python object behavior, true xdist execution, threading and filesystem IO are outside the projection. The composer still explicitly warns about incompatible evidence; no formerly silent successful whole pytest run is claimed. Quint sampling and API-level projection are executable drift detection, not exhaustive verification, liveness proof or full-source refinement. Broader audit models without an adapter remain unconnected historical abstractions.
+
+## Current-source effect proof
+
+The [Python source contract](../../source-contracts/report-merge.md) now checks the
+real merge AST in addition to this bounded API replay. Its conditional rejection
+frame and structural mutation rules use explicit external model contracts; it
+does not prove the concrete truth of compatibility predicates. The normal replay
+therefore also includes four **actual source** mutants: an early evidence write,
+a retained-case replacement, removed compatibility assertions and an omitted
+commit. The last two prevent a vacuous conditional source theorem from satisfying
+the complete lane. Their helper `scripts/source_contracts/mutations.py` is an
+explicit input to both the Quint and source-contract lanes. All six mutations
+must produce an observation mismatch on fresh traces. Historical `audit.qnt`
+remains unchanged.
