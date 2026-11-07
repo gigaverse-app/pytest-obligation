@@ -41,13 +41,13 @@ This command is **expected to exit 1 with `Invariant violated`** and a counterex
 npx --yes @informalsystems/quint@0.33.1 run fixed.qnt --main cost_baseline_fixed --invariant incompletePreservesBaseline --max-samples 1000 --max-steps 12 --seed 1 --backend typescript
 ```
 
-Executed with Quint 0.33.1: both files typechecked; the historical witness and fixed scenarios passed; the historical invariant produced its expected counterexample; the fixed invariant had no violation in 1,000 sampled traces of at most 12 steps (seed 1).
+The historical witness and invariant commands reproduce the old defect. The current model-to-code bridge uses the exact witness names, seed and bounds declared in `manifest.json`; its recorded results and generated traces are retained as CI artifacts, separately from historical audit evidence.
 
 ## Scope
 
 The fixed model bounds the baseline to two contracts and represents outcome families as events. It assumes the caller supplied every cost-test path; neither this model nor pytest can infer omitted paths or custom collection exclusions. Report transport, actual pytest hook ordering and worker crashes are checked by the runtime regressions. The historical audit file also contains the separate host-leak finding; only the baseline invariant/witness selected in the commands above belongs to this PR.
 
-These are handwritten state-machine abstractions, **not runtime contracts or a proof that Python/YAML refines the model**. Bounded sampling is not exhaustive model checking or a liveness proof. The linked runtime regressions independently exercise the implementation boundary; the `.qnt` files are reviewable evidence, not part of the installed package.
+These are handwritten state-machine specifications. The maintained bridge checks generated traces against the production API projection; it does not instrument production execution or establish exhaustive refinement, arbitrary concurrency or liveness. The linked full-lifecycle regressions remain independent evidence. Model files and adapters are not part of the installed package.
 
 
 ## Maintained model-to-code replay
