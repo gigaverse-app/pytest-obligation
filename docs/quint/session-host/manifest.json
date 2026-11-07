@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "module": "session_host_fixed",
+  "invariant": "maintained",
+  "model": "fixed.qnt",
+  "historical": "audit.qnt",
+  "historical_sha256": "64bc901c721adc767ad27fabddd39d843bfeb8b8fbcb8a5fa637f32ee8f0dd54",
+  "adapter": "adapter.py",
+  "sources": [
+    "package/src/pytest_obligation/host.py",
+    "package/src/pytest_obligation/pytest_plugin.py",
+    "package/tests/core/test_host_initialization.py"
+  ],
+  "actions": {
+    "init": "host.configure with actual Host or lazy manual factory.",
+    "configureA": "Actual pytest Config.fromdictargs then _do_configure, with due_work_harness_host ini.",
+    "resolveApplication": "host.current_host resolves application factory.",
+    "cleanupA": "Actual pytest Config._ensure_unconfigure invokes registered cleanup stack.",
+    "configureWithoutIni": "Independent pytest Config._do_configure with no host ini.",
+    "resolveManual": "host.current_host on second configuration.",
+    "cleanupB": "Second config _ensure_unconfigure.",
+    "inspect": "Read raw production host identity and real factory counters, without resolving factories."
+  },
+  "witnesses": [
+    "unusedFactoryRestorationTest",
+    "resolvedFactoryRestorationTest",
+    "manualConfigurationControlTest",
+    "manualRestorationControlTest"
+  ],
+  "mutants": [
+    "omit-host-restoration",
+    "eager-previous-resolution"
+  ],
+  "bounds": {
+    "seed": 1,
+    "max_samples": 64,
+    "n_traces": 16,
+    "max_steps": 8
+  },
+  "limits": [
+    "Unitized real pytest configuration/cleanup lifecycle, without full test collection in the replay.",
+    "Actual pytest.main regressions remain in test_host_initialization.py, including collection failure.",
+    "Raw private host identity is observed to avoid altering lazy factory state; factory resolution itself uses current_host API.",
+    "Two serial configurations per trace; no claim about concurrent/nested independent pytest sessions."
+  ]
+}
