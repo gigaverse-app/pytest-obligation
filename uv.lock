@@ -33,6 +33,7 @@ lint = [
     { name = "pyrefly", specifier = ">=1.0,<2" },
     { name = "ruff", specifier = ">=0.8" },
 ]
+quint = [{ name = "pytest-quint-connect", git = "https://github.com/gigaverse-app/pytest-quint-connect?rev=7db65854a1f0ae4c5c4ad5503297d624cf2d3163" }]
 xdist = [{ name = "pytest-obligation", extras = ["selftest"], editable = "package" }]
 
 [[package]]
@@ -2877,6 +2878,14 @@ requires-dist = [
     { name = "time-machine", marker = "extra == 'rq'", specifier = ">=2.10" },
 ]
 provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration", "mongodb", "prefect", "procrastinate", "redis", "report", "rq", "selftest"]
+
+[[package]]
+name = "pytest-quint-connect"
+version = "0.0.0"
+source = { git = "https://github.com/gigaverse-app/pytest-quint-connect?rev=7db65854a1f0ae4c5c4ad5503297d624cf2d3163#7db65854a1f0ae4c5c4ad5503297d624cf2d3163" }
+dependencies = [
+    { name = "pytest" },
+]
 
 [[package]]
 name = "pytest-xdist"

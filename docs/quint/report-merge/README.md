@@ -6,22 +6,23 @@
 
 ## Run model checks and real implementation replay
 
-From the repository root, install Node.js as pinned in CI and the locked Python dependencies, then run:
+From the repository root, with Node.js 22+ and npm on `PATH` and the locked Python dependencies installed:
 
 ```sh
-uv sync --locked --all-packages --no-default-groups --extra debt --extra django --extra celery
-uv run --no-sync python scripts/quint/replay.py --topic report-merge
+uv sync --locked --all-packages --no-default-groups --extra debt --extra django --extra celery --group xdist --group quint
+uv run --no-sync pytest verification_tests/quint --quint-require-complete
 ```
 
-The shared runner installs the exact Quint dependency from `scripts/quint/package-lock.json` with `npm ci` when needed, requires Quint **0.33.1**, typechecks the maintained model, checks its invariant and named scenarios, writes fresh ITF traces, then replays them. The CI job executes both model checks and replay, including semantic mutation controls. Missing tooling, missing topics/witnesses/traces, empty traces, unknown events, escaped imports, mismatches and surviving mutants fail the command. Existing traces are removed before generation so stale output cannot satisfy a generation check.
+[pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) runs the contract. It installs its locked Quint **0.33.1** with `npm ci` when no `QUINT`/`--quint` executable is given, checks the immutable `audit.qnt` hash, typechecks the maintained model, writes fresh ITF traces for every named witness and bounded sample, and replays each one through [adapter.py](adapter.py) as its own pytest case. Missing tooling, missing witnesses or traces, empty traces, unknown events, imports from outside `package/src`, mismatches and surviving mutants fail. Existing traces are removed before generation, and a filtered run (`-k`) is reported as partial and fails under `--quint-require-complete`.
 
-The checked-in [manifest](manifest.json) declares seed `20261107`, 150 bounded samples, 16 emitted sample traces, at most six API calls per sampled trace, plus five named witness traces. `.artifacts/quint/results.json` records the source head/hashes, imported production paths, covered actions, mutation mismatches and bounds. ITF files and command logs remain beside it, including on CI failure. A mismatch identifies the trace, state, event, expected projection and actual projection. To replay a saved trace against the current implementation:
+The checked-in [manifest](manifest.json) declares seed `20261107`, 150 bounded samples, 16 emitted sample traces, at most six API calls per sampled trace, plus five named witness traces: 21 histories, 28 cases with the six mutation controls and the action-coverage check. `.artifacts/quint-connect/results.json` records the source head and hashes, imported production paths, per-case outcomes, mutation mismatches, bounds and the exact Quint commands. ITF files, command logs and `mismatch-*.json` files stay beside it, including on CI failure. A mismatch names the trace, state, event, a field-level expected/actual difference, the seed and a reproduction command. To replay a saved trace against the current implementation, optionally through a mutant:
 
 ```sh
-uv run --no-sync python scripts/quint/replay.py --topic report-merge --replay .artifacts/quint/report-merge/sample-0.itf.json
+uv run --no-sync pytest verification_tests/quint/test_report_merge_contract.py::test_report_merge --quint-replay .artifacts/quint-connect/report-merge/sample-0.itf.json
+# add --quint-mutant incremental-admission to replay the same trace through a mutant
 ```
 
-`--replay` checks that trace directly; the default generate-and-replay command also enforces witness/action coverage and mutation sensitivity. No external application checkout or database service is needed.
+Replay-only results identify the source trace and never count as complete coverage. No external application checkout or database service is needed.
 
 ## API and observation mapping
 
@@ -39,7 +40,7 @@ Implementation: [merge API](../../../package/src/pytest_obligation/profiles/repo
 
 ## Repeatable sensitivity controls
 
-The normal runner command replays the **same emitted traces** against both fixed code and these deliberate implementation mutants; only `ReplayMismatch` counts as detection. Import/setup exceptions do not count.
+The normal command replays the **same emitted traces** against both fixed code and these deliberate implementation mutants; only `ReplayMismatch` counts as detection. Import/setup exceptions do not count.
 
 - `incremental-admission` compiles the current real `merge_reports` source with its commit loop moved inside preflight and new suites admitted immediately. This restores the old mutation-before-late-validation defect; target evidence/new-suite admission diverges from the emitted expected state.
 - `replace-case-identity` is an explicit post-call output mutation: after the real compatible merge, replace a retained case by an equal deep copy. It tests whether observation checks retained object identity as well as values. This is not presented as original production source.

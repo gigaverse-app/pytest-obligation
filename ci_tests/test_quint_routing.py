@@ -22,9 +22,7 @@ class QuintRoutingTests(unittest.TestCase):
             "docs/quint/example/adapter.py",
             "docs/quint/example/manifest.json",
             "docs/quint/example/README.md",
-            "scripts/quint/replay.py",
-            "scripts/quint/package.json",
-            "scripts/quint/package-lock.json",
+            "verification_tests/quint/test_report_merge_contract.py",
         ):
             with self.subTest(path=path):
                 self.assertIn("quint", self.selection(path))

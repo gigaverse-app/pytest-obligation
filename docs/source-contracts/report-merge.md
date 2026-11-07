@@ -38,7 +38,7 @@ The check command requires all three forms of evidence:
 
 `.artifacts/source-contracts/results.json`, runtime XML, exact positive/mutated Python and generated Dafny plus full backend
 output under `.artifacts/source-contracts/backend`,
-project artifacts and `.artifacts/quint` retain outcomes and source hashes. A
+project artifacts and `.artifacts/quint-connect` retain outcomes and source hashes. A
 failed command overwrites a previous green receipt. CI uploads them on failure.
 The `source_contracts` lane declares source, dependencies, sidecar, compiler
 patch/lock/bootstrap, enrollment, runtime inventory, model and adapter inputs;

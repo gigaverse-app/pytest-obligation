@@ -47,7 +47,17 @@ def main() -> None:
         observed = sorted(case.attrib["name"] for case in cases)
         if not required or observed != required or any(list(case) for case in cases):
             raise RuntimeError(f"runtime enrollment/outcomes changed: expected {required}, observed {observed}")
-        command = [sys.executable, "scripts/quint/replay.py", "--topic", "report-merge"]
+        command = [
+            sys.executable,
+            "-m",
+            "pytest",
+            "verification_tests/quint",
+            "-p",
+            "no:cacheprovider",
+            "--quint-require-complete",
+            "-o",
+            "quint_required_contracts=report-merge",
+        ]
         if args.quint:
             command += ["--quint", str(args.quint.resolve())]
         run(command, "generated-replay")
