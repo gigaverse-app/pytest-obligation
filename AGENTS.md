@@ -47,3 +47,13 @@ remain complete checkpoints.
 
 - ALWAYS use published major-version tags for established GitHub Actions, for example `actions/checkout@v7` and `actions/upload-artifact@v7`, so compatible fixes arrive without per-commit maintenance. NEVER replace those tags with commit hashes unless the user explicitly requests that exact exception. If a publisher has no major-version tag, use its published release tag rather than inventing a ref or substituting a hash.
 - ALWAYS use `gigaverse-app/dry-lint@main` until its v1 launch, then use `@v1`. Apply the same ref in workflow examples and adoption instructions.
+
+## Maintained Quint contracts
+
+For behavior covered by a registered `docs/quint/*/manifest.json`, review the
+production implementation, current `fixed.qnt`, adapter and action mapping
+together. Run the one-command check in [the replay guide](scripts/quint/README.md)
+before publishing a behavior change. Keep historical `audit.qnt` files immutable,
+retain known-bad mutation controls, and investigate drift instead of automatically
+weakening an invariant or expected observation. This applies to registered
+contracts; unrelated changes do not require inventing a new specification.

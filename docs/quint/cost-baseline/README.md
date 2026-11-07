@@ -47,4 +47,25 @@ Executed with Quint 0.33.1: both files typechecked; the historical witness and f
 
 The fixed model bounds the baseline to two contracts and represents outcome families as events. It assumes the caller supplied every cost-test path; neither this model nor pytest can infer omitted paths or custom collection exclusions. Report transport, actual pytest hook ordering and worker crashes are checked by the runtime regressions. The historical audit file also contains the separate host-leak finding; only the baseline invariant/witness selected in the commands above belongs to this PR.
 
-These are handwritten state-machine abstractions, **not runtime contracts or a proof that Python/YAML refines the model**. Bounded sampling is not exhaustive model checking or a liveness proof. The linked runtime regressions independently exercise the implementation boundary; the `.qnt` files are reviewable evidence, not part of the installed package or automatic PR CI.
+These are handwritten state-machine abstractions, **not runtime contracts or a proof that Python/YAML refines the model**. Bounded sampling is not exhaustive model checking or a liveness proof. The linked runtime regressions independently exercise the implementation boundary; the `.qnt` files are reviewable evidence, not part of the installed package.
+
+
+## Maintained model-to-code replay
+
+`fixed.qnt` now emits ITF `event` and `observed` records. The registered
+[manifest](manifest.json) maps actions to the [production-hook adapter](adapter.py)
+and declares witness coverage, source files, immutable historical hash, bounds
+and known-bad controls. The selected CI lane generates these traces and replays
+them against the current checkout; it does not run a Python clone of the model.
+
+Run the [one-command bridge](../../../scripts/quint/README.md) from the repository
+root. Baseline projection compares actual persisted cost entries, visited report
+contracts and completed teardown count after every generated event. The bridge
+unitizes real pytest Config/Session, CollectReport/TestReport and CostCompleteness
+hooks. Existing subprocess regressions retain full pytest lifecycle and real
+xdist crash coverage. It does not infer excluded paths or verify actual SQL costs.
+
+The same generated traces must detect unconditional historical-style pruning,
+omitted deselection tracking, and disabled legitimate retirement. Artifacts retain
+seed, bounds, exact trace, source/tool hashes and mismatch observations. Historical
+`audit.qnt` is not the current replay oracle; modifying it fails its recorded hash.

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "module": "cost_baseline_fixed",
+  "invariant": "incompletePreservesBaseline",
+  "model": "fixed.qnt",
+  "historical": "audit.qnt",
+  "historical_sha256": "64bc901c721adc767ad27fabddd39d843bfeb8b8fbcb8a5fa637f32ee8f0dd54",
+  "adapter": "adapter.py",
+  "sources": [
+    "package/src/pytest_obligation/_cost_plugin.py",
+    "package/src/pytest_obligation/costs.py",
+    "package/tests/core/test_costs.py"
+  ],
+  "actions": {
+    "init": "Create actual pytest Config/Session, CostCompleteness, and two-entry baseline file.",
+    "collectionError": "CostCompleteness.pytest_collectreport with actual failed pytest.CollectReport.",
+    "skipOrDeselect": "Passed pytest.TestReport phases followed by pytest_deselected with a pytest.Item.",
+    "earlySuccessfulExit": "One actual completed TestReport sequence; finish input says two collected tests.",
+    "testFailure": "Actual failed call report and passed teardown; final TESTS_FAILED status.",
+    "collectOnly": "Instantiate CostCompleteness with Config.option.collectonly.",
+    "distributedRun": "Instantiate with Config.option.numprocesses=2; actual measured TestReport sequence.",
+    "completeRun": "Actual passed TestReport sequence with obligation_cost_contract property.",
+    "emptyCollection": "No report; final NO_TESTS_COLLECTED status.",
+    "finishUpdate": "Call real CostCompleteness.pytest_sessionfinish with actual pytest.Session inputs.",
+    "inspect": "Observe baseline via load_cost_baseline and real plugin visited/finished fields; no repeated hook."
+  },
+  "witnesses": [
+    "failedCollectionPreservesTest",
+    "skippedRunPreservesTest",
+    "earlyExitPreservesTest",
+    "failurePreservesTest",
+    "collectionOnlyPreservesTest",
+    "distributedRunPreservesTest",
+    "retirementControlTest",
+    "emptyRetirementControlTest"
+  ],
+  "mutants": [
+    "unconditional-prune",
+    "ignore-deselection",
+    "disable-retirement"
+  ],
+  "bounds": {
+    "seed": 1,
+    "max_samples": 64,
+    "n_traces": 16,
+    "max_steps": 6
+  },
+  "limits": [
+    "Unitizes actual pytest hook entrypoints and report transport, not a full pytest collection/execution loop.",
+    "Existing test_costs.py subprocess tests retain real lifecycle and real xdist worker-loss coverage.",
+    "Two baseline contracts, at most two collected items; measured contract properties are report inputs, not SQL measurement proof.",
+    "Explicit caller path omissions/custom collector exclusions remain outside completeness inference."
+  ]
+}
