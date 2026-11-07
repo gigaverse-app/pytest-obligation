@@ -59,6 +59,37 @@ jobs:
         if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).contracts }}
         run: node --test report/publish.test.cjs publish/publish.test.cjs preview/preview.test.cjs
 
+  quint:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).quint) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: scripts/quint/package-lock.json
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: '3.12'
+      - run: uv sync --all-packages --locked --no-default-groups --extra debt --extra django --extra celery --group xdist
+      - run: npm ci --prefix scripts/quint --ignore-scripts
+      - name: Generate model traces and replay production APIs with mutation controls
+        run: uv run --no-sync python scripts/quint/replay.py
+      - name: Require trace bridge negative controls
+        run: uv run --no-sync python -m unittest discover -s scripts/quint -p test_replay.py -v
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: quint-trace-replay
+          path: .artifacts/quint
+          if-no-files-found: error
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -768,7 +799,7 @@ jobs:
 
   validation-gate:
     name: Validation gate
-    needs: [select-tests, ci-contracts, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
+    needs: [select-tests, ci-contracts, quint, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -776,4 +807,4 @@ jobs:
         with:
           needs: ${{ toJSON(needs) }}
           lanes: ${{ needs.select-tests.outputs.lanes || '{}' }}
-          lane-jobs: '{"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"actions":["actions"],"due":["due"]}'
+          lane-jobs: '{"quint":["quint"],"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"actions":["actions"],"due":["due"]}'
