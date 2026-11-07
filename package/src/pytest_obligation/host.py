@@ -25,13 +25,17 @@ or in the pytest configuration file::
 
     [pytest]
     due_work_harness_host = myapp.testing:harness_host
+
+The ini setting owns its host only for that pytest session and restores the
+previous host or unresolved factory during configuration cleanup. Direct
+``configure()`` calls remain process-wide until replaced or scoped by ``hosted()``.
 """
 
 from collections.abc import Callable, Collection, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 from pydantic import Field, SkipValidation
 
@@ -355,10 +359,13 @@ def current_host() -> Host:
     return _host
 
 
+_HostT = TypeVar("_HostT", Host, Callable[[], Host])
+
+
 @contextmanager
-def hosted(host: Host) -> Iterator[Host]:
-    """Use ``host`` for the duration of a block; for tests of the harness itself."""
-    previous = current_host()
+def hosted(host: _HostT) -> Iterator[_HostT]:
+    """Temporarily configure a host, restoring prior state without resolving factories."""
+    previous = _host
     configure(host)
     try:
         yield host
