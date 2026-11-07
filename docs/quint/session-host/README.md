@@ -37,16 +37,16 @@ npx --yes @informalsystems/quint@0.33.1 run audit.qnt --main session_persistence
 This command is **expected to exit 1 with `Invariant violated`** and a counterexample. It is evidence of the pre-fix bug, not a required passing check for current code. The corresponding fixed check is:
 
 ```sh
-npx --yes @informalsystems/quint@0.33.1 run fixed.qnt --main session_host_fixed --invariant sessionIsolated --max-samples 1000 --max-steps 12 --seed 1 --backend typescript
+npx --yes @informalsystems/quint@0.33.1 run fixed.qnt --main session_host_fixed --invariant maintained --max-samples 1000 --max-steps 12 --seed 1 --backend typescript
 ```
 
-Executed with Quint 0.33.1: both files typechecked; the historical witness and fixed scenarios passed; the historical invariant produced its expected counterexample; the fixed invariant had no violation in 1,000 sampled traces of at most 12 steps (seed 1).
+The historical witness and invariant commands reproduce the old defect. The current model-to-code bridge uses the exact witness names, seed and bounds declared in `manifest.json`; its recorded results and generated traces are retained as CI artifacts, separately from historical audit evidence.
 
 ## Scope
 
 The fixed model represents a prior host or factory by an opaque identity (`manual`) and two sessions; it does not execute imports, lazy factories or pytest cleanup. Runtime regressions establish exact object restoration, absence of eager factory resolution, and cleanup after collection failure. Direct manual configure calls remain process-wide. The historical audit file also contains the separate baseline-deletion finding; only the host invariant/witness selected in the commands above belongs to this PR.
 
-These are handwritten state-machine abstractions, **not runtime contracts or a proof that Python/YAML refines the model**. Bounded sampling is not exhaustive model checking or a liveness proof. The linked runtime regressions independently exercise the implementation boundary; the `.qnt` files are reviewable evidence, not part of the installed package.
+These are handwritten state-machine specifications. The maintained bridge checks generated traces against the production API projection; it does not instrument production execution or establish exhaustive refinement, arbitrary concurrency or liveness. The linked full-lifecycle regressions remain independent evidence. Model files and adapters are not part of the installed package.
 
 
 ## Maintained model-to-code replay
