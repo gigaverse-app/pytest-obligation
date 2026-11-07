@@ -130,6 +130,44 @@ def test_distributed_results_cannot_erase_failure_or_change_expected_coverage() 
         merge_reports(merged, {"suite": incoming})
 
 
+@pytest.mark.parametrize("mismatch", ["family", "debt", "declaration", "case-set", "source"])
+@pytest.mark.parametrize("location", ["same-suite", "later-suite"])
+def test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence(mismatch: str, location: str) -> None:
+    initial = SuiteCoverage(name="effect", profiles={"H": coverage()})
+    incoming = initial.model_copy(deep=True)
+    for case in incoming.profiles["H"].cases.values():
+        case.collected = case.selected = True
+        case.outcomes = {phase: ["passed"] for phase in ("setup", "call", "teardown")}
+    target = {"suite": initial}
+    shard = {"suite": incoming}
+    incompatible = incoming
+    if location == "later-suite":
+        target["later"] = initial.model_copy(deep=True)
+        incompatible = incoming.model_copy(deep=True)
+        shard["new"] = incoming.model_copy(deep=True)
+        shard["later"] = incompatible
+    last = incompatible.profiles["H"].cases["duplicate"]
+    if mismatch == "case-set":
+        incompatible.profiles["H"].cases.pop("duplicate")
+    elif mismatch == "source":
+        from pytest_obligation.profiles.coverage import SourceLocation
+
+        incompatible.source = SourceLocation(path="different.py", line=1, kind="suite")
+    elif mismatch == "family":
+        last.family = "incompatible"
+    elif mismatch == "debt":
+        from pytest_obligation.debt import DebtEntry
+
+        last.debt = DebtEntry(case="duplicate", kind="known-defect", reason="Reviewed finding.")
+    else:
+        last.declaration = "not applicable"
+    before = {key: value.model_dump(round_trip=True) for key, value in target.items()}
+    with pytest.raises(AssertionError):
+        merge_reports(target, shard)
+    assert {key: value.model_dump(round_trip=True) for key, value in target.items()} == before
+    assert not initial.verified
+
+
 @pytest.mark.parametrize("workers", [0, 2])
 def test_native_filtered_report_keeps_unselected_proofs_and_missing_families(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, pytestconfig: pytest.Config, workers: int
