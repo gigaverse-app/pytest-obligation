@@ -54,28 +54,28 @@ module cost_baseline_fixed {
     emit({ ...s, phase: "done",
       baseline: if (completeEvidence) s.baseline.intersect(s.visited) else s.baseline }, "finishUpdate")
   }
-  action stay = emit(s, "inspect")
+  action inspect = emit(s, "inspect")
   action step = any {
     collectionError, skipOrDeselect, earlySuccessfulExit, testFailure, collectOnly,
     distributedRun, completeRun, emptyCollection, finishUpdate,
-    all { s.phase == "done", stay }
+    all { s.phase == "done", inspect }
   }
   val incompletePreservesBaseline = s.phase != "done" or completeEvidence
     or s.baseline == Set("required", "retired")
   run failedCollectionPreservesTest = init.then(collectionError).then(finishUpdate)
-    .then(all { assert(s.baseline == Set("required", "retired")), stay })
+    .then(all { assert(s.baseline == Set("required", "retired")), inspect })
   run skippedRunPreservesTest = init.then(skipOrDeselect).then(finishUpdate)
-    .then(all { assert(incompletePreservesBaseline), stay })
+    .then(all { assert(incompletePreservesBaseline), inspect })
   run earlyExitPreservesTest = init.then(earlySuccessfulExit).then(finishUpdate)
-    .then(all { assert(s.baseline == Set("required", "retired")), stay })
+    .then(all { assert(s.baseline == Set("required", "retired")), inspect })
   run failurePreservesTest = init.then(testFailure).then(finishUpdate)
-    .then(all { assert(incompletePreservesBaseline), stay })
+    .then(all { assert(incompletePreservesBaseline), inspect })
   run collectionOnlyPreservesTest = init.then(collectOnly).then(finishUpdate)
-    .then(all { assert(incompletePreservesBaseline), stay })
+    .then(all { assert(incompletePreservesBaseline), inspect })
   run distributedRunPreservesTest = init.then(distributedRun).then(finishUpdate)
-    .then(all { assert(incompletePreservesBaseline), stay })
+    .then(all { assert(incompletePreservesBaseline), inspect })
   run retirementControlTest = init.then(completeRun).then(finishUpdate)
-    .then(all { assert(s.baseline == Set("required")), stay })
+    .then(all { assert(s.baseline == Set("required")), inspect })
   run emptyRetirementControlTest = init.then(emptyCollection).then(finishUpdate)
-    .then(all { assert(s.baseline == Set()), stay })
+    .then(all { assert(s.baseline == Set()), inspect })
 }

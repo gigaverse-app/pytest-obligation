@@ -52,20 +52,32 @@ These are handwritten state-machine specifications. The maintained bridge checks
 
 ## Maintained model-to-code replay
 
-`fixed.qnt` now emits ITF `event` and `observed` records. The registered
-[manifest](manifest.json) maps actions to the [production-hook adapter](adapter.py)
-and declares witness coverage, source files, immutable historical hash, bounds
-and known-bad controls. The selected CI lane generates these traces and replays
-them against the current checkout; it does not run a Python clone of the model.
+`fixed.qnt` emits ITF `event` and `observed` records. The [manifest](manifest.json)
+maps actions to the [production-hook adapter](adapter.py) and declares witnesses,
+source files, the immutable historical hash, bounds, planted bugs and the bug this
+contract found. [pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect)
+generates fresh traces and replays each through the adapter as its own pytest case
+([guide](../README.md)):
 
-Run the [one-command bridge](../../../scripts/quint/README.md) from the repository
-root. Baseline projection compares actual persisted cost entries, visited report
-contracts and completed teardown count after every generated event. The bridge
-unitizes real pytest Config/Session, CollectReport/TestReport and CostCompleteness
-hooks. Existing subprocess regressions retain full pytest lifecycle and real
-xdist crash coverage. It does not infer excluded paths or verify actual SQL costs.
+```sh
+uv run --no-sync pytest verification_tests/quint/test_cost_baseline_contract.py --quint-require-complete
+```
 
-The same generated traces must detect unconditional historical-style pruning,
-omitted deselection tracking, and disabled legitimate retirement. Artifacts retain
-seed, bounds, exact trace, source/tool hashes and mismatch observations. Historical
-`audit.qnt` is not the current replay oracle; modifying it fails its recorded hash.
+The adapter compares actual persisted cost entries, visited report contracts and the
+completed teardown count after every generated event. It unitizes real pytest
+Config/Session, CollectReport/TestReport and CostCompleteness hooks. Existing
+subprocess regressions retain full pytest lifecycle and real xdist crash coverage. It
+does not infer excluded paths or verify actual SQL costs.
+
+Planted bugs, each of which some generated history must catch:
+
+- `shipped-389c5bb` runs [`sessionfinish-389c5bb.py.txt`](sessionfinish-389c5bb.py.txt),
+  the pre-fix `pytest_sessionfinish` copied verbatim from `389c5bb` and pinned by SHA-256
+  in `adapter.py`. The manifest's `bugs_found` entry names it, so every history is
+  replayed through it and the report shows how many diverge. It replaces the earlier
+  hand-written `unconditional-prune` control, which reproduced the same rule.
+- `ignore-deselection` drops deselection tracking.
+- `disable-retirement` stops legitimate retirement.
+
+Historical `audit.qnt` is not the current replay oracle; modifying it fails its
+recorded hash.

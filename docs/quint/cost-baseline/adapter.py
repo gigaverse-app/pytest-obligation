@@ -1,5 +1,6 @@
-"""Replay Quint events at the production pytest cost-hook boundary, without pruning policy here."""
+"""pytest-quint-connect driver: apply Quint events at the production pytest cost-hook boundary, without pruning policy here."""
 
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ import pytest
 
 from pytest_obligation import _cost_plugin
 from pytest_obligation.costs import COST_BASELINE, COST_UPDATE_ENVIRONMENT, load_cost_baseline
+
+SHIPPED_389C5BB_SHA256 = "2bd5a5167354468d9caf4c1aa237daafc33c3eb569d4241cdfbf38eedabe0bd0"
 
 
 class DeselectedItem(pytest.Item):
@@ -22,14 +25,17 @@ class Adapter:
         self.config: pytest.Config | None = None
         self.patches: list[Any] = []
         self.root = root
-        if mutant == "unconditional-prune":
-
-            def old_pruning(plugin: Any, session: pytest.Session) -> None:
-                _cost_plugin.prune_cost_entries(
-                    plugin.root, _cost_plugin.stale_cost_entries(plugin.root, plugin.visited)
-                )
-
-            self.patches.append(patch.object(_cost_plugin.CostCompleteness, "pytest_sessionfinish", old_pruning))
+        if mutant == "shipped-389c5bb":
+            # The exact pre-fix sessionfinish, run in the real module's namespace. The hash keeps
+            # this frozen evidence from being edited until it agrees with the model.
+            shipped = Path(__file__).with_name("sessionfinish-389c5bb.py.txt")
+            text = shipped.read_bytes()
+            assert hashlib.sha256(text).hexdigest() == SHIPPED_389C5BB_SHA256, f"{shipped} was edited"
+            namespace = dict(vars(_cost_plugin))
+            exec(compile(text, str(shipped), "exec"), namespace)
+            self.patches.append(
+                patch.object(_cost_plugin.CostCompleteness, "pytest_sessionfinish", namespace["pytest_sessionfinish"])
+            )
         elif mutant == "ignore-deselection":
             self.patches.append(patch.object(_cost_plugin.CostCompleteness, "pytest_deselected", lambda *args: None))
         elif mutant == "disable-retirement":
@@ -53,8 +59,8 @@ class Adapter:
             )
             self.plugin.pytest_runtest_logreport(report)
 
-    def apply(self, event: dict[str, Any]) -> None:
-        op = event["op"]
+    def step(self, step: Any) -> None:
+        event, op = step.args, step.action
         if op == "init":
             ini = self.work / "pytest.ini"
             ini.write_text("[pytest]\n", encoding="utf-8")
@@ -93,8 +99,8 @@ class Adapter:
 
     def observe(self) -> dict[str, Any]:
         return {
-            "baseline": sorted(entry.contract for entry in load_cost_baseline(self.work).costs),
-            "visited": sorted(self.plugin.visited),
+            "baseline": {entry.contract for entry in load_cost_baseline(self.work).costs},
+            "visited": set(self.plugin.visited),
             "finished": self.plugin.finished,
         }
 

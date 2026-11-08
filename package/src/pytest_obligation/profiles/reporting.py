@@ -209,9 +209,13 @@ def pytest_runtest_makereport(
 
 def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCoverage]) -> None:
     """Merge distributed evidence only when workers agree on the same declaration and expected cases."""
+    additions: dict[str, SuiteCoverage] = {}
+    pairs: list[tuple[CaseEvidence, CaseEvidence]] = []
+    # Validate the entire shard before admitting any of its evidence. A later
+    # disagreement must not leave earlier cases (or new suites) promoted.
     for suite, report in incoming.items():
         if suite not in target:
-            target[suite] = report
+            additions[suite] = report
             continue
         current = target[suite]
         assert current.source == report.source, f"{suite}: workers disagree on source location"
@@ -236,12 +240,15 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
                 assert old.debt == case.debt, f"{suite}/{case_id}: workers disagree on declared debt"
                 assert old.family == case.family
                 assert old.declaration == case.declaration, f"{suite}/{case_id}: workers disagree on declaration"
-                old.collected |= case.collected
-                old.selected |= case.selected
-                for phase, outcomes in case.outcomes.items():
-                    old.outcomes.setdefault(phase, []).extend(outcomes)
-                old.failures.extend(case.failures)
-                old.durations.extend(case.durations)
+                pairs.append((old, case))
+    target.update(additions)
+    for old, case in pairs:
+        old.collected |= case.collected
+        old.selected |= case.selected
+        for phase, outcomes in case.outcomes.items():
+            old.outcomes.setdefault(phase, []).extend(outcomes)
+        old.failures.extend(case.failures)
+        old.durations.extend(case.durations)
 
 
 @pytest.hookimpl(optionalhook=True)
