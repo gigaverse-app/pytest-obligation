@@ -81,7 +81,7 @@ jobs:
           .venv/bin/python scripts/bootstrap_source_verifier.py
           bash tooling/source-contracts/install-dafny.sh
       - name: Prove current report source and replay independent histories
-        run: .venv/bin/python scripts/source_contracts/check.py
+        run: .venv/bin/python -m scripts.source_contracts.check
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -18,6 +18,8 @@ def require(condition: object, message: object) -> None:
 
 
 def digest(path: Path) -> str:
+    # dry-lint: distinct-from scripts/render_brand.py::digest
+    # Enrolled integrity hashes are byte-exact (wheel, patch, locks); brand hashes normalize text newlines.
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
