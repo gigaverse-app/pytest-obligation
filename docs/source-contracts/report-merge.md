@@ -14,7 +14,7 @@ uv sync --all-packages --locked --no-default-groups --extra debt --group xdist
 .venv/bin/python scripts/bootstrap_source_verifier.py
 bash tooling/source-contracts/install-dafny.sh
 export PATH="$PWD/.source-contract-tooling/dafny:$PATH"
-.venv/bin/python scripts/source_contracts/check.py
+.venv/bin/python -m scripts.source_contracts.check
 ```
 
 The bootstrap fetches the exact public upstream commit in
@@ -110,7 +110,7 @@ alongside the source proof.
 After an intentional source/dependency/contract edit:
 
 ```sh
-.venv/bin/python scripts/source_contracts/check.py --generate
+.venv/bin/python -m scripts.source_contracts.check --generate
 ```
 
 Generation proves before replacing artifacts and preserves checked proof additions

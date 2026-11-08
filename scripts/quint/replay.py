@@ -49,13 +49,14 @@ def canonical(value: Any) -> Any:
     return value
 
 
-def command(arguments: list[str], log: Path, *, cwd: Path = ROOT) -> None:
+def command(arguments: list[str], log: Path, *, cwd: Path = ROOT, timeout: float | None = 180) -> None:
+    """Run one step with merged output logged; a failure carries the output for CI logs."""
     result = subprocess.run(
-        arguments, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180
+        arguments, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout
     )
     log.write_text(result.stdout, encoding="utf-8")
     if result.returncode:
-        raise RuntimeError(f"command failed ({result.returncode}); see {log}: {' '.join(arguments)}")
+        raise RuntimeError(f"command failed ({result.returncode}); see {log}: {' '.join(arguments)}\n{result.stdout}")
 
 
 def production_modules() -> dict[str, str]:

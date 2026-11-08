@@ -4,20 +4,14 @@ import argparse
 import hashlib
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from scripts.quint.replay import command
+
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / ".artifacts/source-contracts"
-
-
-def run(arguments: list[str], name: str) -> None:
-    result = subprocess.run(arguments, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    (OUTPUT / f"{name}.log").write_text(result.stdout)
-    if result.returncode:
-        raise RuntimeError(f"{name} failed ({result.returncode}); see {OUTPUT / (name + '.log')}:\n{result.stdout}")
 
 
 def main() -> None:
@@ -32,25 +26,30 @@ def main() -> None:
     result_path.write_text(json.dumps({"status": "running"}) + "\n")
     try:
         action = "generate" if args.generate else "check"
-        run([sys.executable, "-m", "veripy", "project", action, "veripy-project.json", "--json"], "source-proof")
+        command(
+            [sys.executable, "-m", "veripy", "project", action, "veripy-project.json", "--json"],
+            OUTPUT / "source-proof.log",
+            timeout=None,
+        )
         # This independent fixed inventory cannot turn green by pytest selection,
         # deselection, skips, or removal of one parametrized rejection control.
         junit = OUTPUT / "runtime.xml"
         shutil.rmtree(OUTPUT / "backend", ignore_errors=True)
         junit.unlink(missing_ok=True)
-        run(
+        command(
             [sys.executable, "-m", "pytest", "verification_tests/source_contracts", "-q", f"--junitxml={junit}"],
-            "runtime",
+            OUTPUT / "runtime.log",
+            timeout=None,
         )
         cases = list(ET.parse(junit).getroot().iter("testcase"))
         required = json.loads((ROOT / "scripts/source_contracts/required-tests.json").read_text())
         observed = sorted(case.attrib["name"] for case in cases)
         if not required or observed != required or any(list(case) for case in cases):
             raise RuntimeError(f"runtime enrollment/outcomes changed: expected {required}, observed {observed}")
-        command = [sys.executable, "scripts/quint/replay.py", "--topic", "report-merge"]
+        replay = [sys.executable, "scripts/quint/replay.py", "--topic", "report-merge"]
         if args.quint:
-            command += ["--quint", str(args.quint.resolve())]
-        run(command, "generated-replay")
+            replay += ["--quint", str(args.quint.resolve())]
+        command(replay, OUTPUT / "generated-replay.log", timeout=None)
         manifest = json.loads((ROOT / "veripy-project.json").read_text())
         paths = {
             "veripy-project.json",

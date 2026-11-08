@@ -63,7 +63,7 @@ contracts; unrelated changes do not require inventing a new specification.
 `veripy-project.json` enrolls the current report merge AST. For edits to its source,
 external model dependencies, heap schema, proof sidecar or verifier toolchain,
 review the source/effect proof and real API observations together, then run
-`scripts/source_contracts/check.py` as described in
+`python -m scripts.source_contracts.check` as described in
 [the source contract guide](docs/source-contracts/report-merge.md). Intentional
 source changes use `--generate` to prove and refresh artifacts before checking.
 Keep enrollment and exact runtime inventory nonempty and fixed; retain semantic
