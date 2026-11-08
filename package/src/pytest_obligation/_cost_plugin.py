@@ -39,9 +39,21 @@ class CostCompleteness:
         self.root = config.rootpath
         self.visited: set[str] = set()
         self.stale: list[str] = []
+        self.incomplete = bool(config.getoption("collectonly") or config.getoption("numprocesses", default=None))
+        self.finished = 0
+        self.update_blocked = False
+
+    def pytest_collectreport(self, report: pytest.CollectReport) -> None:
+        self.incomplete |= not report.passed
+
+    def pytest_deselected(self, items: list[pytest.Item]) -> None:
+        self.incomplete |= bool(items)
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         self.visited.update(str(value) for name, value in report.user_properties if name == PROPERTY)
+        self.incomplete |= not report.passed
+        if report.when == "teardown":
+            self.finished += 1
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_sessionfinish(self, session: pytest.Session) -> None:
@@ -49,13 +61,28 @@ class CostCompleteness:
         if not stale:
             return
         if os.environ.get(COST_UPDATE_ENVIRONMENT) == "update":
-            prune_cost_entries(self.root, stale)
+            # The flag declares full-suite intent; absence only proves retirement
+            # after collection and execution completed. An empty successful
+            # collection may deliberately retire the final cost test.
+            complete = (
+                not self.incomplete
+                and self.finished == session.testscollected
+                and session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED)
+            )
+            if complete:
+                prune_cost_entries(self.root, stale)
+            else:
+                self.update_blocked = True
             return
         self.stale = stale
         if session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
             session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
     def pytest_terminal_summary(self, terminalreporter: pytest.TerminalReporter) -> None:
+        if self.update_blocked:
+            terminalreporter.line(
+                "Cost baseline pruning skipped: requires a complete, unfiltered serial run.", yellow=True
+            )
         if not self.stale:
             return
         terminalreporter.section("cost contracts: baseline entries no test measured", red=True)
