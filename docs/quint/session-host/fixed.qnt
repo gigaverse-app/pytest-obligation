@@ -5,11 +5,11 @@ module session_host_fixed {
   var observed: { host: str, manualCalls: int, applicationCalls: int }
   var previous: str
   action initFactory = all {
-    phase' = 0, previous' = "manual_factory", event' = { op: "init", kind: "factory" },
+    phase' = 0, previous' = "manual_factory", event' = { op: "initFactory", kind: "factory" },
     observed' = { host: "manual_factory", manualCalls: 0, applicationCalls: 0 }
   }
   action initManual = all {
-    phase' = 0, previous' = "manual", event' = { op: "init", kind: "host" },
+    phase' = 0, previous' = "manual", event' = { op: "initManual", kind: "host" },
     observed' = { host: "manual", manualCalls: 0, applicationCalls: 0 }
   }
   action init = any { initFactory, initManual }

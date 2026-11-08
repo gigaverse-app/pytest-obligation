@@ -206,6 +206,100 @@ CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
 See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
 environment caches, required gates and real dependency critical-path reports.
 
+### Merge rules checked against a model
+
+Distributed report merging is checked against a [Quint](https://quint.sh) model on every
+relevant pull request: generated histories are replayed through the real code, and deliberate
+mutants must be caught. [The contract and what it proves](docs/quint/README.md).
+
+<!-- pytest-quint-connect:start -->
+<!-- pytest-quint-connect:contracts report-merge,session-host -->
+<a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
+
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug"><img alt="Quint contracts: 2 contracts passed · 41 histories · 5/5 planted bugs caught" src="https://img.shields.io/badge/Quint_contracts-2_contracts_passed_%C2%B7_41_histories_%C2%B7_5%2F5_planted_bugs_caught-brightgreen"></a>
+
+| | Contract | Cases passed | [Planted bugs caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") |
+| :-: | :-- | --: | --: |
+| ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `session-host` `verification_tests/quint/test_session_host_contract.py::test_session_host`<br><sub>20 histories (4 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 23/23 | 2/2 |
+
+**Bugs these contracts found**
+
+1. `report-merge` · **A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available.** Fixed in #210 · found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · regression test `package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`. 16 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard) reintroduces it; first caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+1. `session-host` · **Repeated pytest.main() sessions in one process inherited an earlier session's due_work_harness_host instead of getting their previous host back.** Fixed in #209 · found by the historical audit model (audit.qnt, pinned to 389c5bb): leakedHostWitnessTest reaches the leaked host · regression test `package/tests/core/test_host_initialization.py::test_independent_sessions_restore_the_previous_manual_host`. 10 of 20 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact pytest_plugin.pytest_configure shipped at 389c5bb, before the fix: it configures the ini host process-wide and never restores the previous one) reintroduces it; first caught by `witness-unusedFactoryRestorationTest` at state 2, after `cleanupA(kind='cleanup')`.
+
+**[Planted bugs](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") these contracts catch**
+
+- `report-merge` · `incremental-admission`: Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function. Caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+- `report-merge` · `replace-case-identity`: After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence. Caught by `witness-compatibleRepeatedEvidenceTest` at state 1, after `merge(location='later-suite', mismatch='', payload='passed')`.
+- `session-host` · `eager-previous-resolution`: Scoping the host resolves the previous lazy factory first, importing an application the session never asked for. Caught by `witness-unusedFactoryRestorationTest` at state 1, after `configureA(kind='ini')`.
+
+<details>
+<summary>What <code>report-merge</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `init`: Construct real SuiteCoverage / ProfileCoverage / CaseEvidence fixtures; no production merge guard patched
+- `merge`: profiles.reporting.merge_reports(target, compatible shard), direct call
+- `reject`: profiles.reporting.merge_reports(target, shard with indicated late mismatch), observe actual AssertionError and state
+- `inspect`: SuiteCoverage.verified, CaseEvidence.outcomes and retained object references read without mutation
+
+**Invariant** `contract`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `repeatedLateRejectionTest`, `compatibleRepeatedEvidenceTest`, `lateRejectionRetainsPriorSuccessTest`, `failedRepeatCannotBecomeVerifiedTest`, `interruptedRepeatRevokesSuccessTest`.
+
+**Bounds**: seed `20261107` · max_samples `150` · max_steps `6` · n_traces `16`.
+
+**Witness `repeatedLateRejectionTest`, step by step**: what the model expects the code to show after each action.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `init(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `1` | `reject(location='later-suite', mismatch='family', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `2` | `reject(location='later-suite', mismatch='debt', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `3` | `reject(location='same-suite', mismatch='declaration', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `4` | `inspect(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+
+</details>
+
+<details>
+<summary>What <code>session-host</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `initFactory`: host.configure with a lazy manual factory.
+- `initManual`: host.configure with an actual Host.
+- `configureA`: Actual pytest Config.fromdictargs then _do_configure, with due_work_harness_host ini.
+- `resolveApplication`: host.current_host resolves application factory.
+- `cleanupA`: Actual pytest Config._ensure_unconfigure invokes registered cleanup stack.
+- `configureWithoutIni`: Independent pytest Config._do_configure with no host ini.
+- `resolveManual`: host.current_host on second configuration.
+- `cleanupB`: Second config _ensure_unconfigure.
+- `inspect`: Read raw production host identity and real factory counters, without resolving factories.
+
+**Invariant** `maintained`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `unusedFactoryRestorationTest`, `resolvedFactoryRestorationTest`, `manualConfigurationControlTest`, `manualRestorationControlTest`.
+
+**Bounds**: seed `1` · max_samples `64` · max_steps `8` · n_traces `16`.
+
+**Witness `unusedFactoryRestorationTest`, step by step**: what the model expects the code to show after each action.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `initFactory(kind='factory')` | `{ applicationCalls: 0, host: "manual_factory", manualCalls: 0 }` |
+| `1` | `configureA(kind='ini')` | `{ applicationCalls: 0, host: "application_factory", manualCalls: 0 }` |
+| `2` | `cleanupA(kind='cleanup')` | `{ applicationCalls: 0, host: "manual_factory", manualCalls: 0 }` |
+| `3` | `configureWithoutIni(kind='no-ini')` | `{ applicationCalls: 0, host: "manual_factory", manualCalls: 0 }` |
+| `4` | `resolveManual(kind='api')` | `{ applicationCalls: 0, host: "manual", manualCalls: 1 }` |
+| `5` | `cleanupB(kind='cleanup')` | `{ applicationCalls: 0, host: "manual", manualCalls: 1 }` |
+| `6` | `inspect(kind='observation')` | `{ applicationCalls: 0, host: "manual", manualCalls: 1 }` |
+
+</details>
+
+<sub>Generated by [pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) from contract receipts; [what a passing run proves](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/limits.md).</sub>
+<!-- pytest-quint-connect:end -->
+
 ### Duplicates kept out
 
 The local hooks and required PR check prevent new copies; the weekly audit records progress against the

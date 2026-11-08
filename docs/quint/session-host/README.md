@@ -57,14 +57,30 @@ pins witness/bounded generation and semantic controls, and protects historical
 `audit.qnt` with its original hash. CI now replays the generated events against
 real pytest configuration/cleanup and host APIs in the current checkout.
 
-Run the [one-command bridge](../../../scripts/quint/README.md) from the repository
-root. The independent projection reads the raw host identity and actual manual
+[pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) generates
+fresh traces and replays each through the adapter as its own pytest case
+([guide](../README.md)):
+
+```sh
+uv run --no-sync pytest verification_tests/quint/test_session_host_contract.py --quint-require-complete
+```
+
+The independent projection reads the raw host identity and actual manual
 and application factory counters after every event. Host resolution is an
 explicit `current_host()` event; observing through that API would itself change
 lazy state. Inputs cover manual hosts and unresolved factories, used/unused ini
-hosts, cleanup and a following configuration without host settings. The bridge
-must reject omitted restoration and eager previous-factory resolution using the
-same generated traces.
+hosts, cleanup and a following configuration without host settings. The same
+generated traces must catch two planted bugs:
+
+- `shipped-389c5bb` runs [`pytest_configure-389c5bb.py.txt`](pytest_configure-389c5bb.py.txt),
+  the pre-fix `pytest_configure` copied verbatim from `389c5bb` and pinned by SHA-256 in
+  `adapter.py`. The manifest's `bugs_found` entry names it, so every history is replayed
+  through it and the report shows how many diverge. It replaces the earlier hand-written
+  `omit-host-restoration` control, which reproduced the same behavior.
+- `eager-previous-resolution` resolves the previous lazy factory while scoping.
+
+The adapter sets `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` for its inner sessions, which load
+the plugin with `-p`; the old runner set it process-wide.
 
 The adapter unitizes `Config._do_configure` / `_ensure_unconfigure` and host APIs;
 it does not collect full test sessions. Existing `pytest.main()` regressions

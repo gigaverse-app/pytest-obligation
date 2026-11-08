@@ -56,15 +56,17 @@ class RoutingTests(unittest.TestCase):
         cls.git("commit", "-qm", "routing scenario")
         return cls.git("rev-parse", "HEAD")
 
-    def selection(self, path, *, delete=False):
+    def selection(self, *paths, delete=False):
+        """Lanes selected by one commit that edits (or deletes) every path."""
         self.git("reset", "--hard", self.base)
-        file = self.repo / path
-        if delete:
-            file.unlink()
-        else:
-            file.parent.mkdir(parents=True, exist_ok=True)
-            with file.open("a") as output:
-                output.write("\n# CI routing scenario\n")
+        for path in paths:
+            file = self.repo / path
+            if delete:
+                file.unlink()
+            else:
+                file.parent.mkdir(parents=True, exist_ok=True)
+                with file.open("a") as output:
+                    output.write("\n# CI routing scenario\n")
         result = plan(self.repo, self.config, self.base, self.commit())
         self.assertNotIn("fallback", result.reason, result.model_dump_json())
         return {name for name, enabled in result.lanes.items() if enabled}
@@ -72,8 +74,11 @@ class RoutingTests(unittest.TestCase):
     def test_prose_does_not_start_runtime_lanes(self):
         for path in (
             "README.md",
-            "package/README.md",
             "package/docs/adopting.md",
+            "examples/adopter/README.md",
+            "documentation/index.md",
+            "mkdocs.yml",
+            ".readthedocs.yaml",
             "docs/guide.rst",
             "md/guide.md",
             ".github/pull_request_template.md",
@@ -82,8 +87,42 @@ class RoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set())
 
+    def test_documentation_only_change_selects_no_lane(self):
+        # One real commit across the documentation surfaces, including the Read the Docs dependencies.
+        self.assertEqual(
+            self.selection(
+                "README.md",
+                "docs/ci.md",
+                "documentation/index.md",
+                "documentation/requirements.in",
+                "documentation/requirements.txt",
+                "mkdocs.yml",
+                "examples/adopter/README.md",
+            ),
+            set(),
+        )
+
+    def test_documentation_site_dependencies_are_not_test_environment(self):
+        for path in ("documentation/requirements.txt", "documentation/requirements.in"):
+            with self.subTest(path=path):
+                self.assertEqual(self.selection(path), set())
+
+    def test_embedded_distribution_files_select_only_the_package_build(self):
+        # pyproject's readme and license-files: twine and check_metadata.py validate them in the build job.
+        for path in ("package/README.md", "package/LICENSE"):
+            with self.subTest(path=path):
+                self.assertEqual(self.selection(path), {"package"})
+
     def test_global_environment_changes_keep_full_validation(self):
-        for path in ("uv.lock", ".github/workflows/ci.yml", ".github/test-lanes.json"):
+        for path in (
+            "uv.lock",
+            "examples/adopter/uv.lock",
+            "package/pyproject.toml",
+            "demos/wagtail_tasks/pyproject.toml",
+            ".python-version",
+            ".github/workflows/ci.yml",
+            ".github/test-lanes.json",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set(self.config.lanes))
 
@@ -91,6 +130,9 @@ class RoutingTests(unittest.TestCase):
         for path in ("requirements.txt", "package/requirements-dev.txt", "poetry.lock", "pylock.toml"):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set(self.config.lanes))
+
+    def test_publisher_container_dependencies_start_its_consumers(self):
+        self.assertEqual(self.selection("publish/requirements.txt"), {"actions", "contracts"})
 
     def test_demo_recording_inputs_keep_the_complete_demo_lane(self):
         for path in ("docs/demo.tape", "docs/demo_env.sh"):
@@ -155,9 +197,16 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(result.lanes["core"], result.model_dump_json())
         self.assertNotIn("fallback", result.reason)
 
-    def test_execution_helpers_select_contracts_and_wheel(self):
+    def test_execution_helpers_select_contracts_and_package(self):
         self.assertIn("contracts", self.selection("ci_tests/test_routing.py"))
-        self.assertIn("wheel", self.selection("scripts/check_core_is_framework_free.py"))
+        self.assertIn("package", self.selection("scripts/check_core_is_framework_free.py"))
+        self.assertIn("package", self.selection("scripts/ci/check_metadata.py"))
+
+    def test_example_adopter_code_at_any_depth_starts_the_action_smoke(self):
+        # Files no test imports: only the explicit input globs can select the lane.
+        for path in ("examples/adopter/new_module.py", "examples/adopter/adopter_app/new_module.py"):
+            with self.subTest(path=path):
+                self.assertIn("actions", self.selection(path))
 
 
 if __name__ == "__main__":

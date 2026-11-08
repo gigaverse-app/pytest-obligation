@@ -66,28 +66,43 @@ jobs:
           fromJSON(needs.select-tests.outputs.lanes).quint) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # The Quint contract report's sticky comment.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: npm
-          cache-dependency-path: scripts/quint/package-lock.json
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: '3.12'
-      - run: uv sync --all-packages --locked --no-default-groups --extra debt --extra django --extra celery --group xdist
-      - run: npm ci --prefix scripts/quint --ignore-scripts
+      - run: uv sync --all-packages --locked --no-default-groups --extra debt --extra django --extra celery --group xdist --group quint
+      # pytest-quint-connect installs its locked Quint 0.33.1 with npm, generates every
+      # registered witness and sample, replays them through the real APIs and requires
+      # each declared mutation to be caught. A filtered or partial run fails here.
       - name: Generate model traces and replay production APIs with mutation controls
-        run: uv run --no-sync python scripts/quint/replay.py
-      - name: Require trace bridge negative controls
-        run: uv run --no-sync python -m unittest discover -s scripts/quint -p test_replay.py -v
+        env:
+          # Every registered contract; a run that collects fewer fails --quint-require-complete.
+          QUINT_REQUIRED_CONTRACTS: |-
+            report-merge
+            session-host
+        run: >-
+          uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
+          --quint-require-complete -o "quint_required_contracts=$QUINT_REQUIRED_CONTRACTS"
+          --junitxml=.artifacts/quint-connect/junit.xml
+      # One sticky PR comment per run: bugs the contract found, planted bugs it catches, what
+      # the model claims, and for any failure the diverging state and a replay command. Fails
+      # when README.md's contract block no longer matches complete receipts.
+      - name: Contract report
+        if: ${{ !cancelled() }}
+        uses: gigaverse-app/pytest-quint-connect/report@v1
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: quint-trace-replay
-          path: .artifacts/quint
+          path: .artifacts/quint-connect
           if-no-files-found: error
 
   lint:
@@ -568,8 +583,11 @@ jobs:
 
   build:
     # The published wheel alone: it installs without any framework, imports, and ships py.typed.
+    # Builds only when the distribution can change: package sources, its embedded README/LICENSE, locks.
     needs: select-tests
-    if: ${{ !cancelled() }}
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).package) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -586,12 +604,9 @@ jobs:
           python scripts/ci/check_metadata.py
       - run: unzip -l dist/*.whl | grep -q "pytest_obligation/py.typed"
       - run: unzip -l dist/*.whl | grep -q "due_work_harness/py.typed"
-      - if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).wheel }}
-        run: uv venv /tmp/wheel && uv pip install --python /tmp/wheel dist/*.whl
-      - if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).wheel }}
-        run: /tmp/wheel/bin/python scripts/check_core_is_framework_free.py
+      - run: uv venv /tmp/wheel && uv pip install --python /tmp/wheel dist/*.whl
+      - run: /tmp/wheel/bin/python scripts/check_core_is_framework_free.py
       - name: Verify old and new adopters against the installed wheel
-        if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).wheel }}
         run: /tmp/wheel/bin/python -m pytest package/tests/core/test_compatibility.py package/tests/core/test_package_identity.py -q
 
   actions:
@@ -807,4 +822,4 @@ jobs:
         with:
           needs: ${{ toJSON(needs) }}
           lanes: ${{ needs.select-tests.outputs.lanes || '{}' }}
-          lane-jobs: '{"quint":["quint"],"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"actions":["actions"],"due":["due"]}'
+          lane-jobs: '{"quint":["quint"],"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"build":["package"],"actions":["actions"],"due":["due"]}'

@@ -1,5 +1,7 @@
-"""Drive production pytest configuration and host APIs from Quint-generated events."""
+"""pytest-quint-connect driver: drive production pytest configuration and host APIs from Quint-generated events."""
 
+import hashlib
+import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -10,6 +12,8 @@ from unittest.mock import patch
 import pytest
 
 from pytest_obligation import host, pytest_plugin
+
+SHIPPED_389C5BB_SHA256 = "7abe6ac9e0ea7a686633b2db414b269af189c1b24b928f29776b59ac17094ad8"
 
 
 class Adapter:
@@ -24,14 +28,15 @@ class Adapter:
         self.application = host.Host(production_packages={"A"})
         self.patches: list[Any] = []
         original_scope = pytest_plugin.hosted
-        if mutant == "omit-host-restoration":
-
-            @contextmanager
-            def unscoped(value: Any):
-                host.configure(value)
-                yield value
-
-            self.patches.append(patch.object(pytest_plugin, "hosted", unscoped))
+        if mutant == "shipped-389c5bb":
+            # The exact pre-fix pytest_configure, run in the real module's namespace. The hash
+            # keeps this frozen evidence from being edited until it agrees with the model.
+            shipped = Path(__file__).with_name("pytest_configure-389c5bb.py.txt")
+            text = shipped.read_bytes()
+            assert hashlib.sha256(text).hexdigest() == SHIPPED_389C5BB_SHA256, f"{shipped} was edited"
+            namespace = {**vars(pytest_plugin), "configure": host.configure}
+            exec(compile(text, str(shipped), "exec"), namespace)
+            self.patches.append(patch.object(pytest_plugin, "pytest_configure", namespace["pytest_configure"]))
         elif mutant == "eager-previous-resolution":
 
             @contextmanager
@@ -43,6 +48,8 @@ class Adapter:
             self.patches.append(patch.object(pytest_plugin, "hosted", eager))
         elif mutant is not None:
             raise ValueError(mutant)
+        # The inner sessions load the plugin with -p; entry-point autoload would register it twice.
+        self.patches.append(patch.dict(os.environ, {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}))
         module = ModuleType("quint_replay_application")
         module.make_host = self.application_factory  # type: ignore[attr-defined]
         self.patches.append(patch.dict(sys.modules, {module.__name__: module}))
@@ -72,9 +79,9 @@ class Adapter:
         config._do_configure()
         return config
 
-    def apply(self, event: dict[str, Any]) -> None:
-        op = event["op"]
-        if op == "init":
+    def step(self, step: Any) -> None:
+        event, op = step.args, step.action
+        if op in ("initFactory", "initManual"):
             host.configure(self.manual_factory if event["kind"] == "factory" else self.manual)
         elif op == "configureA":
             self.first = self.configure("first", application=True)

@@ -36,8 +36,9 @@ Keep the symlink tracked in Git. See CONTRIBUTING.md for platform setup.
 
 Documentation-only PRs execute zero tests unless a test or lane explicitly
 declares that documentation as an input. This includes CI contract tests,
-installed-wheel smoke and public-action smoke. Metadata/link/build checks may
-still validate documentation without running runtime tests. Declare execution
+installed-wheel smoke, package builds and public-action smoke. Local link checks
+and the documentation site build still validate documentation; the package build
+and metadata checks run only when the package lane is selected. Declare execution
 workflows, selector configuration, helpers, locks and non-import inputs; missing
 history or failed planning must execute the full affected lanes and fail the
 required planning gate. Ordinary PRs and pushes use selection; manual/release/scheduled/full overrides
@@ -52,8 +53,8 @@ remain complete checkpoints.
 
 For behavior covered by a registered `docs/quint/*/manifest.json`, review the
 production implementation, current `fixed.qnt`, adapter and action mapping
-together. Run the one-command check in [the replay guide](scripts/quint/README.md)
-before publishing a behavior change. Keep historical `audit.qnt` files immutable,
+together. Run `uv run --no-sync pytest verification_tests/quint --quint-require-complete`
+([guide](docs/quint/README.md)) before publishing a behavior change. Keep historical `audit.qnt` files immutable,
 retain known-bad mutation controls, and investigate drift instead of automatically
 weakening an invariant or expected observation. This applies to registered
 contracts; unrelated changes do not require inventing a new specification.
