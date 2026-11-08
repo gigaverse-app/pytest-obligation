@@ -213,23 +213,61 @@ relevant pull request: generated histories are replayed through the real code, a
 mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 
 <!-- pytest-quint-connect:start -->
-<!-- pytest-quint-connect:contracts report-merge -->
+<!-- pytest-quint-connect:contracts cost-baseline,report-merge -->
 <a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug"><img alt="Quint contracts: 1 contract passed · 21 histories · 3/3 planted bugs caught" src="https://img.shields.io/badge/Quint_contracts-1_contract_passed_%C2%B7_21_histories_%C2%B7_3%2F3_planted_bugs_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug"><img alt="Quint contracts: 2 contracts passed · 45 histories · 6/6 planted bugs caught" src="https://img.shields.io/badge/Quint_contracts-2_contracts_passed_%C2%B7_45_histories_%C2%B7_6%2F6_planted_bugs_caught-brightgreen"></a>
 
 | | Contract | Cases passed | [Planted bugs caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") |
 | :-: | :-- | --: | --: |
+| ✅ | `cost-baseline` `verification_tests/quint/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>24 histories (8 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 28/28 | 3/3 |
 | ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 
-**Bugs this contract found**
+**Bugs these contracts found**
 
-1. **A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available.** Fixed in #210 · found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · regression test `package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`. 16 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard) reintroduces it; first caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+1. `cost-baseline` · **Running with OBLIGATION_COST_BASELINE=update after an incomplete run (failed collection, deselection, early exit, failure, collect-only or xdist) deleted every baseline entry that run did not measure.** Fixed in #208 · found by the historical audit model (audit.qnt, pinned to 389c5bb): baselineDeletionWitnessTest reaches the deletion after a collection error · regression test `package/tests/core/test_costs.py::test_incomplete_update_does_not_retire_unmeasured_contracts`. 19 of 24 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact CostCompleteness.pytest_sessionfinish shipped at 389c5bb, before the fix: update mode prunes every unmeasured entry at session end, even after a failed collection, filter or crash) reintroduces it; first caught by `witness-failedCollectionPreservesTest` at state 2, after `finishUpdate(collected=0, status=2)`.
+1. `report-merge` · **A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available.** Fixed in #210 · found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · regression test `package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`. 16 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard) reintroduces it; first caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
 
-**[Planted bugs](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") this contract catches**
+**[Planted bugs](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") these contracts catch**
 
-- `incremental-admission`: Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function. Caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
-- `replace-case-identity`: After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence. Caught by `witness-compatibleRepeatedEvidenceTest` at state 1, after `merge(location='later-suite', mismatch='', payload='passed')`.
+- `cost-baseline` · `ignore-deselection`: Deselected tests are not recorded as incomplete, so a filtered run can retire entries its deselected tests would have measured. Caught by `witness-skippedRunPreservesTest` at state 2, after `finishUpdate(collected=1, status=0)`.
+- `cost-baseline` · `disable-retirement`: Pruning never happens, so a complete run cannot retire a contract no test measures any more. Caught by `witness-retirementControlTest` at state 2, after `finishUpdate(collected=1, status=0)`.
+- `report-merge` · `incremental-admission`: Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function. Caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+- `report-merge` · `replace-case-identity`: After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence. Caught by `witness-compatibleRepeatedEvidenceTest` at state 1, after `merge(location='later-suite', mismatch='', payload='passed')`.
+
+<details>
+<summary>What <code>cost-baseline</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `init`: Create actual pytest Config/Session, CostCompleteness, and two-entry baseline file.
+- `collectionError`: CostCompleteness.pytest_collectreport with actual failed pytest.CollectReport.
+- `skipOrDeselect`: Passed pytest.TestReport phases followed by pytest_deselected with a pytest.Item.
+- `earlySuccessfulExit`: One actual completed TestReport sequence; finish input says two collected tests.
+- `testFailure`: Actual failed call report and passed teardown; final TESTS_FAILED status.
+- `collectOnly`: Instantiate CostCompleteness with Config.option.collectonly.
+- `distributedRun`: Instantiate with Config.option.numprocesses=2; actual measured TestReport sequence.
+- `completeRun`: Actual passed TestReport sequence with obligation_cost_contract property.
+- `emptyCollection`: No report; final NO_TESTS_COLLECTED status.
+- `finishUpdate`: Call real CostCompleteness.pytest_sessionfinish with actual pytest.Session inputs.
+- `inspect`: Observe baseline via load_cost_baseline and real plugin visited/finished fields; no repeated hook.
+
+**Invariant** `incompletePreservesBaseline`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `failedCollectionPreservesTest`, `skippedRunPreservesTest`, `earlyExitPreservesTest`, `failurePreservesTest`, `collectionOnlyPreservesTest`, `distributedRunPreservesTest`, `retirementControlTest`, `emptyRetirementControlTest`.
+
+**Bounds**: seed `1` · max_samples `64` · max_steps `6` · n_traces `16`.
+
+**Witness `failedCollectionPreservesTest`, step by step**: what the model expects the code to show after each action.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `init(collected=0, status=0)` | `{ baseline: Set("required", "retired"), finished: 0, visited: Set() }` |
+| `1` | `collectionError(collected=0, status=2)` | `{ baseline: Set("required", "retired"), finished: 0, visited: Set() }` |
+| `2` | `finishUpdate(collected=0, status=2)` | `{ baseline: Set("required", "retired"), finished: 0, visited: Set() }` |
+| `3` | `inspect(collected=0, status=2)` | `{ baseline: Set("required", "retired"), finished: 0, visited: Set() }` |
+
+</details>
 
 <details>
 <summary>What <code>report-merge</code> says</summary>
