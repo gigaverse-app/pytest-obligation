@@ -1,0 +1,18 @@
+# Frozen evidence: CostCompleteness.pytest_sessionfinish exactly as shipped at
+# 389c5bb84f7ab186fa9c7815c2e15cb9332b67a4, before #208 fixed it. The planted bug
+# `shipped-389c5bb` runs this text in the real _cost_plugin module's namespace and
+# installs it on today's CostCompleteness, so the contract replays the code that
+# actually pruned baselines after incomplete runs. adapter.py checks its SHA-256;
+# never edit it.
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_sessionfinish(self, session: pytest.Session) -> None:
+    stale = stale_cost_entries(self.root, self.visited)
+    if not stale:
+        return
+    if os.environ.get(COST_UPDATE_ENVIRONMENT) == "update":
+        prune_cost_entries(self.root, stale)
+        return
+    self.stale = stale
+    if session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

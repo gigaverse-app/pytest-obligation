@@ -15,6 +15,7 @@ uv run --no-sync pytest verification_tests/quint --quint-require-complete
 | --- | --- | --- |
 | [report-merge](report-merge/README.md) | `profiles.reporting.merge_reports` | [test_report_merge_contract.py](../../verification_tests/quint/test_report_merge_contract.py) |
 | [resource-identity](resource-identity/README.md) | Django reference `ResourceProvider` | [test_resource_identity_contract.py](../../verification_tests/quint/test_resource_identity_contract.py) |
+| [cost-baseline](cost-baseline/README.md) | `CostCompleteness` hooks in `_cost_plugin.py` | [test_cost_baseline_contract.py](../../verification_tests/quint/test_cost_baseline_contract.py) |
 
 To register a topic, add its directory with an `adapter.py` exposing
 `create(root, work, mutant)`, and a test module declaring
