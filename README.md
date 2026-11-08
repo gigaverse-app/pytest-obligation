@@ -213,39 +213,44 @@ relevant pull request: generated histories are replayed through the real code, a
 mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 
 <!-- pytest-quint-connect:start -->
-<!-- pytest-quint-connect:contracts ambiguity,report-merge -->
+<!-- pytest-quint-connect:contracts ambiguity,cost-baseline,report-merge -->
 <a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 2 contracts passed · 41 histories · 6/6 mutants caught" src="https://img.shields.io/badge/Quint_contracts-2_contracts_passed_%C2%B7_41_histories_%C2%B7_6%2F6_mutants_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 3 contracts passed · 65 histories · 9/9 mutants caught" src="https://img.shields.io/badge/Quint_contracts-3_contracts_passed_%C2%B7_65_histories_%C2%B7_9%2F9_mutants_caught-brightgreen"></a>
 
 <details>
-<summary>✅ 2 contracts · 49/49 cases · 6/6 mutants caught · 41 histories</summary>
+<summary>✅ 3 contracts · 77/77 cases · 9/9 mutants caught · 65 histories</summary>
 
 | | <img width="2000" height="1" align="right" alt="">Contract | Cases passed | [Mutants caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") |
 | :-: | :-- | --: | --: |
 | ✅ | `ambiguity` `verification_tests/quint/test_ambiguity_contract.py::test_ambiguity`<br><sub>20 histories (4 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 24/24 | 3/3 |
+| ✅ | `cost-baseline` `verification_tests/quint/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>24 histories (8 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 28/28 | 3/3 |
 | ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 
 </details>
 
 <details>
-<summary>🐞 2 real bugs found by these contracts</summary>
+<summary>🐞 3 real bugs found by these contracts</summary>
 
 | Contract | <img width="2000" height="1" align="right" alt="">Bug | Fixed in | Regression test |
 | :-- | :-- | :-- | :-- |
 | `ambiguity` | Profile C's reference machine re-armed a settled row on the next reaper sweep, putting an already-applied effect back into due work; invariant 6 never ran the reaper on settled work, so adopters with the same reaper passed<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, attempt, expire, resolve, evidence and a second sweep against the real InMemoryMachine · mutant `shipped-9aa6ff2` reintroduces it: 3 of 20 histories diverge</sub> | #218 | <sub>`package/tests/core/profiles/test_crash_ambiguity.py`<br>`::test_the_reaper_leaves_settled_work_settled`</sub> |
+| `cost-baseline` | Running with OBLIGATION_COST_BASELINE=update after an incomplete run (failed collection, deselection, early exit, failure, collect-only or xdist) deleted every baseline entry that run did not measure<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): baselineDeletionWitnessTest reaches the deletion after a collection error · mutant `shipped-389c5bb` reintroduces it: 19 of 24 histories diverge</sub> | #208 | <sub>`package/tests/core/test_costs.py`<br>`::test_incomplete_update_does_not_retire_unmeasured_contracts`</sub> |
 | `report-merge` | A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · mutant `shipped-389c5bb` reintroduces it: 16 of 21 histories diverge</sub> | #210 | <sub>`package/tests/core/test_profile_coverage.py`<br>`::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`</sub> |
 
 </details>
 
 <details>
-<summary>🧪 6 mutants (planted fake bugs), all caught</summary>
+<summary>🧪 9 mutants (planted fake bugs), all caught</summary>
 
 | Contract | [Mutant](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") | <img width="2000" height="1" align="right" alt="">What it breaks | Caught by | At |
 | :-- | :-- | :-- | :-- | :-- |
 | `ambiguity` | `shipped-9aa6ff2` | The exact InMemoryMachine.resolve_stalled shipped at 9aa6ff2, before the fix: settling clears the attempt, so the next sweep re-arms the settled row READY and its applied effect becomes due work again<br><sub>reintroduces a real bug found earlier</sub> | `witness-settledStaysSettledTest` | state 5, after `resolve()` |
 | `ambiguity` | `blind-retry` | The reaper re-arms every dead claim, including one whose provider call may already have applied | `witness-settledStaysSettledTest` | state 3, after `resolve()` |
 | `ambiguity` | `ambiguous-redispatch` | Ambiguous rows appear in the ordinary due-work selection, so the sweep re-sends a maybe-applied effect | `witness-settledStaysSettledTest` | state 3, after `resolve()` |
+| `cost-baseline` | `shipped-389c5bb` | The exact CostCompleteness.pytest_sessionfinish shipped at 389c5bb, before the fix: update mode prunes every unmeasured entry at session end, even after a failed collection, filter or crash<br><sub>reintroduces a real bug found earlier</sub> | `witness-failedCollectionPreservesTest` | state 2, after `finishUpdate(collected=0, status=2)` |
+| `cost-baseline` | `ignore-deselection` | Deselected tests are not recorded as incomplete, so a filtered run can retire entries its deselected tests would have measured | `witness-skippedRunPreservesTest` | state 2, after `finishUpdate(collected=1, status=0)` |
+| `cost-baseline` | `disable-retirement` | Pruning never happens, so a complete run cannot retire a contract no test measures any more | `witness-retirementControlTest` | state 2, after `finishUpdate(collected=1, status=0)` |
 | `report-merge` | `shipped-389c5bb` | The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard<br><sub>reintroduces a real bug found earlier</sub> | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
 | `report-merge` | `incremental-admission` | Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
 | `report-merge` | `replace-case-identity` | After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence | `witness-compatibleRepeatedEvidenceTest` | state 1, after `merge(location='later-suite', mismatch='', payload='passed')` |
@@ -281,6 +286,40 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 | `4` | `evidence()` | `attempt: true → false`<br>`state: "UNKNOWN" → "SENT"` |
 | `5` | `resolve()` | unchanged |
 | `6` | `inspect()` | unchanged |
+
+</details>
+
+<details open>
+<summary>What <code>cost-baseline</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `init`: Create actual pytest Config/Session, CostCompleteness, and two-entry baseline file.
+- `collectionError`: CostCompleteness.pytest_collectreport with actual failed pytest.CollectReport.
+- `skipOrDeselect`: Passed pytest.TestReport phases followed by pytest_deselected with a pytest.Item.
+- `earlySuccessfulExit`: One actual completed TestReport sequence; finish input says two collected tests.
+- `testFailure`: Actual failed call report and passed teardown; final TESTS_FAILED status.
+- `collectOnly`: Instantiate CostCompleteness with Config.option.collectonly.
+- `distributedRun`: Instantiate with Config.option.numprocesses=2; actual measured TestReport sequence.
+- `completeRun`: Actual passed TestReport sequence with obligation_cost_contract property.
+- `emptyCollection`: No report; final NO_TESTS_COLLECTED status.
+- `finishUpdate`: Call real CostCompleteness.pytest_sessionfinish with actual pytest.Session inputs.
+- `inspect`: Observe baseline via load_cost_baseline and real plugin visited/finished fields; no repeated hook.
+
+**Invariant** `incompletePreservesBaseline`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `failedCollectionPreservesTest`, `skippedRunPreservesTest`, `earlyExitPreservesTest`, `failurePreservesTest`, `collectionOnlyPreservesTest`, `distributedRunPreservesTest`, `retirementControlTest`, `emptyRetirementControlTest`.
+
+**Bounds**: seed `1` · max_samples `64` · max_steps `6` · n_traces `16`.
+
+**Witness `failedCollectionPreservesTest`, step by step**: the observation the model starts from, then what it expects each action to change.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `init(collected=0, status=0)` | `{ baseline: Set("required", "retired"), finished: 0, visited: Set() }` |
+| `1` | `collectionError(collected=0, status=2)` | unchanged |
+| `2` | `finishUpdate(collected=0, status=2)` | unchanged |
+| `3` | `inspect(collected=0, status=2)` | unchanged |
 
 </details>
 

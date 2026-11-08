@@ -224,6 +224,55 @@ def test_a_full_update_run_prunes_entries_no_test_measured(
     assert [entry.contract for entry in load_cost_baseline(pytester.path).costs] == ["kept"]
 
 
+@pytest.mark.parametrize(
+    ("source", "arguments"),
+    [
+        ("def broken(:", []),
+        ("import pytest\npytest.skip('unavailable', allow_module_level=True)", []),
+        ("def test_failure():\n    assert False", []),
+        ("import pytest\ndef test_skip():\n    pytest.skip('unavailable')", []),
+        ("def test_other(): pass", ["-k", "kept"]),
+        ("def test_other(): pass", ["--collect-only"]),
+        ("import pytest\ndef test_exit():\n    pytest.exit('stopped', returncode=0)", []),
+    ],
+    ids=["collection-error", "collection-skip", "failure", "skip", "deselection", "collect-only", "early-success-exit"],
+)
+def test_incomplete_update_does_not_retire_unmeasured_contracts(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, source: str, arguments: list[str]
+) -> None:
+    pytester.makepyfile(test_incomplete=source)
+    baseline = pytester.path / COST_BASELINE
+    baseline.write_text(_STALE_BASELINE, encoding="utf-8")
+    monkeypatch.setenv(COST_UPDATE_ENVIRONMENT, "update")
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    pytester.runpytest_subprocess("--obligation-cost-baseline-complete", "-p", "no:xdist", *arguments)
+    assert baseline.read_text(encoding="utf-8") == _STALE_BASELINE
+
+
+def test_complete_empty_update_can_retire_the_last_contract(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytester.makepyfile("# All cost tests have deliberately been retired.\n")
+    (pytester.path / COST_BASELINE).write_text(_STALE_BASELINE, encoding="utf-8")
+    monkeypatch.setenv(COST_UPDATE_ENVIRONMENT, "update")
+    result = pytester.runpytest_subprocess("--obligation-cost-baseline-complete", "-p", "no:xdist")
+    assert result.ret == pytest.ExitCode.NO_TESTS_COLLECTED
+    assert load_cost_baseline(pytester.path).costs == []
+
+
+@pytest.mark.parametrize("crash", [False, True], ids=["complete-workers", "lost-worker"])
+def test_distributed_update_cannot_prune_even_without_measurements(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, crash: bool
+) -> None:
+    pytester.makepyfile("import os\ndef test_worker():\n    " + ("os._exit(1)" if crash else "pass"))
+    baseline = pytester.path / COST_BASELINE
+    baseline.write_text(_STALE_BASELINE, encoding="utf-8")
+    monkeypatch.setenv(COST_UPDATE_ENVIRONMENT, "update")
+    result = pytester.runpytest_subprocess("--obligation-cost-baseline-complete", "-n", "1", "--max-worker-restart=0")
+    assert result.ret == (pytest.ExitCode.TESTS_FAILED if crash else pytest.ExitCode.OK)
+    assert baseline.read_text(encoding="utf-8") == _STALE_BASELINE
+
+
 def test_an_unrecorded_contract_cannot_pass_by_being_absent(tmp_path: Path) -> None:
     with pytest.raises(AssertionError, match=f"no recorded cost.*{COST_UPDATE_ENVIRONMENT}=update"):
         assert_statement_cost("new path", ["read work"], root=tmp_path)
