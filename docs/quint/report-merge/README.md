@@ -40,7 +40,7 @@ Implementation: [merge API](../../../package/src/pytest_obligation/profiles/repo
 
 ## Repeatable sensitivity controls
 
-The normal command replays the **same emitted traces** against both fixed code and these deliberate implementation mutants; only `ReplayMismatch` counts as detection. Import/setup exceptions do not count.
+The normal command replays the **same emitted traces** against both fixed code and these deliberate implementation mutants; only an observed-state mismatch counts as detection. Import/setup exceptions do not count.
 
 - `incremental-admission` compiles the current real `merge_reports` source with its commit loop moved inside preflight and new suites admitted immediately. This restores the old mutation-before-late-validation defect; target evidence/new-suite admission diverges from the emitted expected state.
 - `replace-case-identity` is an explicit post-call output mutation: after the real compatible merge, replace a retained case by an equal deep copy. It tests whether observation checks retained object identity as well as values. This is not presented as original production source.
