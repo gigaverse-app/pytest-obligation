@@ -87,12 +87,12 @@ jobs:
           uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
           --quint-require-complete -o quint_required_contracts=report-merge
           --junitxml=.artifacts/quint-connect/junit.xml
-      # One sticky PR comment per run (what ran, what diverged, how to reproduce it), and a failure
-      # when README.md's contract block no longer matches complete receipts. Pinned to the commit
-      # that added the report; switch to @v1 once pytest-quint-connect 1.0 publishes that tag.
+      # One sticky PR comment per run: bugs the contract found, planted bugs it catches, what
+      # the model claims, and for any failure the diverging state and a replay command. Fails
+      # when README.md's contract block no longer matches complete receipts.
       - name: Contract report
         if: ${{ !cancelled() }}
-        uses: gigaverse-app/pytest-quint-connect/report@6dd9780f2274877bbaa1adfe130f8592c4f3ecbb
+        uses: gigaverse-app/pytest-quint-connect/report@v1
       - uses: actions/upload-artifact@v7
         if: always()
         with:

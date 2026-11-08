@@ -1,10 +1,13 @@
 """pytest-quint-connect driver: apply Quint events to the current checkout's real report merge API."""
 
 import ast
+import hashlib
 import inspect
 import sys
 from pathlib import Path
 from typing import Any
+
+SHIPPED_389C5BB_SHA256 = "964d808f9a012748c9f926bbce853aaf06f5da1e8dad64d1fbe5100156f8b120"
 
 
 def create(root: Path, work: Path, mutant: str | None = None):
@@ -44,6 +47,15 @@ def create(root: Path, work: Path, mutant: str | None = None):
         source.write_text(ast.unparse(tree) + "\n")
         namespace = dict(reporting.__dict__)
         exec(compile(tree, str(source), "exec"), namespace)
+        merge = namespace["merge_reports"]
+    elif mutant == "shipped-389c5bb":
+        # The exact pre-fix merge_reports, run in the real module's namespace. The hash keeps
+        # this frozen evidence from being edited until it agrees with the model.
+        shipped = Path(__file__).with_name("merge_reports-389c5bb.py.txt")
+        text = shipped.read_bytes()
+        assert hashlib.sha256(text).hexdigest() == SHIPPED_389C5BB_SHA256, f"{shipped} was edited"
+        namespace = dict(reporting.__dict__)
+        exec(compile(text, str(shipped), "exec"), namespace)
         merge = namespace["merge_reports"]
     elif mutant not in (None, "replace-case-identity"):
         raise ValueError(f"unknown implementation mutant: {mutant}")

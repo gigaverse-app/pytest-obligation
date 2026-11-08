@@ -214,11 +214,50 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 
 <!-- pytest-quint-connect:start -->
 <!-- pytest-quint-connect:contracts report-merge -->
-<a href="https://github.com/gigaverse-app/pytest-quint-connect"><img alt="Quint contracts: 1 contract passed · 21 histories · 2/2 mutants caught" src="https://img.shields.io/badge/Quint_contracts-1_contract_passed_%C2%B7_21_histories_%C2%B7_2%2F2_mutants_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-| | Contract | Histories | Cases passed | Mutants caught | Actions covered | Quint |
-| :-: | :-- | --: | --: | --: | :-: | :-- |
-| ✅ | `report-merge`<br><sub>`verification_tests/quint/test_report_merge_contract.py::test_report_merge`</sub> | 21<br><sub>5 witnesses · 16 samples · seed 20261107</sub> | 24/24 | 2/2 | ✅ | `0.33.1` |
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug"><img alt="Quint contracts: 1 contract passed · 21 histories · 3/3 planted bugs caught" src="https://img.shields.io/badge/Quint_contracts-1_contract_passed_%C2%B7_21_histories_%C2%B7_3%2F3_planted_bugs_caught-brightgreen"></a>
+
+| | Contract | Cases passed | [Planted bugs caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") |
+| :-: | :-- | --: | --: |
+| ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+
+**Bugs this contract found**
+
+1. **A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available.** Fixed in #210 · found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · regression test `package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`. 16 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard) reintroduces it; first caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+
+**[Planted bugs](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") this contract catches**
+
+- `incremental-admission`: Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function. Caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+- `replace-case-identity`: After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence. Caught by `witness-compatibleRepeatedEvidenceTest` at state 1, after `merge(location='later-suite', mismatch='', payload='passed')`.
+
+<details>
+<summary>What <code>report-merge</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `init`: Construct real SuiteCoverage / ProfileCoverage / CaseEvidence fixtures; no production merge guard patched
+- `merge`: profiles.reporting.merge_reports(target, compatible shard), direct call
+- `reject`: profiles.reporting.merge_reports(target, shard with indicated late mismatch), observe actual AssertionError and state
+- `inspect`: SuiteCoverage.verified, CaseEvidence.outcomes and retained object references read without mutation
+
+**Invariant** `contract`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `repeatedLateRejectionTest`, `compatibleRepeatedEvidenceTest`, `lateRejectionRetainsPriorSuccessTest`, `failedRepeatCannotBecomeVerifiedTest`, `interruptedRepeatRevokesSuccessTest`.
+
+**Bounds**: seed `20261107` · max_samples `150` · max_steps `6` · n_traces `16`.
+
+**Witness `repeatedLateRejectionTest`, step by step**: what the model expects the code to show after each action.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `init(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `1` | `reject(location='later-suite', mismatch='family', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `2` | `reject(location='later-suite', mismatch='debt', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `3` | `reject(location='same-suite', mismatch='declaration', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `4` | `inspect(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+
+</details>
 
 <sub>Generated by [pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) from contract receipts; [what a passing run proves](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/limits.md).</sub>
 <!-- pytest-quint-connect:end -->
