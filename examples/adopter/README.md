@@ -83,3 +83,5 @@ a published notice is complete even if its courtesy alert is lost. The generated
 connection, then delivers the real worker and requires the alert without a product
 change. A mutation that makes the worker edit the notice fails. The configured
 `defer_notice` bridge identifies the injected queue port for static coverage.
+
+<!-- docs-only routing probe -->

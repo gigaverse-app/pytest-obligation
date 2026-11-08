@@ -216,3 +216,5 @@ accepted backlog. [Contributor setup and cleanup workflow](CONTRIBUTING.md#dupli
 
 [Accepted backlog](.dry-lint/baseline.json) · [Weekly audit](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/dry-lint-audit.yml)
 <!-- dry-lint-progress:end -->
+
+<!-- docs-only routing probe -->

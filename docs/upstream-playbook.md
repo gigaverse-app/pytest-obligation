@@ -219,3 +219,5 @@ threads close: maintainers' answers decide what to write next.
 - [ ] harness gap closed upstream first, released, pins raised
 - [ ] authorized reports reuse existing issues; assistance and affiliation disclosed; no duplicate promotional comments
 - [ ] CI watched to green, or red explained
+
+<!-- docs-only routing probe -->
