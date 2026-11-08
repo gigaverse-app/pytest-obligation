@@ -216,26 +216,43 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 <!-- pytest-quint-connect:contracts fenced-lease,report-merge -->
 <a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug"><img alt="Quint contracts: 2 contracts passed · 42 histories · 6/6 planted bugs caught" src="https://img.shields.io/badge/Quint_contracts-2_contracts_passed_%C2%B7_42_histories_%C2%B7_6%2F6_planted_bugs_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 2 contracts passed · 42 histories · 6/6 mutants caught" src="https://img.shields.io/badge/Quint_contracts-2_contracts_passed_%C2%B7_42_histories_%C2%B7_6%2F6_mutants_caught-brightgreen"></a>
 
-| | Contract | Cases passed | [Planted bugs caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") |
+<details>
+<summary>✅ 2 contracts · 50/50 cases · 6/6 mutants caught · 42 histories</summary>
+
+| | <img width="2000" height="1" align="right" alt="">Contract | Cases passed | [Mutants caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") |
 | :-: | :-- | --: | --: |
 | ✅ | `fenced-lease` `verification_tests/quint/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 | ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 
-**Bugs these contracts found**
-
-1. `fenced-lease` · **Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window.** Fixed in #217 · found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · regression test `package/tests/core/profiles/test_bounded_ownership.py::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`. 3 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-9aa6ff2` (The exact InMemoryOwner re-arm methods shipped at 9aa6ff2, before the fix: the row returns to READY but keeps the previous owner's token, which can still write or renew it) reintroduces it; first caught by `witness-reapedOwnerCannotWriteTest` at state 4, after `write(token='last')`.
-1. `report-merge` · **A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available.** Fixed in #210 · found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · regression test `package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`. 16 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard) reintroduces it; first caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
-
-**[Planted bugs](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") these contracts catch**
-
-- `fenced-lease` · `reaper-ignores-lease`: The reaper re-arms any claimed row, taking it from an owner whose lease is still live. Caught by `witness-reapedOwnerCannotWriteTest` at state 3, after `reclaim(token='')`.
-- `fenced-lease` · `unfenced-renewal`: renew_lease ignores the token, so a dead owner can keep a lease alive. Caught by `witness-reapedOwnerCannotRenewTest` at state 4, after `renew(token='last')`.
-- `report-merge` · `incremental-admission`: Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function. Caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
-- `report-merge` · `replace-case-identity`: After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence. Caught by `witness-compatibleRepeatedEvidenceTest` at state 1, after `merge(location='later-suite', mismatch='', payload='passed')`.
+</details>
 
 <details>
+<summary>🐞 2 real bugs found by these contracts</summary>
+
+| Contract | <img width="2000" height="1" align="right" alt="">Bug | Fixed in | Regression test |
+| :-- | :-- | :-- | :-- |
+| `fenced-lease` | Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · mutant `shipped-9aa6ff2` reintroduces it: 3 of 21 histories diverge</sub> | #217 | <sub>`package/tests/core/profiles/test_bounded_ownership.py`<br>`::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`</sub> |
+| `report-merge` | A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · mutant `shipped-389c5bb` reintroduces it: 16 of 21 histories diverge</sub> | #210 | <sub>`package/tests/core/test_profile_coverage.py`<br>`::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`</sub> |
+
+</details>
+
+<details>
+<summary>🧪 6 mutants (planted fake bugs), all caught</summary>
+
+| Contract | [Mutant](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") | <img width="2000" height="1" align="right" alt="">What it breaks | Caught by | At |
+| :-- | :-- | :-- | :-- | :-- |
+| `fenced-lease` | `shipped-9aa6ff2` | The exact InMemoryOwner re-arm methods shipped at 9aa6ff2, before the fix: the row returns to READY but keeps the previous owner's token, which can still write or renew it<br><sub>reintroduces a real bug found earlier</sub> | `witness-reapedOwnerCannotWriteTest` | state 4, after `write(token='last')` |
+| `fenced-lease` | `reaper-ignores-lease` | The reaper re-arms any claimed row, taking it from an owner whose lease is still live | `witness-reapedOwnerCannotWriteTest` | state 3, after `reclaim(token='')` |
+| `fenced-lease` | `unfenced-renewal` | renew_lease ignores the token, so a dead owner can keep a lease alive | `witness-reapedOwnerCannotRenewTest` | state 4, after `renew(token='last')` |
+| `report-merge` | `shipped-389c5bb` | The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard<br><sub>reintroduces a real bug found earlier</sub> | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
+| `report-merge` | `incremental-admission` | Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
+| `report-merge` | `replace-case-identity` | After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence | `witness-compatibleRepeatedEvidenceTest` | state 1, after `merge(location='later-suite', mismatch='', payload='passed')` |
+
+</details>
+
+<details open>
 <summary>What <code>fenced-lease</code> says</summary>
 
 **Actions**, and the code each one drives:
@@ -256,20 +273,20 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 
 **Bounds**: seed `20261108` · max_samples `200` · max_steps `8` · n_traces `16`.
 
-**Witness `reapedOwnerCannotWriteTest`, step by step**: what the model expects the code to show after each action.
+**Witness `reapedOwnerCannotWriteTest`, step by step**: the observation the model starts from, then what it expects each action to change.
 
 | State | Action | Model expects |
 | --: | :-- | :-- |
 | `0` | `init(token='')` | `{ accepted: false, lease: "none", state: "READY" }` |
-| `1` | `claim(token='')` | `{ accepted: true, lease: "live", state: "CLAIMED" }` |
-| `2` | `expire(token='')` | `{ accepted: false, lease: "expired", state: "CLAIMED" }` |
-| `3` | `reclaim(token='')` | `{ accepted: true, lease: "expired", state: "READY" }` |
-| `4` | `write(token='last')` | `{ accepted: false, lease: "expired", state: "READY" }` |
-| `5` | `inspect(token='')` | `{ accepted: false, lease: "expired", state: "READY" }` |
+| `1` | `claim(token='')` | `accepted: false → true`<br>`lease: "none" → "live"`<br>`state: "READY" → "CLAIMED"` |
+| `2` | `expire(token='')` | `accepted: true → false`<br>`lease: "live" → "expired"` |
+| `3` | `reclaim(token='')` | `accepted: false → true`<br>`state: "CLAIMED" → "READY"` |
+| `4` | `write(token='last')` | `accepted: true → false` |
+| `5` | `inspect(token='')` | unchanged |
 
 </details>
 
-<details>
+<details open>
 <summary>What <code>report-merge</code> says</summary>
 
 **Actions**, and the code each one drives:
@@ -285,15 +302,15 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 
 **Bounds**: seed `20261107` · max_samples `150` · max_steps `6` · n_traces `16`.
 
-**Witness `repeatedLateRejectionTest`, step by step**: what the model expects the code to show after each action.
+**Witness `repeatedLateRejectionTest`, step by step**: the observation the model starts from, then what it expects each action to change.
 
 | State | Action | Model expects |
 | --: | :-- | :-- |
-| `0` | `init(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
-| `1` | `reject(location='later-suite', mismatch='family', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
-| `2` | `reject(location='later-suite', mismatch='debt', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
-| `3` | `reject(location='same-suite', mismatch='declaration', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
-| `4` | `inspect(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `0` | `init(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: false, identityRetained: true, laterFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, laterSecond: { bad: false, call: 1, collected: true, durationTicks: 3, failureCount: 0, selected: true, setup: 1, teardown: 1 }, laterVerifi…` |
+| `1` | `reject(location='later-suite', mismatch='family', payload='passed')` | `rejected: false → true` |
+| `2` | `reject(location='later-suite', mismatch='debt', payload='passed')` | unchanged |
+| `3` | `reject(location='same-suite', mismatch='declaration', payload='passed')` | unchanged |
+| `4` | `inspect(location='', mismatch='', payload='')` | unchanged |
 
 </details>
 
