@@ -119,6 +119,15 @@ or are removed when `OBLIGATION_COST_BASELINE=update` is set. Each test's
 measured contracts travel on its report, so this works under xdist. Do not pass
 it on filtered runs, which measure only some contracts.
 
+Update-mode pruning requires a serial run with successful collection, no
+deselections or skips, and a successful teardown for every collected test.
+Failures, interruptions, collection-only runs and xdist runs preserve unmeasured
+entries. Measurements already recorded by tests still update their own entries.
+A successful empty collection may retire the last entries (pytest still exits
+with its normal no-tests status). The flag remains your declaration that the
+invocation includes every cost test: pytest cannot detect omitted paths or tests
+excluded by application-specific collection hooks.
+
 ## What a pass means
 
 A pass means the path sent exactly the recorded statements, in this run, against
