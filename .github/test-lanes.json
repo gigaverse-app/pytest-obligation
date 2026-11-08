@@ -262,6 +262,17 @@
         "package/tests/core/test_compatibility.py",
         "package/tests/core/test_package_identity.py"
       ]
+    },
+    "quint": {
+      "roots": [
+        "verification_tests/quint"
+      ],
+      "inputs": [
+        "package/src/pytest_obligation/**",
+        "docs/quint/**",
+        "verification_tests/quint/**",
+        "ci_tests/test_quint_routing.py"
+      ]
     }
   },
   "global_inputs": [

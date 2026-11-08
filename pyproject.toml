@@ -10,6 +10,8 @@ demos = [
 ]
 # Adopters split sessions across workers; the verify option must hold there too.
 xdist = ["pytest-obligation[selftest]"]
+# Maintained Quint contracts run as pytest cases (verification_tests/quint).
+quint = ["pytest-quint-connect>=1.1,<2"]
 dev = [ { include-group = "lint" }, { include-group = "xdist" }]
 
 [tool.uv]
