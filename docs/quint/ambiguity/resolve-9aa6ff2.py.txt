@@ -1,0 +1,13 @@
+# Frozen evidence: InMemoryMachine.resolve_stalled exactly as shipped at 9aa6ff21 (main
+# before this fix). Settling a row clears its open attempt, so this reaper re-arms a settled
+# row READY and its applied effect becomes due work again. The planted bug
+# `shipped-9aa6ff2` installs it on a subclass of today's InMemoryMachine. adapter.py checks
+# this file's SHA-256; never edit it.
+
+def resolve_stalled(self, row_id: int) -> str:
+    row = self.rows[row_id]
+    if row.open_attempt is not None:
+        row.state = "UNKNOWN"
+        return "MARK_UNKNOWN"
+    row.state = "READY"
+    return "REARM_READY"
