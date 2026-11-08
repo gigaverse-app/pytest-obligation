@@ -100,6 +100,9 @@ jobs:
           fromJSON(needs.select-tests.outputs.lanes).quint) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # The Quint contract report's sticky comment.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -118,6 +121,12 @@ jobs:
           uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
           --quint-require-complete -o quint_required_contracts=report-merge
           --junitxml=.artifacts/quint-connect/junit.xml
+      # One sticky PR comment per run (what ran, what diverged, how to reproduce it), and a failure
+      # when README.md's contract block no longer matches complete receipts. Pinned to the commit
+      # that added the report; switch to @v1 once pytest-quint-connect 1.0 publishes that tag.
+      - name: Contract report
+        if: ${{ !cancelled() }}
+        uses: gigaverse-app/pytest-quint-connect/report@6dd9780f2274877bbaa1adfe130f8592c4f3ecbb
       - uses: actions/upload-artifact@v7
         if: always()
         with:
