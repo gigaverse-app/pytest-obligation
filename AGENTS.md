@@ -52,8 +52,8 @@ remain complete checkpoints.
 
 For behavior covered by a registered `docs/quint/*/manifest.json`, review the
 production implementation, current `fixed.qnt`, adapter and action mapping
-together. Run the one-command check in [the replay guide](scripts/quint/README.md)
-before publishing a behavior change. Keep historical `audit.qnt` files immutable,
+together. Run `uv run --no-sync pytest verification_tests/quint --quint-require-complete`
+([guide](docs/quint/README.md)) before publishing a behavior change. Keep historical `audit.qnt` files immutable,
 retain known-bad mutation controls, and investigate drift instead of automatically
 weakening an invariant or expected observation. This applies to registered
 contracts; unrelated changes do not require inventing a new specification.

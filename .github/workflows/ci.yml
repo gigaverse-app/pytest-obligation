@@ -71,23 +71,24 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: npm
-          cache-dependency-path: scripts/quint/package-lock.json
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: '3.12'
-      - run: uv sync --all-packages --locked --no-default-groups --extra debt --extra django --extra celery --group xdist
-      - run: npm ci --prefix scripts/quint --ignore-scripts
+      - run: uv sync --all-packages --locked --no-default-groups --extra debt --extra django --extra celery --group xdist --group quint
+      # pytest-quint-connect installs its locked Quint 0.33.1 with npm, generates every
+      # registered witness and sample, replays them through the real APIs and requires
+      # each declared mutation to be caught. A filtered or partial run fails here.
       - name: Generate model traces and replay production APIs with mutation controls
-        run: uv run --no-sync python scripts/quint/replay.py
-      - name: Require trace bridge negative controls
-        run: uv run --no-sync python -m unittest discover -s scripts/quint -p test_replay.py -v
+        run: >-
+          uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
+          --quint-require-complete -o quint_required_contracts=report-merge
+          --junitxml=.artifacts/quint-connect/junit.xml
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: quint-trace-replay
-          path: .artifacts/quint
+          path: .artifacts/quint-connect
           if-no-files-found: error
 
   lint:

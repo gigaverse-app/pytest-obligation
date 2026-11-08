@@ -1,4 +1,4 @@
-"""Replay Quint events through the current checkout's real report merge API."""
+"""pytest-quint-connect driver: apply Quint events to the current checkout's real report merge API."""
 
 import ast
 import inspect
@@ -93,8 +93,9 @@ def create(root: Path, work: Path, mutant: str | None = None):
                 if name not in self.references:
                     self.references[name] = (suite, dict(suite.profiles["A"].cases))
 
-        def apply(self, event):
-            op = event["op"]
+        def step(self, step):
+            event = step.args
+            op = step.action
             if op == "inspect":
                 return
             if op == "init":

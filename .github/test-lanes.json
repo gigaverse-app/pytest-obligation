@@ -231,10 +231,13 @@
       ]
     },
     "quint": {
+      "roots": [
+        "verification_tests/quint"
+      ],
       "inputs": [
         "package/src/pytest_obligation/**",
         "docs/quint/**",
-        "scripts/quint/**",
+        "verification_tests/quint/**",
         "ci_tests/test_quint_routing.py"
       ]
     }
