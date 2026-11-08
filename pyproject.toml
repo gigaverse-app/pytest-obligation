@@ -11,7 +11,7 @@ demos = [
 # Adopters split sessions across workers; the verify option must hold there too.
 xdist = ["pytest-obligation[selftest]"]
 # Maintained Quint contracts run as pytest cases (verification_tests/quint).
-quint = ["pytest-quint-connect"]
+quint = ["pytest-quint-connect>=0.2,<2"]
 dev = [ { include-group = "lint" }, { include-group = "xdist" }]
 
 [tool.uv]
@@ -43,4 +43,3 @@ members = ["package"]
 
 [tool.uv.sources]
 pytest-obligation = { workspace = true }
-pytest-quint-connect = { git = "https://github.com/gigaverse-app/pytest-quint-connect", rev = "7db65854a1f0ae4c5c4ad5503297d624cf2d3163" }
