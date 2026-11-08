@@ -31,7 +31,37 @@
       "package/pyproject.toml": "197e7f7507e5e55187d99781b4c7a4532cd222fc4ebdda624bb6d62cd3ad60a3",
       "pyproject.toml": "e22f1beebaa72b78345891da5d89dc21a513f9fd40c0f6e4367c844d8f505a92"
     },
-    "global_modules": []
+    "global_modules": [],
+    "global_inputs": [
+      "pyproject.toml",
+      "**/pyproject.toml",
+      "uv.lock",
+      "**/uv.lock",
+      ".python-version",
+      "pytest.ini",
+      "**/pytest.ini",
+      ".pytest.ini",
+      "**/.pytest.ini",
+      "pytest.toml",
+      "**/pytest.toml",
+      ".pytest.toml",
+      "**/.pytest.toml",
+      "requirements*.txt",
+      "requirements*.in",
+      "requirements*.lock",
+      "constraints*.txt",
+      "package/*requirements*.txt",
+      "package/*requirements*.in",
+      "poetry.lock",
+      "pdm.lock",
+      "pixi.lock",
+      "Pipfile",
+      "Pipfile.lock",
+      "pylock*.toml",
+      "setup.py",
+      "setup.cfg",
+      "tox.ini"
+    ]
   },
   "lanes": {
     "core": {
@@ -184,7 +214,8 @@
         "examples/adopter/test_bindings.py"
       ],
       "inputs": [
-        "examples/adopter/**",
+        "examples/adopter/*.py",
+        "examples/adopter/**/*.py",
         "check/**",
         "test/**",
         "report/**",
@@ -220,11 +251,13 @@
         "preview/**"
       ]
     },
-    "wheel": {
+    "package": {
       "inputs": [
         "package/src/**",
         "package/shims/**",
-        "scripts/check_wheel.py",
+        "package/README.md",
+        "package/LICENSE",
+        "scripts/ci/check_metadata.py",
         "scripts/check_core_is_framework_free.py",
         "package/tests/core/test_compatibility.py",
         "package/tests/core/test_package_identity.py"
