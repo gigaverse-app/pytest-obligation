@@ -4,14 +4,23 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from scripts.quint.replay import command
-
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / ".artifacts/source-contracts"
+
+
+def command(arguments: list[str], log: Path, *, timeout: float | None = 180) -> None:
+    """Run one step with merged output logged; a failure carries the output for CI logs."""
+    result = subprocess.run(
+        arguments, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout
+    )
+    log.write_text(result.stdout, encoding="utf-8")
+    if result.returncode:
+        raise RuntimeError(f"command failed ({result.returncode}); see {log}: {' '.join(arguments)}\n{result.stdout}")
 
 
 def main() -> None:
@@ -46,7 +55,17 @@ def main() -> None:
         observed = sorted(case.attrib["name"] for case in cases)
         if not required or observed != required or any(list(case) for case in cases):
             raise RuntimeError(f"runtime enrollment/outcomes changed: expected {required}, observed {observed}")
-        replay = [sys.executable, "scripts/quint/replay.py", "--topic", "report-merge"]
+        replay = [
+            sys.executable,
+            "-m",
+            "pytest",
+            "verification_tests/quint",
+            "-p",
+            "no:cacheprovider",
+            "--quint-require-complete",
+            "-o",
+            "quint_required_contracts=report-merge",
+        ]
         if args.quint:
             replay += ["--quint", str(args.quint.resolve())]
         command(replay, OUTPUT / "generated-replay.log", timeout=None)

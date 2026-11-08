@@ -1,10 +1,16 @@
 {
   "version": 1,
+  "name": "report-merge",
+  "description": "Atomic admission of distributed report evidence through the real merge_reports API.",
+  "root": "../../..",
+  "attest": {
+    "package": "pytest_obligation",
+    "source": "package/src"
+  },
   "module": "report_merge_fixed",
   "invariant": "contract",
   "model": "fixed.qnt",
   "historical": "audit.qnt",
-  "adapter": "adapter.py",
   "sources": [
     "package/src/pytest_obligation/profiles/reporting.py",
     "package/src/pytest_obligation/profiles/coverage.py",

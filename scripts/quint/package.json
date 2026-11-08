@@ -1,8 +1,0 @@
-{
-  "name": "pytest-obligation-quint-contracts",
-  "private": true,
-  "version": "1.0.0",
-  "dependencies": {
-    "@informalsystems/quint": "0.33.1"
-  }
-}

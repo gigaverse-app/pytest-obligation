@@ -25,7 +25,7 @@ class SourceContractRoutingTests(unittest.TestCase):
             "tooling/source-contracts/verifier.patch",
             "docs/source-contracts/report-merge.md",
             "docs/quint/report-merge/adapter.py",
-            "scripts/quint/replay.py",
+            "verification_tests/quint/test_report_merge_contract.py",
         ):
             with self.subTest(path=path):
                 self.assertIn("source_contracts", self.selection(path))
