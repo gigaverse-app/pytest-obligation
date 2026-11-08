@@ -45,7 +45,7 @@
   "bugs_found": [
     {
       "summary": "Profile C's reference machine re-armed a settled row on the next reaper sweep, putting an already-applied effect back into due work; invariant 6 never ran the reaper on settled work, so adopters with the same reaper passed",
-      "fixed_in": "fix/ambiguity-terminal-stays-settled",
+      "fixed_in": "#218",
       "found_by": "a state-machine audit of the references, confirmed by replaying claim, attempt, expire, resolve, evidence and a second sweep against the real InMemoryMachine",
       "regression_test": "package/tests/core/profiles/test_crash_ambiguity.py::test_the_reaper_leaves_settled_work_settled",
       "mutant": "shipped-9aa6ff2"

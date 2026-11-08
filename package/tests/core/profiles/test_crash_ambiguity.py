@@ -165,7 +165,7 @@ class _ReaperReopensSettledWork(_InMemoryMachine):
     """
     Breaks invariant 6 from the recovery side: the reaper re-arms a settled row.
 
-    This was the reference machine itself before this fix. Settling clears the open
+    This was the reference machine itself before #218. Settling clears the open
     attempt, so a later sweep saw a row with no attempt and re-armed it READY: the
     settled effect became due work again and would be sent twice. The monotonicity
     proof only re-applied evidence, so it never ran the reaper on a settled row.
