@@ -107,9 +107,11 @@ MongoDB-only test change runs MongoDB; changes to the shared plugin/runtime,
 shims, locks or CI configuration retain full testing. Explicit full runs and planner failures retain full-suite execution;
 ordinary main pushes use dependency selection.
 
-Changes confined to `package/README.md` or `package/docs/` need packaging checks,
-not live framework test services. Build, metadata and lint checks remain available; installed-wheel runtime and
-compatibility/identity tests follow the wheel lane. CI contract tests follow
+Changes confined to `package/docs/`, the root README, `docs/` prose or the Read the
+Docs site (`documentation/`, its requirements files and `mkdocs.yml`) run no tests,
+builds or smoke checks. `package/README.md` and `package/LICENSE` are embedded in the
+distributions, so they select the package lane: the build, Twine/metadata checks and
+installed-wheel compatibility/identity tests. CI contract tests follow
 the contracts lane, and type checks follow their declared inputs. The
 package prose is not executed by the test lanes. Root `docs/demo.tape` and
 `docs/demo_env.sh` remain demo-lane inputs because the executable README demo
@@ -165,8 +167,9 @@ guidance in `AGENTS.md`; do not commit the backup as another instruction source.
 
 Documentation-only PRs execute zero tests unless a test or lane explicitly
 declares that documentation as an input. This includes CI contract tests,
-installed-wheel smoke and public-action smoke. Metadata/link/build checks may
-still validate documentation without running runtime tests. Declare execution
+installed-wheel smoke, package builds and public-action smoke. Local link checks
+and the documentation site build still validate documentation; the package build
+and metadata checks run only when the package lane is selected. Declare execution
 workflows, selector configuration, helpers, locks and non-import inputs; missing
 history or failed planning must execute the full affected lanes and fail the
 required planning gate. Ordinary PRs and pushes use selection; manual/release/scheduled/full overrides
@@ -185,6 +188,15 @@ The staged `dry-lint` hook uses Sonnet and the same `.dry-lint/baseline.json` as
 The `dry-lint-trailers` hook runs at `prepare-commit-msg`: duplicates fixed before the first push are
 recorded in the commit message and counted by the PR sticky. The hook environment uses Python 3.13,
 independently of the project's runtime environments.
+
+Model duplication review also runs by default in the staged hook and PR check, starting with dry-lint 1.4.0.
+Use `rev: v1` for hooks and `@v1` for the Action and CLI installs. If a cached hook environment still runs an
+older version, run `uvx pre-commit clean` and rerun the hook.
+With our Sonnet setup, model candidates require source review; Sonnet judges functions, and no TypeSafe key
+is required for model detection. Review declarations and consumers before accepting or dismissing a pair.
+The function baseline and weekly function sweep do not certify the existing model inventory. Follow
+[model adoption](https://github.com/gigaverse-app/dry-lint/blob/main/docs/model-adoption.md) for its separate
+reviewed baseline. The explicit opt-out is `--no-models` locally or `models: false` on the Action.
 
 The required judged `dry-lint` check rejects new blocking duplicates, incomplete judging and baseline
 widening. Forks first run `dry-lint detect`, then a trusted workflow judges the artifact. Read both

@@ -9,13 +9,15 @@ conformance suite to individual tests.
 
 | Change | Validation |
 | --- | --- |
-| Root/package README or prose in `package/docs/` | Local documentation links, lint, wheel/sdist build and metadata validation; runtime checks only for explicitly declared document inputs |
+| Root README, `docs/` prose, the Read the Docs site (`documentation/`, including its requirements files, `mkdocs.yml`), example READMEs or `package/docs/` | Local documentation links, lint and the documentation site build; no tests, builds or smoke checks unless a test declares the document |
+| Package README or LICENSE (embedded in the distributions) | Package lane: wheel/sdist build, Twine and metadata validation, installed-wheel smoke |
 | Python source or tests | Import-dependent complete lanes, explicit integration inputs, and type checking |
 | Demo recording tape/environment | Complete demo lane, including the executable GIF assertions |
 | Adoption evidence validator | Its direct workflow consumers and Python-dependent guard tests |
 | Published `check` action | Demo, Saleor, and example action lanes |
 | Published `test` action | Example action lane |
-| Lock files, project configuration, or GitHub workflow/configuration | All lanes |
+| Lock files, project/pytest configuration, `.python-version`, or GitHub workflow/configuration | All lanes |
+| Publisher container requirements (`publish/requirements.txt`) | Action and contract lanes |
 | Ordinary main push | Affected lanes, including zero runtime tests for unrelated prose |
 | Manual dispatch, rerun, `test:full` label, or missing history/planning proof | All lanes |
 
@@ -29,11 +31,22 @@ for additional capabilities and their opt-in boundaries. Retained timing history
 stays off here: whole-lane conformance uses the existing matrix/xdist strategy,
 and a scheduling change needs measurements first.
 
-The build and lightweight documentation checks always run. The link checker
+Only planning, lint, `ci-esta check-workflow`, the local link check, the
+documentation site build and the `Validation gate` run on every PR. The link checker
 validates inline local Markdown file destinations, excluding fenced examples and
 template substitution fields. It does not validate remote URLs, anchors, HTML,
-or reference-style links. Twine validates both distribution descriptions, and a
-separate check verifies that both archives contain the current package README.
+or reference-style links. The `build` job follows the `package` lane: package
+sources, `package/README.md` and `package/LICENSE` (pyproject's `readme` and
+`license-files`), the metadata checker, and global lock/configuration inputs.
+There, Twine validates both distribution descriptions, and a separate check
+verifies that both archives contain the current package README.
+
+The selector's built-in environment policy treats any `*requirements*.txt` as a
+test environment, which made a Read the Docs dependency bump run every lane.
+`graph.global_inputs` therefore names this repository's environment files:
+every `pyproject.toml`, `uv.lock` and pytest configuration, `.python-version`, and
+alternate installer files at the root or in `package/`. `documentation/` is not
+among them; the documentation workflow installs its requirements itself.
 
 Package implementation changes retain explicit compatibility coverage across
 integrations, including Due's external checkout, whose tests are not present in
@@ -45,8 +58,9 @@ local dependencies. Do not replace these boundaries with a blanket `docs/**`,
 
 `ci-contracts` installs the selector revision referenced by the
 workflow's action, resolved by `scripts/ci/selector_requirement.py`. It creates
-real Git snapshots of this repository and verifies README/guide changes, demo
-inputs, validator consumers, action consumers, Python changes, test deletion,
+real Git snapshots of this repository and verifies README/guide changes, a
+documentation-only commit (including `documentation/requirements.txt`) that
+selects no lane, package-distribution inputs, demo inputs, validator consumers, action consumers, Python changes, test deletion,
 global environment changes, missing history, and explicit full checkpoints.
 Failures block the PR; they must be fixed rather than bypassed with `test:full`.
 
