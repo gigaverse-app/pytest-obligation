@@ -121,7 +121,9 @@ class _RecordsTheAttemptAfterTheCall(_InMemoryMachine):
 class _MarksEverythingAmbiguous(_InMemoryMachine):
     """Breaks invariant 3: safe but useless — nothing is ever retried."""
 
-    def resolve_stalled(self, row_id: int) -> str:
+    def resolve_stalled(self, row_id: int) -> str | None:
+        if self.rows[row_id].state in _TERMINAL:
+            return super().resolve_stalled(row_id)  # isolate this variant's defect from invariant 6
         self.rows[row_id].state = "UNKNOWN"
         return "MARK_UNKNOWN"
 
@@ -129,7 +131,9 @@ class _MarksEverythingAmbiguous(_InMemoryMachine):
 class _RetriesEverything(_InMemoryMachine):
     """Breaks invariant 2: a maybe-applied effect is re-run blind."""
 
-    def resolve_stalled(self, row_id: int) -> str:
+    def resolve_stalled(self, row_id: int) -> str | None:
+        if self.rows[row_id].state in _TERMINAL:
+            return super().resolve_stalled(row_id)  # isolate this variant's defect from invariant 6
         self.rows[row_id].state = "READY"
         return "REARM_READY"
 
@@ -155,6 +159,25 @@ class _ReopensSettledWork(_InMemoryMachine):
         row = self.rows[row_id]
         row.state = "SENT" if row.state != "SENT" else "READY"
         return row.state
+
+
+class _ReaperReopensSettledWork(_InMemoryMachine):
+    """
+    Breaks invariant 6 from the recovery side: the reaper re-arms a settled row.
+
+    This was the reference machine itself before this fix. Settling clears the open
+    attempt, so a later sweep saw a row with no attempt and re-armed it READY: the
+    settled effect became due work again and would be sent twice. The monotonicity
+    proof only re-applied evidence, so it never ran the reaper on a settled row.
+    """
+
+    def resolve_stalled(self, row_id: int) -> str:
+        row = self.rows[row_id]
+        if row.open_attempt is not None:
+            row.state = "UNKNOWN"
+            return "MARK_UNKNOWN"
+        row.state = "READY"
+        return "REARM_READY"
 
 
 def _verdicts(make_machine: Callable[[], _InMemoryMachine]) -> set[str]:
@@ -225,12 +248,33 @@ def test_the_conforming_machine_passes_every_proof() -> None:
             {assert_terminal_is_monotonic.__name__},
             id="terminal-reopened",
         ),
+        pytest.param(
+            _ReaperReopensSettledWork,
+            {assert_terminal_is_monotonic.__name__},
+            id="reaper-reopens-settled-work",
+        ),
     ],
 )
 def test_each_broken_machine_fails_exactly_its_own_proofs(
     make_machine: Callable[[], _InMemoryMachine], expected_failures: set[str]
 ) -> None:
     assert _verdicts(make_machine) == expected_failures
+
+
+def test_the_reaper_leaves_settled_work_settled() -> None:
+    """
+    Regression: once late evidence settles a row, a later reaper sweep must not
+    re-arm it. Before the fix it went back to READY and into the due-work set.
+    """
+    machine = _InMemoryMachine()
+    row_id, token = machine.claim()
+    machine.start_attempt(row_id, token)
+    machine.expire_lease(row_id)
+    assert machine.resolve_stalled(row_id) == "MARK_UNKNOWN"
+    assert machine.apply_late_evidence(row_id) == "SENT"
+    machine.resolve_stalled(row_id)
+    assert machine.state_of(row_id) == "SENT"
+    assert row_id not in machine.due_work_ids()
 
 
 def test_the_binding_guard_rejects_a_test_module_machine() -> None:
