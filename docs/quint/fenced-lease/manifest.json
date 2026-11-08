@@ -49,7 +49,7 @@
   "bugs_found": [
     {
       "summary": "Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window",
-      "fixed_in": "fix/fence-reaped-owner",
+      "fixed_in": "#217",
       "found_by": "a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner",
       "regression_test": "package/tests/core/profiles/test_bounded_ownership.py::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again",
       "mutant": "shipped-9aa6ff2"

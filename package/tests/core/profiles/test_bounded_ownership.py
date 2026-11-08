@@ -202,7 +202,7 @@ class _KeepsTokenThroughReclaim(_InMemoryOwner):
     Breaks invariants 3 and 6 in the window recovery opens: the reaper re-arms
     the row but leaves the dead owner's token current until the next claim.
 
-    This was the reference owner itself before this fix. The stale
+    This was the reference owner itself before #217. The stale
     proofs used to claim again right after reclaiming, so they only ever tried
     the old token once it had been rotated, and never saw this window. A worker
     that wakes up in it can renew a lease on a READY row or write it to
