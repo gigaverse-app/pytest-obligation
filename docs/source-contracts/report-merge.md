@@ -22,7 +22,7 @@ The bootstrap fetches the exact public upstream commit in
 committed reviewed patch and installs its hash-locked dependencies. It compares
 the installed compiler's Python source tree with the reviewed tree. No model API,
 secret or remote write is used. The Dafny installer verifies the pinned 4.11.0
-archive checksum. Quint's existing runner installs integrity-locked 0.33.1.
+archive checksum. pytest-quint-connect installs its locked Quint 0.33.1.
 
 The check command requires all three forms of evidence:
 
