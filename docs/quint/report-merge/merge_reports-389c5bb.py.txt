@@ -1,0 +1,41 @@
+# Frozen evidence: merge_reports exactly as shipped at 389c5bb84f7ab186fa9c7815c2e15cb9332b67a4,
+# before #210 fixed it. The planted bug `shipped-389c5bb` runs this text in the real
+# reporting module's namespace, so the contract replays the code that actually had the bug.
+# Kept as .txt so linters and duplicate checks leave it unchanged. adapter.py checks its
+# SHA-256; never edit it.
+
+def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCoverage]) -> None:
+    """Merge distributed evidence only when workers agree on the same declaration and expected cases."""
+    for suite, report in incoming.items():
+        if suite not in target:
+            target[suite] = report
+            continue
+        current = target[suite]
+        assert current.source == report.source, f"{suite}: workers disagree on source location"
+        assert (current.exploration is None) == (report.exploration is None)
+        assert current.name == report.name and current.profiles.keys() == report.profiles.keys()
+        for letter, profile in report.profiles.items():
+            existing = current.profiles[letter]
+            assert (existing.title, existing.assessment, existing.families, existing.cases.keys()) == (
+                profile.title,
+                profile.assessment,
+                profile.families,
+                profile.cases.keys(),
+            ), f"{suite}/{letter}: workers disagree on expected profile coverage"
+        for existing_cases, incoming_cases in zip(
+            (*current.case_groups(), current.exploration or {}),
+            (*report.case_groups(), report.exploration or {}),
+            strict=True,
+        ):
+            assert existing_cases.keys() == incoming_cases.keys(), f"{suite}: workers disagree on expected checks"
+            for case_id, case in incoming_cases.items():
+                old = existing_cases[case_id]
+                assert old.debt == case.debt, f"{suite}/{case_id}: workers disagree on declared debt"
+                assert old.family == case.family
+                assert old.declaration == case.declaration, f"{suite}/{case_id}: workers disagree on declaration"
+                old.collected |= case.collected
+                old.selected |= case.selected
+                for phase, outcomes in case.outcomes.items():
+                    old.outcomes.setdefault(phase, []).extend(outcomes)
+                old.failures.extend(case.failures)
+                old.durations.extend(case.durations)

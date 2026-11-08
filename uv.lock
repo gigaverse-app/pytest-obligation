@@ -33,7 +33,7 @@ lint = [
     { name = "pyrefly", specifier = ">=1.0,<2" },
     { name = "ruff", specifier = ">=0.8" },
 ]
-quint = [{ name = "pytest-quint-connect", specifier = ">=0.2,<2" }]
+quint = [{ name = "pytest-quint-connect", specifier = ">=1.1,<2" }]
 xdist = [{ name = "pytest-obligation", extras = ["selftest"], editable = "package" }]
 
 [[package]]
@@ -2881,14 +2881,14 @@ provides-extras = ["aiokafka", "celery", "dbos", "debt", "django", "exploration"
 
 [[package]]
 name = "pytest-quint-connect"
-version = "0.2.0"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/63/000e92e2c581be6026b9138d51f522e35d91841af7c8d4d4b1d968f6b0a6/pytest_quint_connect-0.2.0.tar.gz", hash = "sha256:e29836917b91e3c75839234b03d0ce1e1f8f0a1c1ae660d8afc7310fdc7be38c", size = 244841, upload-time = "2026-11-08T12:36:06.607Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/3c/7b2ddc1b7f423b0bfa5371cb194f7e1d1aa9e0f9da4fedc0eb88e712cd82/pytest_quint_connect-1.1.0.tar.gz", hash = "sha256:07cf1f2e607363a7493f04e8f38d808a06ae32d4170bbd2a8ffcdf6eaa71301d", size = 6923970, upload-time = "2026-11-08T15:22:02.125Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/63/39/df7d8a823e7110cf2bbcbb1e065a44ff4ba4ed0232175a55d9d91dbac02a/pytest_quint_connect-0.2.0-py3-none-any.whl", hash = "sha256:fa8d8ac112040b53c36528dbf830b0b7336f51589b8c8405a891b3b0e7f27daf", size = 52758, upload-time = "2026-11-08T12:36:05.253Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/65/12d3cc7c8324bb8cb3ea8891afbe402acfa19cdbaaa881c89e5220aef447/pytest_quint_connect-1.1.0-py3-none-any.whl", hash = "sha256:4a24a70034dc1305340faada931ec4e67e77978bbd82abf767adcb3e2d5dcd52", size = 75580, upload-time = "2026-11-08T15:22:00.485Z" },
 ]
 
 [[package]]

@@ -31,12 +31,43 @@
     "interruptedRepeatRevokesSuccessTest"
   ],
   "mutants": [
-    "incremental-admission",
-    "replace-case-identity",
-    "early-evidence-write",
-    "replace-retained-case",
-    "remove-compatibility-guards",
-    "omit-evidence-commit"
+    {
+      "name": "shipped-389c5bb",
+      "description": "The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard"
+    },
+    {
+      "name": "incremental-admission",
+      "description": "Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function"
+    },
+    {
+      "name": "replace-case-identity",
+      "description": "After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence"
+    },
+    {
+      "name": "early-evidence-write",
+      "description": "Today's merge_reports with one evidence write (collected) moved inside validation, before a later mismatch can reject the shard"
+    },
+    {
+      "name": "replace-retained-case",
+      "description": "Today's merge_reports replacing a retained case with the incoming one instead of extending it"
+    },
+    {
+      "name": "remove-compatibility-guards",
+      "description": "Today's merge_reports with every compatibility assertion deleted, so incompatible shards merge silently; the source proof alone would still pass"
+    },
+    {
+      "name": "omit-evidence-commit",
+      "description": "Today's merge_reports that validates and then never writes, so compatible evidence is dropped; the source proof alone would still pass"
+    }
+  ],
+  "bugs_found": [
+    {
+      "summary": "A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available",
+      "fixed_in": "#210",
+      "found_by": "the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak",
+      "regression_test": "package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence",
+      "mutant": "shipped-389c5bb"
+    }
   ],
   "bounds": {
     "seed": 20261107,
@@ -51,7 +82,8 @@
     "incremental-admission compiles a mutation of the real merge_reports source moving commit inside validation.",
     "replace-case-identity is an explicit post-call output mutation replacing a CaseEvidence object with an equal deep copy; not claimed as original production source.",
     "Historical audit.qnt remains unchanged; broader audit models are not connected contracts.",
-    "Additional source mutants compile current merge AST: preflight evidence write, retained case replacement, compatibility guard removal and omitted commit; runtime rejection/accumulation checks complement the conditional source effect theorem."
+    "Additional source mutants compile current merge AST: preflight evidence write, retained case replacement, compatibility guard removal and omitted commit; runtime rejection/accumulation checks complement the conditional source effect theorem.",
+    "shipped-389c5bb runs merge_reports-389c5bb.py.txt, the pre-fix function copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py."
   ],
   "historical_sha256": "1d2a1941bc98e48a0f0151e8490b7639c4fcf495dff15b93ce7c8c619b878375"
 }

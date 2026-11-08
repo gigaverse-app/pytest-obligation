@@ -33,7 +33,7 @@ The check command requires all three forms of evidence:
    and evidence-container references, and reject real source mutations through
    Dafny. Missing, deselected, skipped or failed tests fail the command.
 3. The registered Quint report contract generates and replays 21 fresh traces
-   through current production code. All six mutation controls must produce a
+   through current production code. All seven mutation controls must produce a
    semantic observation mismatch. Import/setup failures do not count as detection.
 
 `.artifacts/source-contracts/results.json`, runtime XML, exact positive/mutated Python and generated Dafny plus full backend
