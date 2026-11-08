@@ -16,10 +16,12 @@ uv run --no-sync pytest verification_tests/quint --quint-require-complete
 | [report-merge](report-merge/README.md) | `profiles.reporting.merge_reports` | [test_report_merge_contract.py](../../verification_tests/quint/test_report_merge_contract.py) |
 | [session-host](session-host/README.md) | `host.hosted` and the plugin's `pytest_configure` | [test_session_host_contract.py](../../verification_tests/quint/test_session_host_contract.py) |
 
-To register a topic, add its directory and a `quint_contract(...)` declaration with
-a driver fixture, add the topic's name to `QUINT_REQUIRED_CONTRACTS` in the `quint` job of
-`.github/workflows/ci.yml`, and add its implementation sources to the `quint` lane in
-`.github/test-lanes.json`. Review implementation, model, manifest and driver together
+To register a topic, add its directory with an `adapter.py` exposing
+`create(root, work, mutant)`, and a test module declaring
+`quint_contract(manifest, driver="quint_adapter")`, which uses the shared fixture in
+`verification_tests/quint/conftest.py`. Add the topic's name to `QUINT_REQUIRED_CONTRACTS`
+in the `quint` job of `.github/workflows/ci.yml`, and its implementation sources to the
+`quint` lane in `.github/test-lanes.json`. Review implementation, model, manifest and driver together
 when registered behavior changes. Investigate mismatches; never weaken the
 specification, drop a witness or accept a surviving mutation to make CI green. Keep
 a conforming positive history and a known-bad semantic control for every topic.
