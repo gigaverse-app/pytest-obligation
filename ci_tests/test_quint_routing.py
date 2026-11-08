@@ -23,6 +23,7 @@ class QuintRoutingTests(unittest.TestCase):
             "docs/quint/example/manifest.json",
             "docs/quint/example/README.md",
             "verification_tests/quint/test_report_merge_contract.py",
+            "verification_tests/quint/test_fenced_lease_contract.py",
         ):
             with self.subTest(path=path):
                 self.assertIn("quint", self.selection(path))
