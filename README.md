@@ -206,6 +206,95 @@ CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
 See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
 environment caches, required gates and real dependency critical-path reports.
 
+### Merge rules checked against a model
+
+Distributed report merging is checked against a [Quint](https://quint.sh) model on every
+relevant pull request: generated histories are replayed through the real code, and deliberate
+mutants must be caught. [The contract and what it proves](docs/quint/README.md).
+
+<!-- pytest-quint-connect:start -->
+<!-- pytest-quint-connect:contracts report-merge,resource-identity -->
+<a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
+
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug"><img alt="Quint contracts: 2 contracts passed · 41 histories · 5/5 planted bugs caught" src="https://img.shields.io/badge/Quint_contracts-2_contracts_passed_%C2%B7_41_histories_%C2%B7_5%2F5_planted_bugs_caught-brightgreen"></a>
+
+| | Contract | Cases passed | [Planted bugs caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") |
+| :-: | :-- | --: | --: |
+| ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `resource-identity` `verification_tests/quint/test_resource_identity_contract.py::test_resource_identity`<br><sub>20 histories (4 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 23/23 | 2/2 |
+
+**Bugs these contracts found**
+
+1. `report-merge` · **A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available.** Fixed in #210 · found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · regression test `package/tests/core/test_profile_coverage.py::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`. 16 of 21 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard) reintroduces it; first caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+1. `resource-identity` · **The Django reference ResourceProvider named new resources from the live count, so creating two, deleting the first and creating again overwrote the surviving resource.** Fixed in #211 · found by the historical audit model (audit.qnt, pinned to 389c5bb), whose witness reaches the reissued name · regression test `package/tests/django/automatic_recovery/test_external_owed_identities.py::test_provider_creation_preserves_surviving_resource_identities`. 16 of 20 histories diverge when [planted bug](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") `shipped-389c5bb` (The exact ResourceProvider.create shipped at 389c5bb, before the fix: it names a new resource from the live count, so after a deletion it reissues a surviving resource's name and overwrites it) reintroduces it; first caught by `witness-earlierDeletionRecreationTest` at state 4, after `create(target=0)`.
+
+**[Planted bugs](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants: deliberately broken copies of the code. Each must make some history diverge, proving the contract would notice that kind of bug") these contracts catch**
+
+- `report-merge` · `incremental-admission`: Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function. Caught by `witness-repeatedLateRejectionTest` at state 1, after `reject(location='later-suite', mismatch='family', payload='passed')`.
+- `report-merge` · `replace-case-identity`: After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence. Caught by `witness-compatibleRepeatedEvidenceTest` at state 1, after `merge(location='later-suite', mismatch='', payload='passed')`.
+- `resource-identity` · `copy-listed-objects`: list() returns copies of the resources, so callers holding a resource stop seeing the provider's object. Caught by `witness-earlierDeletionRecreationTest` at state 1, after `create(target=0)`.
+
+<details>
+<summary>What <code>report-merge</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `init`: Construct real SuiteCoverage / ProfileCoverage / CaseEvidence fixtures; no production merge guard patched
+- `merge`: profiles.reporting.merge_reports(target, compatible shard), direct call
+- `reject`: profiles.reporting.merge_reports(target, shard with indicated late mismatch), observe actual AssertionError and state
+- `inspect`: SuiteCoverage.verified, CaseEvidence.outcomes and retained object references read without mutation
+
+**Invariant** `contract`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `repeatedLateRejectionTest`, `compatibleRepeatedEvidenceTest`, `lateRejectionRetainsPriorSuccessTest`, `failedRepeatCannotBecomeVerifiedTest`, `interruptedRepeatRevokesSuccessTest`.
+
+**Bounds**: seed `20261107` · max_samples `150` · max_steps `6` · n_traces `16`.
+
+**Witness `repeatedLateRejectionTest`, step by step**: what the model expects the code to show after each action.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `init(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `1` | `reject(location='later-suite', mismatch='family', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `2` | `reject(location='later-suite', mismatch='debt', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `3` | `reject(location='same-suite', mismatch='declaration', payload='passed')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+| `4` | `inspect(location='', mismatch='', payload='')` | `{ extraExists: false, extraFirst: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraSecond: { bad: false, call: 0, collected: false, durationTicks: 0, failureCount: 0, selected: false, setup: 0, teardown: 0 }, extraVerified: f…` |
+
+</details>
+
+<details>
+<summary>What <code>resource-identity</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `init`: Create the actual shipped ResourceProvider; minimal Django settings load class declarations without database IO
+- `create`: ResourceProvider.create(); record returned name and object reference, do not supply or patch allocator
+- `delete`: ResourceProvider.delete(name) for an emitted live identity
+- `rejectDelete`: ResourceProvider.delete(resource-0099), observe KeyError and retained live objects
+- `inspect`: ResourceProvider.list() and actual returned object/name identity observations
+
+**Invariant** `contract`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `earlierDeletionRecreationTest`, `latestDeletionRecreationTest`, `emptyProviderStillAdvancesIdentityTest`, `rejectedDeletePreservesObjectsTest`.
+
+**Bounds**: seed `20261107` · max_samples `150` · max_steps `9` · n_traces `16`.
+
+**Witness `earlierDeletionRecreationTest`, step by step**: what the model expects the code to show after each action.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `init(target=0)` | `{ identityRetained: true, issued: [], live: [], rejected: false }` |
+| `1` | `create(target=0)` | `{ identityRetained: true, issued: [1], live: [1], rejected: false }` |
+| `2` | `create(target=0)` | `{ identityRetained: true, issued: [1, 2], live: [1, 2], rejected: false }` |
+| `3` | `delete(target=1)` | `{ identityRetained: true, issued: [1, 2], live: [2], rejected: false }` |
+| `4` | `create(target=0)` | `{ identityRetained: true, issued: [1, 2, 3], live: [2, 3], rejected: false }` |
+| `5` | `inspect(target=0)` | `{ identityRetained: true, issued: [1, 2, 3], live: [2, 3], rejected: false }` |
+
+</details>
+
+<sub>Generated by [pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) from contract receipts; [what a passing run proves](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/limits.md).</sub>
+<!-- pytest-quint-connect:end -->
+
 ### Duplicates kept out
 
 The local hooks and required PR check prevent new copies; the weekly audit records progress against the

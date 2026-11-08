@@ -1,10 +1,10 @@
-"""Replay Quint histories against the shipped ResourceProvider, without database IO."""
+"""pytest-quint-connect driver: replay Quint histories against the shipped ResourceProvider, without database IO."""
 
-import ast
-import inspect
+import hashlib
 import sys
-import textwrap
 from pathlib import Path
+
+SHIPPED_389C5BB_SHA256 = "80cbc999951e8472d93cfbf3ec4c8df2b9c916a2e0dfbd19c1d5a8be023dd71a"
 
 
 def create(root: Path, work: Path, mutant: str | None = None):
@@ -25,20 +25,14 @@ def create(root: Path, work: Path, mutant: str | None = None):
     provider_type = owed_references.ResourceProvider
     original_create = provider_type.create
     original_list = provider_type.list
-    if mutant == "length-allocation":
-        # Compile a deliberate mutation of the real creation method, preserving
-        # all its actual resource construction/storage code except the allocator.
-        tree = ast.parse(textwrap.dedent(inspect.getsource(original_create)))
-        function = tree.body[0]
-        assert isinstance(function.body[0], ast.AugAssign)
-        assert ast.unparse(function.body[0].target) == "self._created"
-        function.body[0] = ast.parse("self._created = len(self.resources) + 1").body[0]
-        tree = ast.fix_missing_locations(tree)
-        work.mkdir(parents=True, exist_ok=True)
-        source = work / "length-allocation.py"
-        source.write_text(ast.unparse(tree) + "\n")
+    if mutant == "shipped-389c5bb":
+        # The exact pre-fix create(), run in the real module's namespace. The hash keeps this
+        # frozen evidence from being edited until it agrees with the model.
+        shipped = Path(__file__).with_name("create-389c5bb.py.txt")
+        text = shipped.read_bytes()
+        assert hashlib.sha256(text).hexdigest() == SHIPPED_389C5BB_SHA256, f"{shipped} was edited"
         namespace = dict(owed_references.__dict__)
-        exec(compile(tree, str(source), "exec"), namespace)
+        exec(compile(text, str(shipped), "exec"), namespace)
         provider_type.create = namespace["create"]
     elif mutant == "copy-listed-objects":
 
@@ -56,8 +50,8 @@ def create(root: Path, work: Path, mutant: str | None = None):
             self.first_objects = {}
             self.rejected = False
 
-        def apply(self, event):
-            op = event["op"]
+        def step(self, step):
+            event, op = step.args, step.action
             if op == "inspect":
                 return
             if op == "init":
@@ -70,7 +64,7 @@ def create(root: Path, work: Path, mutant: str | None = None):
                 self.issued.append(int(resource.name.removeprefix("resource-")))
                 self.first_objects.setdefault(resource.name, resource)
                 self.rejected = False
-            elif op in ("delete", "reject-delete"):
+            elif op in ("delete", "rejectDelete"):
                 self.rejected = False
                 try:
                     self.provider.delete(f"resource-{event['target']:04d}")

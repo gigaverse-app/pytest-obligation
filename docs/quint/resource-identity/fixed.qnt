@@ -23,14 +23,14 @@ module resource_identity_fixed {
   }
   action rejectDelete = all {
     turns < 9, creates' = creates, turns' = turns + 1,
-    event' = { op: "reject-delete", target: 99 },
+    event' = { op: "rejectDelete", target: 99 },
     observed' = { ...observed, rejected: true }
   }
-  action chooseDelete = {
+  action delete = {
     nondet target = members(observed.live).oneOf()
     deleteResource(target)
   }
-  action step = any { create, rejectDelete, chooseDelete }
+  action step = any { create, rejectDelete, delete }
   val contract = observed.identityRetained and observed.issued.length() == members(observed.issued).size() and
     members(observed.live).subseteq(members(observed.issued))
   action inspection = all { event' = { op: "inspect", target: 0 }, observed' = observed, creates' = creates, turns' = turns }
