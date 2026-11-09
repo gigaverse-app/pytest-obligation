@@ -29,7 +29,7 @@ from typing import Any
 
 from pytest_obligation.host import Host
 from pytest_obligation.models import ObligationContractDesignError
-from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker, counted_worker_killer
 
 # Anything not positively known to be read-only counts conservatively. Aggregation
 # has its own rule because $out/$merge are writes despite using a read-shaped API.
@@ -172,13 +172,7 @@ MongoDBWorker = CommitWorker
 
 
 def mongodb_worker_killer(client: Any) -> Callable[[int | None], AbstractContextManager[MongoDBWorker]]:
-    @contextmanager
-    def killer(kill_after: int | None) -> Iterator[MongoDBWorker]:
-        worker = MongoDBWorker(kill_after)
-        with _watching(client, worker.refuse_if_dead, worker.committed):
-            yield worker
-
-    return killer
+    return counted_worker_killer(partial(_watching, client))
 
 
 class MongoDBLostReplies(LostCommitReplies):
