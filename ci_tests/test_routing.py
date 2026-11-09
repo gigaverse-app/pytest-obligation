@@ -117,10 +117,10 @@ class RoutingTests(RoutingSnapshot):
                 self.assertEqual(self.selection(path), {"actions"})
 
     def test_demo_recording_inputs_keep_the_complete_demo_lane(self):
-        # contracts too: its job checks ci.yml, which names the README GIF test that reads them.
+        # Reading ci.yml for validation does not execute its README GIF test.
         for path in ("docs/demo.tape", "docs/demo_env.sh"):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), {"demos", "contracts"})
+                self.assertEqual(self.selection(path), {"demos"})
 
     def test_framework_test_and_deletion_keep_its_lane(self):
         test_file = next((self.repo / "package/tests/mongodb").glob("test_*.py")).relative_to(self.repo).as_posix()
@@ -173,14 +173,11 @@ class RoutingTests(RoutingSnapshot):
                 "demos",
                 "saleor",
                 "actions",
-                # The due job runs Due's own scripts/check_adoption_report.py in its checkout of
-                # gigaverse-app/due; the planner resolves that path to this repository's copy.
-                "due",
                 "typecheck",
                 "contracts",
             },
         )
-        # The due job runs no case validator of its own name, so this repository's does not start it.
+        # Due runs its own validators in a separate checkout. Local validators cannot start it.
         self.assertNotIn("due", self.selection("scripts/check_adoption_cases.py"))
 
     def test_published_actions_only_start_their_consumers(self):
