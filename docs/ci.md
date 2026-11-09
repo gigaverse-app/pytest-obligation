@@ -3,12 +3,20 @@
 Pull requests plan lanes with [CI-esta](https://github.com/gigaverse-app/ci-esta)'s
 `plan-work`. The lanes are the names the jobs' conditions read, and a change selects
 a lane through what its jobs run: pytest-selective's Python import graph, the files
-tests declare they read (`<test>.gv-dependency.yaml` sidecars and
-`# gv:test-dependency:` comments), the Node tests' module graph, the files the wheel
+tests declare they read (shared `.gv-dependencies.yaml` conventions,
+`# gv:test-dependency:` comments and exceptional per-reader sidecars), the Node tests' module graph, the files the wheel
 contains, and the scripts and local actions each job executes.
 [test-lanes.json](../.github/test-lanes.json) extends that with only what the graphs
 cannot see. Once a lane is affected, CI runs its complete suite and existing evidence
 checks. It does not trim a conformance suite to individual tests.
+
+The shared manifests in `contracts/` and `demos/` resolve each rule's inputs relative
+to its matched reader. Each contract follows its own model/history and each demo inventory
+scans only its own Python files. New matching readers inherit the convention; a missing
+required input fails planning with the reader's path. Source scans retain `content` edges,
+so a scanned module's imports do not expand the scan's dependencies. Simple runtime
+dependencies stay inline; the README recording and repository routing harness retain
+sidecars for their more complex input sets. Shared-manifest edits select all their readers.
 
 ## Which changes run which checks?
 

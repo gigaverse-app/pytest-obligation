@@ -30,6 +30,7 @@
     {
       "name": "python-environment",
       "when": [
+        ".github/selector-constraints.txt",
         "pyproject.toml",
         "**/pyproject.toml",
         "uv.lock",

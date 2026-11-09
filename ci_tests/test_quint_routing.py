@@ -2,7 +2,7 @@
 
 from routing import RoutingSnapshot
 
-# A real contract: its sidecar declares the files pytest-quint-connect loads by name.
+# A real contract: the shared manifest resolves its inputs beside its test.
 CONTRACT = "contracts/pytest_obligation/references/in_memory/fenced_lease"
 
 

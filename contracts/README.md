@@ -50,10 +50,11 @@ to generated bases is follow-up work.
 
 1. Create `contracts/<import path of the modelled module>/<contract_name>/` with the files above.
 2. Add a `Contract:` line to the modelled code's docstring pointing back at the directory.
-3. Add the contract's name to `quint_required_contracts` in [`quint.ini`](quint.ini), and copy a
-   `test_<name>_contract.py.gv-dependency.yaml` from another contract: it declares the files
-   pytest-quint-connect loads by name, so changing them runs the `quint` lane. The modelled sources
-   need nothing: the driver imports them.
+3. Add the contract's name to `quint_required_contracts` in [`quint.ini`](quint.ini).
+   The shared [.gv-dependencies.yaml](.gv-dependencies.yaml) matches `test_*_contract.py`
+   and follows each test's own model, manifest, README and history. No per-test sidecar is
+   needed. If a contract uses a different layout, update the convention or declare that
+   exception beside its reader. The modelled sources need nothing: the driver imports them.
 4. Change the code, the model and the driver in the **same** pull request. Investigate a mismatch;
    never weaken the model, drop a witness or accept a surviving planted bug to make CI green.
 5. When a contract finds a real bug: fix it with a regression test, record it in `bugs_found`, and
