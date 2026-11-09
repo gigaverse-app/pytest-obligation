@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from pytest_obligation.costs import (
+    COST_BASELINE,
     COST_UPDATE_ENVIRONMENT,
     prune_cost_entries,
     stale_cost_entries,
@@ -23,6 +24,8 @@ from pytest_obligation.costs import (
 COMPLETE = "--obligation-cost-baseline-complete"
 #: The report property naming one contract a test measured; xdist forwards it to the controller.
 PROPERTY = "obligation_cost_contract"
+#: How to retire an entry when no run can prune it, e.g. a suite whose cost tests always skip somewhere.
+MANUAL_REMOVAL = f"delete the entries from {COST_BASELINE} by hand"
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -44,19 +47,40 @@ class CostCompleteness:
         self.root = config.rootpath
         self.visited: set[str] = set()
         self.stale: list[str] = []
-        self.incomplete = bool(config.getoption("collectonly") or config.getoption("numprocesses", default=None))
+        # Why update mode may not prune, in the order first seen; empty means complete so far.
+        self.causes: dict[str, None] = {}
+        for option, cause in (
+            ("collectonly", "--collect-only"),
+            ("setuponly", "--setup-only/--setup-plan"),
+            ("setupplan", "--setup-only/--setup-plan"),
+            # --lf skips whole files through passed, empty collect reports, without deselecting.
+            ("lf", "--lf"),
+            ("numprocesses", "xdist"),
+        ):
+            if config.getoption(option, default=None):
+                self.causes[cause] = None
         self.finished = 0
+        self.passed_calls = 0
         self.update_blocked = False
 
     def pytest_collectreport(self, report: pytest.CollectReport) -> None:
-        self.incomplete |= not report.passed
+        if not report.passed:
+            self.causes["collection error or skipped module"] = None
 
     def pytest_deselected(self, items: list[pytest.Item]) -> None:
-        self.incomplete |= bool(items)
+        if items:
+            self.causes["deselected tests"] = None
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         self.visited.update(str(value) for name, value in report.user_properties if name == PROPERTY)
-        self.incomplete |= not report.passed
+        if report.skipped:
+            self.causes["skipped or xfailed test"] = None
+        elif report.failed:
+            self.causes["failed test"] = None
+        # A test body ran only if its call phase passed: --setup-only and --setup-plan report
+        # setup and teardown alone. Teardowns still count, so an exit during teardown blocks too.
+        if report.when == "call" and report.passed:
+            self.passed_calls += 1
         if report.when == "teardown":
             self.finished += 1
 
@@ -69,15 +93,15 @@ class CostCompleteness:
             # The flag declares full-suite intent; absence only proves retirement
             # after collection and execution completed. An empty successful
             # collection may deliberately retire the final cost test.
-            complete = (
-                not self.incomplete
-                and self.finished == session.testscollected
-                and session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED)
-            )
-            if complete:
-                prune_cost_entries(self.root, stale)
-            else:
+            completed = min(self.passed_calls, self.finished)
+            if not self.passed_calls == self.finished == session.testscollected:
+                self.causes[f"{completed} of {session.testscollected} collected tests ran to completion"] = None
+            if session.exitstatus not in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
+                self.causes[f"exit status {int(session.exitstatus)}"] = None
+            if self.causes:
                 self.update_blocked = True
+            else:
+                prune_cost_entries(self.root, stale)
             return
         self.stale = stale
         if session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
@@ -86,11 +110,15 @@ class CostCompleteness:
     def pytest_terminal_summary(self, terminalreporter: pytest.TerminalReporter) -> None:
         if self.update_blocked:
             terminalreporter.line(
-                "Cost baseline pruning skipped: requires a complete, unfiltered serial run.", yellow=True
+                f"Cost baseline pruning skipped ({'; '.join(self.causes)}): it requires a complete, unfiltered "
+                f"serial run. To retire an unmeasured contract anyway, {MANUAL_REMOVAL}.",
+                yellow=True,
             )
         if not self.stale:
             return
         terminalreporter.section("cost contracts: baseline entries no test measured", red=True)
         for contract in self.stale:
             terminalreporter.line(f"  - {contract}")
-        terminalreporter.line(f"Remove them with {COST_UPDATE_ENVIRONMENT}=update and {COMPLETE} on a full run.")
+        terminalreporter.line(
+            f"Remove them with {COST_UPDATE_ENVIRONMENT}=update and {COMPLETE} on a full run, or {MANUAL_REMOVAL}."
+        )
