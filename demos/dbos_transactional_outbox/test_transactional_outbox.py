@@ -19,6 +19,8 @@ retry budget. Each of those proofs launches the demo through its own
 ``main()``, with only its HTTP server and its queue listener held back.
 """
 
+# gv:test-dependency: demos/dbos_transactional_outbox/run_demo_process.py
+
 import os
 import subprocess
 import sys

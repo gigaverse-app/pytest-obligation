@@ -1,5 +1,7 @@
 """Exercise the actual release step against a local Git remote."""
 
+# gv:test-dependency: .github/workflows/release.yml
+
 import os
 import subprocess
 import tempfile

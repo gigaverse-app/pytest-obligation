@@ -1,17 +1,9 @@
 """Source proofs and their executable contracts must retain their CI lane."""
 
-import unittest
-
-import test_routing
+from routing import RoutingSnapshot
 
 
-class SourceContractRoutingTests(unittest.TestCase):
-    setUpClass = classmethod(test_routing.RoutingTests.setUpClass.__func__)
-    tearDownClass = classmethod(test_routing.RoutingTests.tearDownClass.__func__)
-    git = classmethod(test_routing.RoutingTests.git.__func__)
-    commit = classmethod(test_routing.RoutingTests.commit.__func__)
-    selection = test_routing.RoutingTests.selection
-
+class SourceContractRoutingTests(RoutingSnapshot):
     def test_executable_contract_inputs_select_source_contracts(self):
         for path in (
             "package/src/pytest_obligation/profiles/reporting.py",
@@ -30,3 +22,6 @@ class SourceContractRoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("source_contracts", self.selection(path))
         self.assertNotIn("source_contracts", self.selection("docs/unrelated.md"))
+
+    def test_mutations_also_select_the_quint_replay(self):
+        self.assertIn("quint", self.selection("scripts/source_contracts/mutations.py"))

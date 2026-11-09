@@ -1,11 +1,14 @@
 """Every runtime test command must be admitted by dependency selection."""
 
+# gv:test-dependency: .github/workflows/*.yml
+
 import unittest
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+PLANNER = "gigaverse-app/ci-esta/actions/plan-work@"
 RUNTIME = (
     "pytest ",
     "-m unittest",
@@ -50,11 +53,15 @@ class ExecutionAdmissionTests(unittest.TestCase):
         )
 
     def test_ordinary_pushes_do_not_force_full_tests(self):
+        planners = 0
         for path in (ROOT / ".github/workflows").glob("*.y*ml"):
             jobs = yaml.safe_load(path.read_text()).get("jobs", {})
             for job in jobs.values():
                 for step in job.get("steps", []):
-                    if "plan-lanes" in step.get("uses", "") or step.get("id") == "files":
+                    if PLANNER in step.get("uses", "") or step.get("id") == "files":
+                        planners += 1
                         full = step.get("with", {}).get("full", "auto")
                         assert "github.event_name != 'pull_request'" not in str(full), path
                         assert full == "auto" or "workflow_dispatch" in str(full), path
+        # A renamed planner action would otherwise leave nothing to check.
+        assert planners, f"no {PLANNER} step in any workflow"

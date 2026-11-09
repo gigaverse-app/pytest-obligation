@@ -1,3 +1,6 @@
+# CI runs these tests with --ds=tests.django.settings, which loads the settings by name:
+# gv:test-dependency: package/tests/django/settings.py
+
 import pytest
 
 from pytest_obligation import configure

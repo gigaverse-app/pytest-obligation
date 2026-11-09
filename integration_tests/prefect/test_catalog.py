@@ -1,5 +1,8 @@
 """Generated application histories through Prefect's flow engine and local API server."""
 
+# Prefect reads the project configuration while starting its local server.
+# gv:test-dependency: pyproject.toml
+
 import asyncio
 from collections.abc import Callable, Iterator
 
