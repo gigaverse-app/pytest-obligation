@@ -1,5 +1,8 @@
 """Cache identity changes with collection inputs, not unrelated edits or venv files."""
 
+# Fingerprinting includes the reporting implementation loaded at runtime.
+# gv:test-dependency: package/src/pytest_obligation/reporting/**
+
 import subprocess
 from pathlib import Path
 
