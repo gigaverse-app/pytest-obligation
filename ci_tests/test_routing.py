@@ -1,21 +1,16 @@
 """Exercise this consumer's real configuration against real Git snapshots."""
 
 import subprocess
-import tempfile
 import unittest
-from pathlib import Path
 
-from pytest_selective.ci import LaneConfig, plan
-
-ROOT = Path(__file__).resolve().parents[1]
+from routing import RoutingSnapshot
 
 
-class RoutingTests(unittest.TestCase):
+class RoutingTests(RoutingSnapshot):
     def test_nested_or_new_pytest_collection_policy_forces_every_lane(self):
         for path in ("package/pyproject.toml", "package/.pytest.ini"):
             with self.subTest(path=path):
-                self.git("reset", "--hard", self.base)
-                self.git("clean", "-fd")
+                self.reset()
                 target = self.repo / path
                 if target.exists():
                     target.write_text(
@@ -23,53 +18,9 @@ class RoutingTests(unittest.TestCase):
                     )
                 else:
                     target.write_text("[pytest]\ntestpaths = other_tests\n")
-                result = plan(self.repo, self.config, self.base, self.commit())
+                result = self.plan(self.base, self.commit())
                 self.assertTrue(all(result.lanes.values()), result.model_dump_json())
                 self.assertIn("fallback", result.reason)
-
-    @classmethod
-    def setUpClass(cls):
-        cls.temporary = tempfile.TemporaryDirectory()
-        cls.repo = Path(cls.temporary.name)
-        archive = subprocess.run(["git", "archive", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout
-        subprocess.run(["tar", "-xf", "-", "-C", str(cls.repo)], input=archive, check=True)
-        # Read working configuration too, so the same tests reproduce the bug before committing its fix.
-        config_text = (ROOT / ".github/test-lanes.json").read_text()
-        (cls.repo / ".github/test-lanes.json").write_text(config_text)
-        cls.config = LaneConfig.model_validate_json(config_text)
-        cls.git("init", "-q")
-        cls.git("config", "user.email", "ci@example.invalid")
-        cls.git("config", "user.name", "CI routing test")
-        cls.base = cls.commit()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.temporary.cleanup()
-
-    @classmethod
-    def git(cls, *args):
-        return subprocess.check_output(["git", *args], cwd=cls.repo, text=True).strip()
-
-    @classmethod
-    def commit(cls):
-        cls.git("add", "-A")
-        cls.git("commit", "-qm", "routing scenario")
-        return cls.git("rev-parse", "HEAD")
-
-    def selection(self, *paths, delete=False):
-        """Lanes selected by one commit that edits (or deletes) every path."""
-        self.git("reset", "--hard", self.base)
-        for path in paths:
-            file = self.repo / path
-            if delete:
-                file.unlink()
-            else:
-                file.parent.mkdir(parents=True, exist_ok=True)
-                with file.open("a") as output:
-                    output.write("\n# CI routing scenario\n")
-        result = plan(self.repo, self.config, self.base, self.commit())
-        self.assertNotIn("fallback", result.reason, result.model_dump_json())
-        return {name for name, enabled in result.lanes.items() if enabled}
 
     def test_prose_does_not_start_runtime_lanes(self):
         for path in (
@@ -107,11 +58,16 @@ class RoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set())
 
-    def test_embedded_distribution_files_select_only_the_package_build(self):
-        # pyproject's readme and license-files: twine and check_metadata.py validate them in the build job.
-        for path in ("package/README.md", "package/LICENSE"):
+    def test_embedded_distribution_files_select_only_the_wheel_builders(self):
+        # pyproject's readme and license-files are in the wheel: the build job validates it with twine and
+        # check_metadata.py, and Due's conformance installs it. ci_tests/test_metadata.py exercises
+        # check_metadata.py, which reads the README.
+        for path, lanes in (
+            ("package/README.md", {"package", "due", "contracts"}),
+            ("package/LICENSE", {"package", "due"}),
+        ):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), {"package"})
+                self.assertEqual(self.selection(path), lanes)
 
     def test_global_environment_changes_keep_full_validation(self):
         for path in (
@@ -120,21 +76,48 @@ class RoutingTests(unittest.TestCase):
             "package/pyproject.toml",
             "demos/wagtail_tasks/pyproject.toml",
             ".python-version",
-            ".github/workflows/ci.yml",
             ".github/test-lanes.json",
         ):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), set(self.config.lanes))
+                self.assertEqual(self.selection(path), self.lanes)
+
+    def edited(self, path, old, new):
+        """Lanes selected by one commit that replaces old with new in path."""
+        self.reset()
+        file = self.repo / path
+        text = file.read_text(encoding="utf-8")
+        self.assertEqual(text.count(old), 1, old)
+        file.write_bytes(text.replace(old, new).encode("utf-8"))
+        result = self.plan(self.base, self.commit())
+        self.assertNotIn("fallback", result.reason, result.model_dump_json())
+        return {name for name, enabled in result.lanes.items() if enabled}
+
+    def test_a_workflow_edit_selects_the_lanes_of_the_jobs_it_changes(self):
+        workflow = ".github/workflows/ci.yml"
+        # A comment changes no job: only the tests that read the workflow run.
+        self.assertEqual(self.selection(workflow), {"contracts"})
+        # One job's command runs that job's lane.
+        self.assertEqual(
+            self.edited(workflow, "pytest package/tests/mongodb -q", "pytest package/tests/mongodb -q -rA"),
+            {"mongodb", "contracts"},
+        )
+        # The planner decides every lane, so changing it runs them all.
+        planner = "  select-tests:\n    runs-on: ubuntu-latest"
+        self.assertEqual(self.edited(workflow, planner, planner.replace("ubuntu-latest", "ubuntu-24.04")), self.lanes)
 
     def test_other_dependency_installers_keep_every_lane(self):
         for path in ("requirements.txt", "package/requirements-dev.txt", "poetry.lock", "pylock.toml"):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), set(self.config.lanes))
+                self.assertEqual(self.selection(path), self.lanes)
 
     def test_publisher_container_dependencies_start_its_consumers(self):
-        self.assertEqual(self.selection("publish/requirements.txt"), {"actions", "contracts"})
+        # The sandbox smoke builds the publisher container from them; the contracts lane's Node tests do not.
+        for path in ("publish/requirements.txt", "publish/Dockerfile"):
+            with self.subTest(path=path):
+                self.assertEqual(self.selection(path), {"actions"})
 
     def test_demo_recording_inputs_keep_the_complete_demo_lane(self):
+        # Reading ci.yml for validation does not execute its README GIF test.
         for path in ("docs/demo.tape", "docs/demo_env.sh"):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), {"demos"})
@@ -165,7 +148,7 @@ class RoutingTests(unittest.TestCase):
                 self.assertLessEqual({"due", "package", "typecheck"}, selected)
 
     def test_the_pytest_plugin_and_what_it_imports_start_every_rooted_lane(self):
-        rooted = {name for name, lane in self.config.lanes.items() if lane.roots}
+        rooted = {name for name, lane in self.resolved(self.base, self.base).config.lanes.items() if lane.roots}
         for path in ("pytest_plugin.py", "host.py"):
             with self.subTest(path=path):
                 self.assertLessEqual(rooted, self.selection(f"package/src/pytest_obligation/{path}"))
@@ -174,7 +157,8 @@ class RoutingTests(unittest.TestCase):
         reporting = "package/src/pytest_obligation/reporting"
         loader = self.selection(f"{reporting}/collect.py")
         self.assertTrue(loader & {"core", "actions"}, loader)
-        self.assertEqual(self.selection(f"{reporting}/_nodeids_plugin.py"), loader)
+        # At least the loader's lanes; the actions job also reaches it through collect.py's declaration.
+        self.assertLessEqual(loader, self.selection(f"{reporting}/_nodeids_plugin.py"))
 
     def test_evidence_validators_only_start_their_consuming_lanes(self):
         self.assertEqual(
@@ -189,15 +173,17 @@ class RoutingTests(unittest.TestCase):
                 "demos",
                 "saleor",
                 "actions",
-                "due",
                 "typecheck",
                 "contracts",
             },
         )
+        # Due runs its own validators in a separate checkout. Local validators cannot start it.
+        self.assertNotIn("due", self.selection("scripts/check_adoption_cases.py"))
 
     def test_published_actions_only_start_their_consumers(self):
-        self.assertEqual(self.selection("check/action.yml"), {"demos", "saleor", "actions"})
-        self.assertEqual(self.selection("test/action.yml"), {"actions"})
+        # contracts too: these routing tests plan through every local action the workflow uses.
+        self.assertEqual(self.selection("check/action.yml"), {"demos", "saleor", "actions", "contracts"})
+        self.assertEqual(self.selection("test/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("report/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("publish/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("preview/preview.cjs"), {"actions", "contracts"})
@@ -206,14 +192,18 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("typecheck", self.selection("package/src/pytest_obligation/host.py"))
 
     def test_missing_history_and_explicit_full_checkpoint_run_every_lane(self):
-        for result in (
-            plan(self.repo, self.config, "missing-history", self.base),
-            plan(self.repo, self.config, self.base, self.base, full=True),
-        ):
-            self.assertTrue(all(result.lanes.values()), result.model_dump_json())
+        result = self.plan(self.base, self.base, full=True)
+        self.assertTrue(all(result.lanes.values()), result.model_dump_json())
+        # An unknown base either plans every lane or fails the planner, and a failed planner runs every
+        # job (test_execution_admission.py requires that fallback on each one).
+        try:
+            result = self.plan("missing-history", self.base)
+        except subprocess.CalledProcessError:
+            return
+        self.assertTrue(all(result.lanes.values()), result.model_dump_json())
 
     def test_documentation_dependency_selects_its_declared_reader(self):
-        self.git("reset", "--hard", self.base)
+        self.reset()
         reader = self.repo / "package/tests/core/test_declared_doc.py"
         reader.parent.mkdir(parents=True, exist_ok=True)
         reader.write_text("# gv:test-dependency: md/declared.md\ndef test_document(): pass\n")
@@ -222,7 +212,7 @@ class RoutingTests(unittest.TestCase):
         doc.write_text("before\n")
         base = self.commit()
         doc.write_text("after\n")
-        result = plan(self.repo, self.config, base, self.commit())
+        result = self.plan(base, self.commit())
         self.assertTrue(result.lanes["core"], result.model_dump_json())
         self.assertNotIn("fallback", result.reason)
 
