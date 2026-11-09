@@ -1,2 +1,0 @@
-# Preview of pytest-selective #139. Replace with a released lower bound after it ships.
-pytest-selective @ git+https://github.com/gigaverse-app/pytest-selective.git@65e85ea337bbb752250d7ef308b59adc73d01f90

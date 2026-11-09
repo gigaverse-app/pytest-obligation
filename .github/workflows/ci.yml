@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+# Preview pytest-selective #139 until its reader-relative rules are released.
+env:
+  SELECTOR_PREVIEW_REF: 65e85ea337bbb752250d7ef308b59adc73d01f90
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
@@ -25,13 +29,24 @@ jobs:
   select-tests:
     runs-on: ubuntu-latest
     env:
-      UV_CONSTRAINT: ${{ github.workspace }}/.github/selector-constraints.txt
+      PYTHONPATH: ${{ github.workspace }}/.ci-tools/pytest-selective/src
     outputs:
       lanes: ${{ steps.select.outputs.lanes }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - uses: actions/checkout@v7
+        with:
+          repository: gigaverse-app/pytest-selective
+          ref: ${{ env.SELECTOR_PREVIEW_REF }}
+          path: .ci-tools/pytest-selective
+          persist-credentials: false
+      - name: Verify the preview selector import path
+        run: >-
+          python -c "import importlib.util; from pathlib import Path;
+          assert Path(importlib.util.find_spec('pytest_selective').origin).resolve().is_relative_to(
+          Path('.ci-tools/pytest-selective/src').resolve())"
       - id: select
         uses: gigaverse-app/ci-esta/actions/plan-work@v1
         with:
@@ -43,9 +58,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Exercise the same selector revision as the public plan-work action.
-      UV_CONSTRAINT: ${{ github.workspace }}/.github/selector-constraints.txt
+      PYTHONPATH: ${{ github.workspace }}/.ci-tools/pytest-selective/src
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: gigaverse-app/pytest-selective
+          ref: ${{ env.SELECTOR_PREVIEW_REF }}
+          path: .ci-tools/pytest-selective
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true

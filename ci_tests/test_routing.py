@@ -77,7 +77,6 @@ class RoutingTests(RoutingSnapshot):
             "demos/wagtail_tasks/pyproject.toml",
             ".python-version",
             ".github/test-lanes.json",
-            ".github/selector-constraints.txt",
         ):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), self.lanes)
