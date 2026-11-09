@@ -40,8 +40,10 @@ uv run --no-sync pytest -c contracts/quint.ini contracts
 | `test_<name>_contract.py` | One `quint_contract("quint-connect.json", driver=...)` line |
 | `history/` | Frozen evidence, never edited: the shipped pre-fix code a planted bug runs, and any audit model that found a bug |
 
-report-merge and cost-baseline still use hand-written `<name>_adapter.py` drivers; converting them
-to generated bases is follow-up work.
+The other contracts still use hand-written `<name>_adapter.py` drivers, exposing
+`create(root, work, mutant)`. They share one fixture, `adapter_driver`, in
+[`conftest.py`](conftest.py), and declare `quint_contract("quint-connect.json", driver="adapter_driver")`.
+Converting them to generated bases is follow-up work.
 
 ## Adding or changing a contract
 
