@@ -30,18 +30,28 @@ def create(root: Path, work: Path, mutant: str | None = None):
         function.body.pop()
 
         class Incremental(ast.NodeTransformer):
+            # Count each rewrite: if the source changes shape (``pairs += [(old, case)]``, say), the
+            # commit loop above is already dropped and a mutant with no write loop would stay green.
+            def __init__(self):
+                self.replaced = {"pairs.append((old, case))": 0, "additions[suite]": 0}
+
             def visit_Expr(self, node):
                 text = ast.unparse(node)
                 if text == "pairs.append((old, case))":
+                    self.replaced[text] += 1
                     return mutation
                 return node
 
             def visit_Assign(self, node):
-                if ast.unparse(node.targets[0]) == "additions[suite]":
+                target = ast.unparse(node.targets[0])
+                if target == "additions[suite]":
+                    self.replaced[target] += 1
                     return ast.copy_location(ast.parse("target[suite] = report").body[0], node)
                 return node
 
-        tree = ast.fix_missing_locations(Incremental().visit(tree))
+        incremental = Incremental()
+        tree = ast.fix_missing_locations(incremental.visit(tree))
+        assert incremental.replaced == {"pairs.append((old, case))": 1, "additions[suite]": 1}, incremental.replaced
         work.mkdir(parents=True, exist_ok=True)
         source = work / "incremental-admission.py"
         source.write_text(ast.unparse(tree) + "\n")
@@ -149,7 +159,8 @@ def create(root: Path, work: Path, mutant: str | None = None):
             self.rejected = False
             try:
                 merge(self.target, shard)
-            except AssertionError:
+            except (AssertionError, reporting.IncompatibleShard):
+                # The frozen shipped code still rejects with ``assert``; the current code raises.
                 self.rejected = True
             if not self.rejected:
                 if mutant == "replace-case-identity":
