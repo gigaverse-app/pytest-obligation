@@ -21,6 +21,7 @@ unassessed guarantees and proofs omitted by selection. It does not change exit s
 
 import json
 from collections.abc import Generator
+from contextlib import ExitStack
 from importlib import import_module
 from pathlib import Path
 
@@ -29,7 +30,7 @@ import pytest
 from pytest_obligation.coverage.config import load_config
 from pytest_obligation.coverage.scan import scan
 from pytest_obligation.history_evidence import capture_histories
-from pytest_obligation.host import Host, configure
+from pytest_obligation.host import Host, hosted
 from pytest_obligation.recording import report, start_recording, stop_recording
 
 VERIFY = "--due-work-verify"
@@ -126,7 +127,9 @@ def pytest_configure(config: pytest.Config) -> None:
         assert isinstance(host, Host), f"{path} did not produce a pytest_obligation Host"
         return host
 
-    configure(configured_host)
+    hosts = ExitStack()
+    config.add_cleanup(hosts.close)
+    hosts.enter_context(hosted(configured_host))
 
 
 class _SuitesRan:
