@@ -34,7 +34,7 @@ changes nothing.
 ## How it is checked
 
 [`model.qnt`](model.qnt) states the rule for one row. Quint generates histories from it (five named
-witnesses and sixteen random samples); for each, [`conftest.py`](conftest.py) applies every step to
+witnesses and eighteen random samples); for each, [`conftest.py`](conftest.py) applies every step to
 a real `InMemoryOwner` and reads the row back. Any difference fails the test.
 
 | Model action | Real call |

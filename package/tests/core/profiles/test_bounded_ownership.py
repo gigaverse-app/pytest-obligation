@@ -235,6 +235,95 @@ class _ReleaseStrandsTheRow(_InMemoryOwner):
         return token == self.rows[row_id].token
 
 
+class _ClaimsTheOldestWaitingRow(_InMemoryOwner):
+    """
+    Conforming, but FIFO: a claim takes the row that has waited longest, not the lowest id.
+
+    That is how a plain queue (rq), a priority-then-id queue (procrastinate) or a
+    design that re-arms by re-enqueueing behaves: a row the reaper hands back goes
+    to the back, behind rows that were already waiting. A row joins the queue the
+    first time a claim sees it waiting, as a polling consumer would.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.waiting: list[int] = []
+
+    def claim(self) -> tuple[int, UUID] | None:
+        self.waiting += [
+            row_id for row_id, row in sorted(self.rows.items()) if row.state == "READY" and row_id not in self.waiting
+        ]
+        if not self.waiting:
+            return None
+        row_id = self.waiting.pop(0)
+        row = self.rows[row_id]
+        row.state = "CLAIMED"
+        row.token = self._issue_token()
+        row.lease_expires_at = self.clock + _LEASE_SECONDS
+        return (row_id, row.token)
+
+
+class _ClaimsTheOldestAndHonoursReapedTokens(_ClaimsTheOldestWaitingRow):
+    """
+    Breaks invariant 3 only after the next claim: once the row is owned again,
+    ``fenced_write`` accepts every token ever issued for it.
+
+    The fence rotates and a re-armed row refuses everyone, so only the window
+    "after another worker claimed the row" can catch it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.issued: dict[int, set[UUID]] = {}
+
+    def claim(self) -> tuple[int, UUID] | None:
+        claimed = super().claim()
+        if claimed is not None:
+            self.issued.setdefault(claimed[0], set()).add(claimed[1])
+        return claimed
+
+    def fenced_write(self, row_id: int, token: UUID) -> bool:
+        row = self.rows[row_id]
+        if row.state != "CLAIMED" or token not in self.issued.get(row_id, set()):
+            return False
+        row.state = "RETRYABLE"
+        row.lease_expires_at = None
+        return True
+
+
+def _run_every_proof_on_one_instance(owner: _InMemoryOwner) -> None:
+    """
+    The behavioral half of ``assert_fenced_ownership_contract``, on ONE owner, in its order.
+
+    That is how an adopter runs it: each proof inherits the rows the previous ones
+    left behind. The composite itself is not called because its binding guard
+    rejects any owner authored in a test module before a behavioral proof runs.
+    """
+    binding = _binding(owner)
+    for proof in FENCED_OWNERSHIP_PROOFS:
+        proof(binding)
+
+
+def test_a_fifo_owner_passes_every_proof_on_one_instance() -> None:
+    """Rows earlier proofs leave waiting must not make a conforming FIFO owner fail."""
+    _run_every_proof_on_one_instance(_ClaimsTheOldestWaitingRow())
+
+
+def test_the_stale_token_proof_reclaims_the_reaped_row_whatever_the_claim_order() -> None:
+    """
+    Regression: the re-claim must reach the reaped row itself.
+
+    Earlier proofs leave rows waiting (a retry returns one to READY), so on a FIFO
+    owner the next claim takes one of those, not the row the reaper just handed
+    back. The proof then tried the dead owner's token on a row nobody owned, saw
+    it refused, and never tested the window after another worker claimed it. The
+    lowest-id reference owner hid this because its claim happens to take the
+    reaped row first, and the per-proof self-tests build a fresh owner each time.
+    """
+    with pytest.raises(AssertionError, match="fenced_write after another worker claimed the row"):
+        _run_every_proof_on_one_instance(_ClaimsTheOldestAndHonoursReapedTokens())
+
+
 def _verdicts(make_owner: Callable[[], _InMemoryOwner], *, observe: bool = True) -> set[str]:
     """The names of the proofs a fresh instance of ``make_owner`` fails."""
     failed: set[str] = set()

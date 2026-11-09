@@ -78,6 +78,6 @@
     "Existing test_costs.py subprocess tests retain real lifecycle and real xdist worker-loss coverage.",
     "Two baseline contracts, at most two collected items; measured contract properties are report inputs, not SQL measurement proof.",
     "Explicit caller path omissions/custom collector exclusions remain outside completeness inference.",
-    "shipped-389c5bb runs history/sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
+    "shipped-389c5bb runs history/sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in cost_baseline_adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
   ]
 }
