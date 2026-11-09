@@ -1,5 +1,6 @@
 """Exercise this consumer's real configuration against real Git snapshots."""
 
+import subprocess
 import unittest
 
 from routing import RoutingSnapshot
@@ -116,9 +117,10 @@ class RoutingTests(RoutingSnapshot):
                 self.assertEqual(self.selection(path), {"actions"})
 
     def test_demo_recording_inputs_keep_the_complete_demo_lane(self):
+        # contracts too: its job checks ci.yml, which names the README GIF test that reads them.
         for path in ("docs/demo.tape", "docs/demo_env.sh"):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), {"demos"})
+                self.assertEqual(self.selection(path), {"demos", "contracts"})
 
     def test_framework_test_and_deletion_keep_its_lane(self):
         test_file = next((self.repo / "package/tests/mongodb").glob("test_*.py")).relative_to(self.repo).as_posix()
@@ -155,7 +157,8 @@ class RoutingTests(RoutingSnapshot):
         reporting = "package/src/pytest_obligation/reporting"
         loader = self.selection(f"{reporting}/collect.py")
         self.assertTrue(loader & {"core", "actions"}, loader)
-        self.assertEqual(self.selection(f"{reporting}/_nodeids_plugin.py"), loader)
+        # At least the loader's lanes; the actions job also reaches it through collect.py's declaration.
+        self.assertLessEqual(loader, self.selection(f"{reporting}/_nodeids_plugin.py"))
 
     def test_evidence_validators_only_start_their_consuming_lanes(self):
         self.assertEqual(
@@ -189,11 +192,15 @@ class RoutingTests(RoutingSnapshot):
         self.assertIn("typecheck", self.selection("package/src/pytest_obligation/host.py"))
 
     def test_missing_history_and_explicit_full_checkpoint_run_every_lane(self):
-        for result in (
-            self.plan("missing-history", self.base),
-            self.plan(self.base, self.base, full=True),
-        ):
-            self.assertTrue(all(result.lanes.values()), result.model_dump_json())
+        result = self.plan(self.base, self.base, full=True)
+        self.assertTrue(all(result.lanes.values()), result.model_dump_json())
+        # An unknown base either plans every lane or fails the planner, and a failed planner runs every
+        # job (test_execution_admission.py requires that fallback on each one).
+        try:
+            result = self.plan("missing-history", self.base)
+        except subprocess.CalledProcessError:
+            return
+        self.assertTrue(all(result.lanes.values()), result.model_dump_json())
 
     def test_documentation_dependency_selects_its_declared_reader(self):
         self.reset()
