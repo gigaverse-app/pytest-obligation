@@ -4,7 +4,7 @@ import pytest
 
 from pytest_obligation.debt import DebtEntry
 from pytest_obligation.profiles.coverage import Assessment, CaseEvidence, ProfileCoverage, SuiteCoverage
-from pytest_obligation.profiles.reporting import merge_reports
+from pytest_obligation.profiles.reporting import IncompatibleShard, merge_reports
 from pytest_obligation.reporting.markdown import counts, render
 
 
@@ -93,7 +93,7 @@ def test_shards_must_agree_on_debt_metadata() -> None:
     suite = specimen()
     incoming = suite.model_copy(deep=True)
     incoming.profiles["E"].cases["late"].debt = None
-    with pytest.raises(AssertionError, match="debt"):
+    with pytest.raises(IncompatibleShard, match="debt"):
         merge_reports({"suite": suite}, {"suite": incoming})
 
 

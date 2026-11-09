@@ -207,6 +207,16 @@ def pytest_runtest_makereport(
     return report
 
 
+class IncompatibleShard(ValueError):
+    """A shard disagrees with the merged report on what was declared or expected, so none of it is admitted."""
+
+
+def _agree(compatible: bool, disagreement: str) -> None:
+    # An explicit raise, not ``assert``: ``python -O`` would strip the check and merge the shard.
+    if not compatible:
+        raise IncompatibleShard(disagreement)
+
+
 def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCoverage]) -> None:
     """Merge distributed evidence only when workers agree on the same declaration and expected cases."""
     additions: dict[str, SuiteCoverage] = {}
@@ -218,28 +228,33 @@ def merge_reports(target: dict[str, SuiteCoverage], incoming: dict[str, SuiteCov
             additions[suite] = report
             continue
         current = target[suite]
-        assert current.source == report.source, f"{suite}: workers disagree on source location"
-        assert (current.exploration is None) == (report.exploration is None)
-        assert current.name == report.name and current.profiles.keys() == report.profiles.keys()
+        _agree(current.source == report.source, f"{suite}: workers disagree on source location")
+        _agree(
+            (current.exploration is None) == (report.exploration is None),
+            f"{suite}: workers disagree on whether exploration ran",
+        )
+        _agree(
+            current.name == report.name and current.profiles.keys() == report.profiles.keys(),
+            f"{suite}: workers disagree on the declared name or profiles",
+        )
         for letter, profile in report.profiles.items():
             existing = current.profiles[letter]
-            assert (existing.title, existing.assessment, existing.families, existing.cases.keys()) == (
-                profile.title,
-                profile.assessment,
-                profile.families,
-                profile.cases.keys(),
-            ), f"{suite}/{letter}: workers disagree on expected profile coverage"
+            _agree(
+                (existing.title, existing.assessment, existing.families, existing.cases.keys())
+                == (profile.title, profile.assessment, profile.families, profile.cases.keys()),
+                f"{suite}/{letter}: workers disagree on expected profile coverage",
+            )
         for existing_cases, incoming_cases in zip(
             (*current.case_groups(), current.exploration or {}),
             (*report.case_groups(), report.exploration or {}),
             strict=True,
         ):
-            assert existing_cases.keys() == incoming_cases.keys(), f"{suite}: workers disagree on expected checks"
+            _agree(existing_cases.keys() == incoming_cases.keys(), f"{suite}: workers disagree on expected checks")
             for case_id, case in incoming_cases.items():
                 old = existing_cases[case_id]
-                assert old.debt == case.debt, f"{suite}/{case_id}: workers disagree on declared debt"
-                assert old.family == case.family
-                assert old.declaration == case.declaration, f"{suite}/{case_id}: workers disagree on declaration"
+                _agree(old.debt == case.debt, f"{suite}/{case_id}: workers disagree on declared debt")
+                _agree(old.family == case.family, f"{suite}/{case_id}: workers disagree on the check's family")
+                _agree(old.declaration == case.declaration, f"{suite}/{case_id}: workers disagree on declaration")
                 pairs.append((old, case))
     target.update(additions)
     for old, case in pairs:
