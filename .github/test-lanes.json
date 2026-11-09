@@ -1,5 +1,23 @@
 {
   "extends": "workflow",
+  "graph": {
+    "module_roots": [
+      ".",
+      "package/src",
+      "package/shims",
+      "package",
+      "package/tests_support",
+      "examples/adopter",
+      "examples/checkout_tutorial",
+      "examples/checkout_tutorial/tests",
+      "examples/rq_tutorial",
+      "examples/rq_tutorial/tests",
+      "demos/dbos_transactional_outbox",
+      "demos/procrastinate_demo_django",
+      "demos/saleor_checkout",
+      "demos/wagtail_tasks"
+    ]
+  },
   "lanes": {
     "core": {
       "roots": [
