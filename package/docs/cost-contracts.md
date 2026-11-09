@@ -120,9 +120,18 @@ measured contracts travel on its report, so this works under xdist. Do not pass
 it on filtered runs, which measure only some contracts.
 
 Update-mode pruning requires a serial run with successful collection, no
-deselections or skips, and a successful teardown for every collected test.
-Failures, interruptions, collection-only runs and xdist runs preserve unmeasured
-entries. Measurements already recorded by tests still update their own entries.
+deselections, skips or xfails, and a passed call and a completed teardown for
+every collected test. Failures, interruptions, `--collect-only`,
+`--setup-only`/`--setup-plan` (no test body runs), `--lf` (it skips whole files
+without deselecting them) and xdist runs preserve unmeasured entries, and the
+run ends with a `Cost baseline pruning skipped (...)` line naming each cause.
+Measurements already recorded by tests still update their own entries.
+
+A suite that always skips or xfails some test somewhere, say one that needs a
+service CI lacks, can never prune: check mode reports the stale entry and update
+mode refuses to remove it. Delete such an entry from
+`obligation_cost_baseline.yaml` by hand; the file is plain YAML, one
+`- contract:` item per entry.
 A successful empty collection may retire the last entries (pytest still exits
 with its normal no-tests status). The flag remains your declaration that the
 invocation includes every cost test: pytest cannot detect omitted paths or tests

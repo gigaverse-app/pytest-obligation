@@ -25,10 +25,12 @@
     "testFailure": "Actual failed call report and passed teardown; final TESTS_FAILED status.",
     "collectOnly": "Instantiate CostCompleteness with Config.option.collectonly.",
     "distributedRun": "Instantiate with Config.option.numprocesses=2; actual measured TestReport sequence.",
+    "setupOnly": "Instantiate with Config.option.setuponly; actual setup and teardown TestReports with no call report.",
+    "lastFailed": "Instantiate with Config.option.lf; actual measured TestReport sequence, as for the one file --lf kept.",
     "completeRun": "Actual passed TestReport sequence with obligation_cost_contract property.",
     "emptyCollection": "No report; final NO_TESTS_COLLECTED status.",
     "finishUpdate": "Call real CostCompleteness.pytest_sessionfinish with actual pytest.Session inputs.",
-    "inspect": "Observe baseline via load_cost_baseline and real plugin visited/finished fields; no repeated hook."
+    "inspect": "Observe baseline via load_cost_baseline and real plugin visited/finished/passed_calls fields; no repeated hook."
   },
   "witnesses": [
     "failedCollectionPreservesTest",
@@ -37,6 +39,8 @@
     "failurePreservesTest",
     "collectionOnlyPreservesTest",
     "distributedRunPreservesTest",
+    "setupOnlyPreservesTest",
+    "lastFailedPreservesTest",
     "retirementControlTest",
     "emptyRetirementControlTest"
   ],
