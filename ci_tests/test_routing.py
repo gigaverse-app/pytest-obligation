@@ -173,11 +173,14 @@ class RoutingTests(RoutingSnapshot):
                 "demos",
                 "saleor",
                 "actions",
+                # The due job runs Due's own scripts/check_adoption_report.py in its checkout of
+                # gigaverse-app/due; the planner resolves that path to this repository's copy.
+                "due",
                 "typecheck",
                 "contracts",
             },
         )
-        # The due job runs Due's own copy of these validators, in its checkout of gigaverse-app/due.
+        # The due job runs no case validator of its own name, so this repository's does not start it.
         self.assertNotIn("due", self.selection("scripts/check_adoption_cases.py"))
 
     def test_published_actions_only_start_their_consumers(self):
