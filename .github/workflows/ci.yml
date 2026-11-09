@@ -122,6 +122,7 @@ jobs:
           # Every registered contract; a run that collects fewer fails --quint-require-complete.
           QUINT_REQUIRED_CONTRACTS: |-
             report-merge
+            fenced-lease
             cost-baseline
         run: >-
           uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
