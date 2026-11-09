@@ -12,7 +12,7 @@ permissions:
 
 # Preview pytest-selective #139 until its reader-relative rules are released.
 env:
-  SELECTOR_PREVIEW_REF: 65e85ea337bbb752250d7ef308b59adc73d01f90
+  SELECTOR_PREVIEW_REF: 756df888218786c3d8ef1f034da1115e6a111b23
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.pull_request.number || github.run_id }}
