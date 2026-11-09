@@ -1,0 +1,10 @@
+dependencies:
+  - inputs:
+      - "//docs/demo.tape"
+      - "//docs/demo_env.sh"
+    kind: content
+    reason: Replays every command the README GIF's tape types, in the environment the tape sources.
+  - inputs:
+      - "saleor_checkout/**/*.py"
+    kind: content
+    reason: The tape's last command, due-work-harness check --root demos/saleor_checkout, scans this demo's source.

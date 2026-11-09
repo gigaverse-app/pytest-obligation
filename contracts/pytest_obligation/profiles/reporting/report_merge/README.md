@@ -52,7 +52,7 @@ Mutants are scoped to replay resources and do not edit production files. The res
 
 Changes to admission, compatibility checks, case evidence or identity behavior require reviewing this model, adapter, manifest, witnesses and CI input mapping in the **same change**. Explain any intended contract change and keep a discriminating old-source or implementation-mutant control. Do not silence a mismatch by dropping an observation, removing a witness/mutant, increasing a permissive bound, weakening an invariant, or accepting exceptions as detection. A deliberate weakening requires explicit rationale and maintainer review; update the contract openly instead of silently making CI green. Preserve `audit.qnt` as historical evidence.
 
-All topic files are executable-contract inputs despite living under `docs/`; `.github/test-lanes.json` and the shared CI job must retain model/adapter/manifest/documentation/toolchain inputs as well as the mapped implementation sources. Shared runner and toolchain changes must run every registered topic.
+Every file in this directory is an executable-contract input: the driver imports the adapter and the mapped implementation sources, and `test_report_merge_contract.py.gv-dependency.yaml` declares the model, manifest, history, this README and `contracts/quint.ini`, so a change to any of them runs the `quint` lane. Shared runner and toolchain changes (the lockfile, pytest-quint-connect) run every registered contract.
 
 ## Limits
 

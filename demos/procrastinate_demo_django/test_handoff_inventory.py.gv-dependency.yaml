@@ -1,0 +1,5 @@
+dependencies:
+  - inputs:
+      - "**/*.py"
+    kind: content
+    reason: Scans every Python file in this demo for handoff sites without importing them.
