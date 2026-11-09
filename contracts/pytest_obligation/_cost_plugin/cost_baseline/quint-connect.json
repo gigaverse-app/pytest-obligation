@@ -25,10 +25,12 @@
     "testFailure": "Actual failed call report and passed teardown; final TESTS_FAILED status.",
     "collectOnly": "Instantiate CostCompleteness with Config.option.collectonly.",
     "distributedRun": "Instantiate with Config.option.numprocesses=2; actual measured TestReport sequence.",
+    "setupOnly": "Instantiate with Config.option.setuponly; actual setup and teardown TestReports with no call report.",
+    "lastFailed": "Instantiate with Config.option.lf; actual measured TestReport sequence, as for the one file --lf kept.",
     "completeRun": "Actual passed TestReport sequence with obligation_cost_contract property.",
     "emptyCollection": "No report; final NO_TESTS_COLLECTED status.",
     "finishUpdate": "Call real CostCompleteness.pytest_sessionfinish with actual pytest.Session inputs.",
-    "inspect": "Observe baseline via load_cost_baseline and real plugin visited/finished fields; no repeated hook."
+    "inspect": "Observe baseline via load_cost_baseline and real plugin visited/finished/passed_calls fields; no repeated hook."
   },
   "witnesses": [
     "failedCollectionPreservesTest",
@@ -37,6 +39,8 @@
     "failurePreservesTest",
     "collectionOnlyPreservesTest",
     "distributedRunPreservesTest",
+    "setupOnlyPreservesTest",
+    "lastFailedPreservesTest",
     "retirementControlTest",
     "emptyRetirementControlTest"
   ],
@@ -74,6 +78,6 @@
     "Existing test_costs.py subprocess tests retain real lifecycle and real xdist worker-loss coverage.",
     "Two baseline contracts, at most two collected items; measured contract properties are report inputs, not SQL measurement proof.",
     "Explicit caller path omissions/custom collector exclusions remain outside completeness inference.",
-    "shipped-389c5bb runs history/sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
+    "shipped-389c5bb runs history/sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in cost_baseline_adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
   ]
 }

@@ -91,9 +91,10 @@ jobs:
       # registered witness and sample, replays them through the real APIs and requires
       # each declared mutation to be caught. A filtered or partial run fails here.
       - name: Generate model traces and replay production APIs with mutation controls
-        # contracts/quint.ini lists every required contract; a run that collects fewer fails.
+        # contracts/quint.ini lists every required contract; with --quint-require-complete a run
+        # that collects fewer, or skips a case, fails.
         run: >-
-          uv run --no-sync pytest -c contracts/quint.ini contracts
+          uv run --no-sync pytest -c contracts/quint.ini contracts --quint-require-complete
           --junitxml=contracts/.artifacts/quint-connect/junit.xml
       # One sticky PR comment per run: bugs the contract found, planted bugs it catches, what
       # the model claims, and for any failure the diverging state and a replay command. Fails

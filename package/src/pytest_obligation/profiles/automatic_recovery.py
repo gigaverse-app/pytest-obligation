@@ -572,19 +572,30 @@ def assert_sweep_bindings_are_production_bound(sweep: DueWorkSweep) -> None:
         assert_the_backlog_reading_is_production_published(sweep)
     assert_lifecycle_execution_is_production_bound(sweep)
     if sweep.still_owed is not None:
-        assert_binding_reaches_production(
-            adopter=sweep.name,
-            field="still_owed",
-            binding=sweep.still_owed,
-            forbidden=INVOCATION_AUTHORING_OPERATIONS,
-            production_shape="the production selection owning this obligation after failure",
+        assert_still_owed_is_production_bound(
+            sweep.name, "still_owed", sweep.still_owed, "the production selection owning this obligation after failure"
         )
-        assert_test_binding_consumes_its_first_parameter(
-            adopter=sweep.name,
-            field="still_owed",
-            binding=sweep.still_owed,
-            parameter_shape="the poisoned row",
-        )
+
+
+def assert_still_owed_is_production_bound(
+    adopter: str, field: str, still_owed: Callable[..., object], production_shape: str
+) -> None:
+    """
+    A ``still_owed`` binding asks production whether *this* row is still owed after it failed.
+
+    It must reach production code, and it must read the row it is given: one that ignores its row ("is anything
+    owed at all") would pass any poisoned row.
+    """
+    assert_binding_reaches_production(
+        adopter=adopter,
+        field=field,
+        binding=still_owed,
+        forbidden=INVOCATION_AUTHORING_OPERATIONS,
+        production_shape=production_shape,
+    )
+    assert_test_binding_consumes_its_first_parameter(
+        adopter=adopter, field=field, binding=still_owed, parameter_shape="the poisoned row"
+    )
 
 
 def assert_lifecycle_execution_is_production_bound(sweep: DueWorkSweep) -> None:
