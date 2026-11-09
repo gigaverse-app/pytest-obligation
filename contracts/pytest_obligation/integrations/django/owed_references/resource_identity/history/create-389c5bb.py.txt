@@ -1,0 +1,10 @@
+# Frozen evidence: ResourceProvider.create exactly as shipped at
+# 389c5bb84f7ab186fa9c7815c2e15cb9332b67a4, before #211 fixed it. The planted bug
+# `shipped-389c5bb` runs this text in the real owed_references module's namespace and
+# installs it on today's ResourceProvider, so the contract replays the code that
+# reissued a live resource's name. adapter.py checks its SHA-256; never edit it.
+
+def create(self) -> ProviderResource:
+    resource = ProviderResource(name=f"resource-{len(self.resources) + 1:04d}")
+    self.resources[resource.name] = resource
+    return resource
