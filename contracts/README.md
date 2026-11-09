@@ -11,8 +11,12 @@ They are test-time only: nothing here ships in the package, and the main test ru
 this directory.
 
 ```sh
-uv run --no-sync pytest -c contracts/quint.ini contracts
+uv run --no-sync pytest -c contracts/quint.ini contracts --quint-require-complete
 ```
+
+`--quint-require-complete` fails the run unless every contract in
+[`quint.ini`](quint.ini)'s `quint_required_contracts` ran every case; CI passes it. Leave it off to
+run one contract's directory or to `--quint-replay` a saved trace.
 
 ## Contracts
 

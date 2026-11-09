@@ -78,6 +78,20 @@ class LostCommitReplies:
 _Replies = TypeVar("_Replies", bound=LostCommitReplies)
 
 
+def counted_worker_killer(
+    watch: Callable[[Callable[[], None], Callable[[], None]], AbstractContextManager[object]],
+) -> Callable[[int | None], AbstractContextManager[CommitWorker]]:
+    """Kill a worker after its n-th acknowledged commit, refusing its later commands through the body."""
+
+    @contextmanager
+    def killer(kill_after: int | None) -> Iterator[CommitWorker]:
+        worker = CommitWorker(kill_after)
+        with watch(worker.refuse_if_dead, worker.committed):
+            yield worker
+
+    return killer
+
+
 def counted_reply_breaker(
     watch: Callable[[Callable[[], None], Callable[[], None]], AbstractContextManager[object]],
     replies_factory: Callable[[int | None], _Replies],

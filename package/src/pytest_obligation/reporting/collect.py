@@ -1,4 +1,6 @@
 """Reuse current-revision nodeids; collect only application files still missing."""
+# Loaded in a subprocess with `-p _nodeids_plugin`, which no import names.
+# gv:test-dependency: package/src/pytest_obligation/reporting/_nodeids_plugin.py
 
 import argparse
 import glob

@@ -58,13 +58,13 @@
   "bounds": {
     "seed": 20261108,
     "max_samples": 200,
-    "n_traces": 16,
+    "n_traces": 18,
     "max_steps": 8
   },
   "limits": [
     "One row and the reference's own clock, which never advances; lease state is read as none, live or expired from the deadline.",
     "Tokens are named by age (last or previous issued); a never-issued token stands in when there is no such token.",
     "This contracts the reference owner the profile B proofs are calibrated against, not an adopter's binding; adopters are judged by the proofs in bounded_ownership.py.",
-    "shipped-9aa6ff2 runs history/rearm-9aa6ff2.py.txt, the three pre-fix methods copied verbatim from 9aa6ff2 and pinned by SHA-256 in adapter.py."
+    "shipped-9aa6ff2 runs history/rearm-9aa6ff2.py.txt, the three pre-fix methods copied verbatim from 9aa6ff2 and pinned by SHA-256 in conftest.py."
   ]
 }
