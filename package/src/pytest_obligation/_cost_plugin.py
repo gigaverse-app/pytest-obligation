@@ -33,7 +33,12 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
 
 
 class CostCompleteness:
-    """Collects every measured contract, then holds the baseline to having no unmeasured entry."""
+    """
+    Collects every measured contract, then holds the baseline to having no unmeasured entry.
+
+    Contract: contracts/pytest_obligation/_cost_plugin/cost_baseline/ replays Quint histories
+    against these hooks. Change them and the model in the same pull request.
+    """
 
     def __init__(self, config: pytest.Config) -> None:
         self.root = config.rootpath
