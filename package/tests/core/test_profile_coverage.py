@@ -1,6 +1,9 @@
 """Reports cannot promote declarations, filtered runs, or failed teardown into verified guarantees."""
 
 import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,15 +15,9 @@ from pytest_obligation.profiles.coverage import (
     ProfileCoverage,
     SuiteCoverage,
 )
-from pytest_obligation.profiles.reporting import merge_reports
-
-
-def coverage() -> ProfileCoverage:
-    return ProfileCoverage(
-        title="Harmless Replay",
-        assessment=Assessment(state="claimed"),
-        cases={"first": CaseEvidence(family="replay"), "duplicate": CaseEvidence(family="replay")},
-    )
+from pytest_obligation.profiles.reporting import IncompatibleShard, merge_reports
+from pytest_obligation.reporting.compose import merge_evidence
+from tests.core.shard_mismatches import LOCATIONS, MISMATCHES, merged_suite, mismatched_shard, replay_profile
 
 
 @pytest.mark.parametrize(
@@ -28,7 +25,7 @@ def coverage() -> ProfileCoverage:
     ["collection", "selection", "setup", "call", "teardown", "family", "declined family", "unfinished repeat"],
 )
 def test_verification_requires_complete_executed_evidence(missing: str) -> None:
-    profile = coverage()
+    profile = replay_profile()
     for case in profile.cases.values():
         case.collected = True
         case.selected = True
@@ -52,7 +49,7 @@ def test_verification_requires_complete_executed_evidence(missing: str) -> None:
 
 @pytest.mark.parametrize("outcome", ["skipped", "xfail", "xpass", "failed"])
 def test_nonpassing_call_cannot_verify_the_profile_or_contract(outcome: str) -> None:
-    profile = coverage()
+    profile = replay_profile()
     for case in profile.cases.values():
         case.collected = case.selected = True
         case.outcomes = {phase: ["passed"] for phase in ("setup", "call", "teardown")}
@@ -71,7 +68,7 @@ def test_a_contract_with_no_claims_is_not_vacuously_verified() -> None:
 
 @pytest.mark.parametrize("fault", [None, "profile", "extra"])
 def test_report_round_trip_recomputes_every_verdict_without_mutating_input(fault: str | None) -> None:
-    profile = coverage()
+    profile = replay_profile()
     for case in profile.cases.values():
         case.collected = case.selected = True
         case.outcomes = {phase: ["passed"] for phase in ("setup", "call", "teardown")}
@@ -101,7 +98,7 @@ def test_report_round_trip_recomputes_every_verdict_without_mutating_input(fault
 @pytest.mark.parametrize("location", ["suite", "profile", "case", "extra"])
 def test_report_readback_still_rejects_unknown_evidence_fields(location: str) -> None:
     suite = SuiteCoverage(
-        name="effect", profiles={"H": coverage()}, additional_cases={"extra": CaseEvidence(family="extra")}
+        name="effect", profiles={"H": replay_profile()}, additional_cases={"extra": CaseEvidence(family="extra")}
     )
     payload = suite.model_dump()
     target = {
@@ -117,7 +114,7 @@ def test_report_readback_still_rejects_unknown_evidence_fields(location: str) ->
 
 
 def test_distributed_results_cannot_erase_failure_or_change_expected_coverage() -> None:
-    initial = SuiteCoverage(name="effect", profiles={"H": coverage()})
+    initial = SuiteCoverage(name="effect", profiles={"H": replay_profile()})
     incoming = initial.model_copy(deep=True)
     incoming.profiles["H"].cases["first"].outcomes = {"call": ["failed"]}
     initial.profiles["H"].cases["first"].outcomes = {"call": ["passed"]}
@@ -126,46 +123,71 @@ def test_distributed_results_cannot_erase_failure_or_change_expected_coverage() 
     assert initial.profiles["H"].cases["first"].outcomes["call"] == ["passed", "failed"]
     assert not initial.profiles["H"].verified
     incoming.profiles["H"].cases.pop("duplicate")
-    with pytest.raises(AssertionError, match="workers disagree"):
+    with pytest.raises(IncompatibleShard, match="workers disagree"):
         merge_reports(merged, {"suite": incoming})
 
 
-@pytest.mark.parametrize("mismatch", ["family", "debt", "declaration", "case-set", "source"])
-@pytest.mark.parametrize("location", ["same-suite", "later-suite"])
+@pytest.mark.parametrize("mismatch", MISMATCHES)
+@pytest.mark.parametrize("location", LOCATIONS)
 def test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence(mismatch: str, location: str) -> None:
-    initial = SuiteCoverage(name="effect", profiles={"H": coverage()})
-    incoming = initial.model_copy(deep=True)
-    for case in incoming.profiles["H"].cases.values():
-        case.collected = case.selected = True
-        case.outcomes = {phase: ["passed"] for phase in ("setup", "call", "teardown")}
-    target = {"suite": initial}
-    shard = {"suite": incoming}
-    incompatible = incoming
-    if location == "later-suite":
-        target["later"] = initial.model_copy(deep=True)
-        incompatible = incoming.model_copy(deep=True)
-        shard["new"] = incoming.model_copy(deep=True)
-        shard["later"] = incompatible
-    last = incompatible.profiles["H"].cases["duplicate"]
-    if mismatch == "case-set":
-        incompatible.profiles["H"].cases.pop("duplicate")
-    elif mismatch == "source":
-        from pytest_obligation.profiles.coverage import SourceLocation
-
-        incompatible.source = SourceLocation(path="different.py", line=1, kind="suite")
-    elif mismatch == "family":
-        last.family = "incompatible"
-    elif mismatch == "debt":
-        from pytest_obligation.debt import DebtEntry
-
-        last.debt = DebtEntry(case="duplicate", kind="known-defect", reason="Reviewed finding.")
-    else:
-        last.declaration = "not applicable"
+    initial = merged_suite()
+    target, shard = mismatched_shard(initial, mismatch, location)
     before = {key: value.model_dump(round_trip=True) for key, value in target.items()}
-    with pytest.raises(AssertionError):
+    with pytest.raises(IncompatibleShard):
         merge_reports(target, shard)
     assert {key: value.model_dump(round_trip=True) for key, value in target.items()} == before
     assert not initial.verified
+
+
+@pytest.mark.parametrize("mismatch", MISMATCHES)
+def test_shards_are_rejected_even_when_python_strips_assertions(mismatch: str) -> None:
+    """``python -O`` removes ``assert``: a compatibility check written as one would merge any shard."""
+    child = f"""
+from pytest_obligation.profiles.reporting import merge_reports
+from tests.core.shard_mismatches import merged_suite, mismatched_shard
+
+target, shard = mismatched_shard(merged_suite(), {mismatch!r}, "later-suite")
+try:
+    merge_reports(target, shard)
+except Exception as error:
+    print(__debug__, type(error).__name__, "new" in target)
+else:
+    print(__debug__, "merged", "new" in target)
+"""
+    package = Path(__file__).resolve().parents[2]
+    path = os.pathsep.join(str(directory) for directory in (package / "src", package))
+    result = subprocess.run(
+        [sys.executable, "-O", "-c", child],
+        env={**os.environ, "PYTHONPATH": path},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.stdout.split() == ["False", "IncompatibleShard", "False"], result.stderr
+
+
+def test_a_rejected_shard_is_named_without_printing_its_contents(tmp_path: Path) -> None:
+    initial = merged_suite()
+    _, shard = mismatched_shard(initial.model_copy(deep=True), "assessment", "same-suite")
+    files = [tmp_path / "shard-1.json", tmp_path / "shard-2.json"]
+    files[0].write_bytes(TypeAdapter(dict[str, SuiteCoverage]).dump_json({"suite": initial}))
+    files[1].write_bytes(TypeAdapter(dict[str, SuiteCoverage]).dump_json(shard))
+    evidence = merge_evidence(
+        files, expected_reports=2, test_outcome="success", inventory=None, problems=[], junit=None
+    )
+    assert "Report 2 of 2 (`shard-2.json`) could not be read or combined (IncompatibleShard)." in evidence.unavailable
+    assert "shard-1" not in evidence.unavailable
+    assert "workers disagree" not in evidence.unavailable
+    assert list(evidence.reports) == ["suite"]
+
+
+@pytest.mark.parametrize("name", ["shard`1.json", "shard](x).json", "<b>.json", "two\nlines.json"])
+def test_a_shard_name_that_could_break_the_markdown_is_left_out(tmp_path: Path, name: str) -> None:
+    evidence = merge_evidence(
+        [tmp_path / name], expected_reports=1, test_outcome="success", inventory=None, problems=[], junit=None
+    )
+    # The type is FileNotFoundError, or OSError where the platform refuses the name itself.
+    assert re.match(r"Report 1 of 1 could not be read or combined \((FileNotFound|OS)Error\)\.", evidence.unavailable)
 
 
 @pytest.mark.parametrize("workers", [0, 2])
