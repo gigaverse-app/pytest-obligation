@@ -7,6 +7,7 @@ what actually replays. Application handlers, partition watermarks, serialization
 and retry policy remain owned by the application. These are consumer offset
 faults, not Kafka transaction or producer-delivery proofs.
 """
+# Probe for the lane planner; not for merging.
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
