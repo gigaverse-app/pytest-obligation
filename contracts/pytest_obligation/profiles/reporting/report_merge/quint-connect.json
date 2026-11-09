@@ -2,15 +2,15 @@
   "version": 1,
   "name": "report-merge",
   "description": "Atomic admission of distributed report evidence through the real merge_reports API.",
-  "root": "../../..",
+  "root": "../../../../..",
   "attest": {
     "package": "pytest_obligation",
     "source": "package/src"
   },
   "module": "report_merge_fixed",
   "invariant": "contract",
-  "model": "fixed.qnt",
-  "historical": "audit.qnt",
+  "model": "model.qnt",
+  "historical": "history/audit.qnt",
   "sources": [
     "package/src/pytest_obligation/profiles/reporting.py",
     "package/src/pytest_obligation/profiles/coverage.py",
@@ -83,7 +83,7 @@
     "replace-case-identity is an explicit post-call output mutation replacing a CaseEvidence object with an equal deep copy; not claimed as original production source.",
     "Historical audit.qnt remains unchanged; broader audit models are not connected contracts.",
     "Additional source mutants compile current merge AST: preflight evidence write, retained case replacement, compatibility guard removal and omitted commit; runtime rejection/accumulation checks complement the conditional source effect theorem.",
-    "shipped-389c5bb runs merge_reports-389c5bb.py.txt, the pre-fix function copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py."
+    "shipped-389c5bb runs history/merge_reports-389c5bb.py.txt, the pre-fix function copied verbatim from 389c5bb and pinned by SHA-256 in report_merge_adapter.py."
   ],
   "historical_sha256": "1d2a1941bc98e48a0f0151e8490b7639c4fcf495dff15b93ce7c8c619b878375"
 }

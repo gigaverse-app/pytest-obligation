@@ -38,7 +38,7 @@ The check command requires all three forms of evidence:
 
 `.artifacts/source-contracts/results.json`, runtime XML, exact positive/mutated Python and generated Dafny plus full backend
 output under `.artifacts/source-contracts/backend`,
-project artifacts and `.artifacts/quint-connect` retain outcomes and source hashes. A
+project artifacts and `contracts/.artifacts/quint-connect` retain outcomes and source hashes. A
 failed command overwrites a previous green receipt. CI uploads them on failure.
 The `source_contracts` lane declares source, dependencies, sidecar, compiler
 patch/lock/bootstrap, enrollment, runtime inventory, model and adapter inputs;
@@ -123,7 +123,7 @@ source-only regeneration. Do not regenerate enrollment merely to remove a
 failing target. Missing/zero targets and stale outputs must fail. Keep runtime
 inventory changes reviewable and retain every semantic control.
 
-Review the maintained [Quint guide](../quint/report-merge/README.md), model,
+Review the maintained [Quint guide](../../contracts/pytest_obligation/profiles/reporting/report_merge/README.md), model,
 adapter and action mapping together. `audit.qnt` remains immutable historical
 evidence; its SHA-256 stays checked by the existing registry. A compiler or
 external contract change requires rerunning the complete source lane and generic

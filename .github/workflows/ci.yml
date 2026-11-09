@@ -89,7 +89,7 @@ jobs:
           name: report-source-contracts
           path: |
             .artifacts/source-contracts
-            .artifacts/quint-connect
+            contracts/.artifacts/quint-connect
             proofs/generated
             test-results/source-verifier
           if-no-files-found: error
@@ -118,16 +118,10 @@ jobs:
       # registered witness and sample, replays them through the real APIs and requires
       # each declared mutation to be caught. A filtered or partial run fails here.
       - name: Generate model traces and replay production APIs with mutation controls
-        env:
-          # Every registered contract; a run that collects fewer fails --quint-require-complete.
-          QUINT_REQUIRED_CONTRACTS: |-
-            report-merge
-            fenced-lease
-            cost-baseline
+        # contracts/quint.ini lists every required contract; a run that collects fewer fails.
         run: >-
-          uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
-          --quint-require-complete -o "quint_required_contracts=$QUINT_REQUIRED_CONTRACTS"
-          --junitxml=.artifacts/quint-connect/junit.xml
+          uv run --no-sync pytest -c contracts/quint.ini contracts
+          --junitxml=contracts/.artifacts/quint-connect/junit.xml
       # One sticky PR comment per run: bugs the contract found, planted bugs it catches, what
       # the model claims, and for any failure the diverging state and a replay command. Fails
       # when README.md's contract block no longer matches complete receipts.
@@ -138,7 +132,7 @@ jobs:
         if: always()
         with:
           name: quint-trace-replay
-          path: .artifacts/quint-connect
+          path: contracts/.artifacts/quint-connect
           if-no-files-found: error
 
   lint:

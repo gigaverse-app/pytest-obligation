@@ -24,8 +24,8 @@ class SourceContractRoutingTests(unittest.TestCase):
             "scripts/bootstrap_source_verifier.py",
             "tooling/source-contracts/verifier.patch",
             "docs/source-contracts/report-merge.md",
-            "docs/quint/report-merge/adapter.py",
-            "verification_tests/quint/test_report_merge_contract.py",
+            "contracts/pytest_obligation/profiles/reporting/report_merge/report_merge_adapter.py",
+            "contracts/pytest_obligation/profiles/reporting/report_merge/test_report_merge_contract.py",
         ):
             with self.subTest(path=path):
                 self.assertIn("source_contracts", self.selection(path))

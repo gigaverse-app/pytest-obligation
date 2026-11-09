@@ -51,10 +51,12 @@ remain complete checkpoints.
 
 ## Maintained Quint contracts
 
-For behavior covered by a registered `docs/quint/*/manifest.json`, review the
-production implementation, current `fixed.qnt`, adapter and action mapping
-together. Run `uv run --no-sync pytest verification_tests/quint --quint-require-complete`
-([guide](docs/quint/README.md)) before publishing a behavior change. Keep historical `audit.qnt` files immutable,
+Model contracts live in `contracts/`, mirroring the import path of the code they model
+([guide](contracts/README.md)). For behavior covered by one (the modelled code's docstring names it),
+review the implementation, `model.qnt`, the driver and the manifest together. Run
+`uv run --no-sync pytest -c contracts/quint.ini contracts` before publishing a behavior change.
+Regenerate a generated `*_driver.py` with `pytest-quint-connect codegen quint-connect.json`; never
+edit it by hand. Keep `history/` files (audit models, shipped pre-fix code) immutable,
 retain known-bad mutation controls, and investigate drift instead of automatically
 weakening an invariant or expected observation. This applies to registered
 contracts; unrelated changes do not require inventing a new specification.

@@ -17,6 +17,7 @@ profiles-*.json
 
 # Maintained Quint tool cache and replay evidence
 /.artifacts/
+/contracts/.artifacts/
 
 # Pinned source verifier tool cache and install receipts
 /.source-contract-tooling/

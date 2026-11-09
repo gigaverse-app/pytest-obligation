@@ -59,10 +59,9 @@ def main() -> None:
             sys.executable,
             "-m",
             "pytest",
-            "verification_tests/quint",
-            "-p",
-            "no:cacheprovider",
-            "--quint-require-complete",
+            "-c",
+            "contracts/quint.ini",
+            "contracts/pytest_obligation/profiles/reporting/report_merge",
             "-o",
             "quint_required_contracts=report-merge",
         ]

@@ -266,12 +266,11 @@
     },
     "quint": {
       "roots": [
-        "verification_tests/quint"
+        "contracts"
       ],
       "inputs": [
         "package/src/pytest_obligation/**",
-        "docs/quint/**",
-        "verification_tests/quint/**",
+        "contracts/**",
         "ci_tests/test_quint_routing.py",
         "scripts/source_contracts/mutations.py"
       ]
@@ -289,8 +288,8 @@
         "proofs/generated/**",
         "package/src/pytest_obligation/profiles/reporting.proofs.dfy",
         "docs/source-contracts/**",
-        "docs/quint/report-merge/**",
-        "verification_tests/quint/**"
+        "contracts/quint.ini",
+        "contracts/pytest_obligation/profiles/reporting/report_merge/**"
       ]
     }
   },

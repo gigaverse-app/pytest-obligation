@@ -17,14 +17,14 @@ class QuintRoutingTests(unittest.TestCase):
             "package/src/pytest_obligation/_cost_plugin.py",
             "package/src/pytest_obligation/host.py",
             "package/src/pytest_obligation/pytest_plugin.py",
-            "docs/quint/example/fixed.qnt",
-            "docs/quint/example/audit.qnt",
-            "docs/quint/example/adapter.py",
-            "docs/quint/example/manifest.json",
-            "docs/quint/example/README.md",
-            "verification_tests/quint/test_report_merge_contract.py",
-            "verification_tests/quint/test_fenced_lease_contract.py",
-            "verification_tests/quint/test_cost_baseline_contract.py",
+            "contracts/quint.ini",
+            "contracts/README.md",
+            "contracts/pytest_obligation/example/example_contract/model.qnt",
+            "contracts/pytest_obligation/example/example_contract/quint-connect.json",
+            "contracts/pytest_obligation/example/example_contract/conftest.py",
+            "contracts/pytest_obligation/example/example_contract/example_contract_driver.py",
+            "contracts/pytest_obligation/example/example_contract/history/audit.qnt",
+            "contracts/pytest_obligation/references/in_memory/fenced_lease/test_fenced_lease_contract.py",
         ):
             with self.subTest(path=path):
                 self.assertIn("quint", self.selection(path))
