@@ -115,7 +115,12 @@ class ProviderResource(HarnessModel):
 
 
 class ResourceProvider:
-    """An in-memory provider fake: the resources it lists, by name, in creation order."""
+    """
+    An in-memory provider fake: the resources it lists, by name, in creation order.
+
+    Contract: contracts/pytest_obligation/integrations/django/owed_references/resource_identity/
+    replays Quint histories against this class. Change it and the model in the same pull request.
+    """
 
     def __init__(self) -> None:
         self.resources: dict[str, ProviderResource] = {}

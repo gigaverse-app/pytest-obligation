@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "name": "cost-baseline",
+  "description": "Cost baseline entries are retired only after a complete, unfiltered, serial run, through the real CostCompleteness hooks.",
+  "root": "../../../..",
+  "attest": {
+    "package": "pytest_obligation",
+    "source": "package/src"
+  },
+  "module": "cost_baseline_fixed",
+  "invariant": "incompletePreservesBaseline",
+  "model": "model.qnt",
+  "historical": "history/audit.qnt",
+  "historical_sha256": "64bc901c721adc767ad27fabddd39d843bfeb8b8fbcb8a5fa637f32ee8f0dd54",
+  "sources": [
+    "package/src/pytest_obligation/_cost_plugin.py",
+    "package/src/pytest_obligation/costs.py",
+    "package/tests/core/test_costs.py"
+  ],
+  "actions": {
+    "init": "Create actual pytest Config/Session, CostCompleteness, and two-entry baseline file.",
+    "collectionError": "CostCompleteness.pytest_collectreport with actual failed pytest.CollectReport.",
+    "skipOrDeselect": "Passed pytest.TestReport phases followed by pytest_deselected with a pytest.Item.",
+    "earlySuccessfulExit": "One actual completed TestReport sequence; finish input says two collected tests.",
+    "testFailure": "Actual failed call report and passed teardown; final TESTS_FAILED status.",
+    "collectOnly": "Instantiate CostCompleteness with Config.option.collectonly.",
+    "distributedRun": "Instantiate with Config.option.numprocesses=2; actual measured TestReport sequence.",
+    "completeRun": "Actual passed TestReport sequence with obligation_cost_contract property.",
+    "emptyCollection": "No report; final NO_TESTS_COLLECTED status.",
+    "finishUpdate": "Call real CostCompleteness.pytest_sessionfinish with actual pytest.Session inputs.",
+    "inspect": "Observe baseline via load_cost_baseline and real plugin visited/finished fields; no repeated hook."
+  },
+  "witnesses": [
+    "failedCollectionPreservesTest",
+    "skippedRunPreservesTest",
+    "earlyExitPreservesTest",
+    "failurePreservesTest",
+    "collectionOnlyPreservesTest",
+    "distributedRunPreservesTest",
+    "retirementControlTest",
+    "emptyRetirementControlTest"
+  ],
+  "mutants": [
+    {
+      "name": "shipped-389c5bb",
+      "description": "The exact CostCompleteness.pytest_sessionfinish shipped at 389c5bb, before the fix: update mode prunes every unmeasured entry at session end, even after a failed collection, filter or crash"
+    },
+    {
+      "name": "ignore-deselection",
+      "description": "Deselected tests are not recorded as incomplete, so a filtered run can retire entries its deselected tests would have measured"
+    },
+    {
+      "name": "disable-retirement",
+      "description": "Pruning never happens, so a complete run cannot retire a contract no test measures any more"
+    }
+  ],
+  "bugs_found": [
+    {
+      "summary": "Running with OBLIGATION_COST_BASELINE=update after an incomplete run (failed collection, deselection, early exit, failure, collect-only or xdist) deleted every baseline entry that run did not measure",
+      "fixed_in": "#208",
+      "found_by": "the historical audit model (audit.qnt, pinned to 389c5bb): baselineDeletionWitnessTest reaches the deletion after a collection error",
+      "regression_test": "package/tests/core/test_costs.py::test_incomplete_update_does_not_retire_unmeasured_contracts",
+      "mutant": "shipped-389c5bb"
+    }
+  ],
+  "bounds": {
+    "seed": 1,
+    "max_samples": 64,
+    "n_traces": 16,
+    "max_steps": 6
+  },
+  "limits": [
+    "Unitizes actual pytest hook entrypoints and report transport, not a full pytest collection/execution loop.",
+    "Existing test_costs.py subprocess tests retain real lifecycle and real xdist worker-loss coverage.",
+    "Two baseline contracts, at most two collected items; measured contract properties are report inputs, not SQL measurement proof.",
+    "Explicit caller path omissions/custom collector exclusions remain outside completeness inference.",
+    "shipped-389c5bb runs history/sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
+  ]
+}
