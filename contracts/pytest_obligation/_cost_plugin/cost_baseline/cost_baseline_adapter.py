@@ -46,8 +46,8 @@ class Adapter:
         for replacement in self.patches:
             replacement.start()
 
-    def reports(self, *, measured: bool = False, failed: bool = False) -> None:
-        for phase in ("setup", "call", "teardown"):
+    def reports(self, *, measured: bool = False, failed: bool = False, call: bool = True) -> None:
+        for phase in ("setup", "call", "teardown") if call else ("setup", "teardown"):
             report = pytest.TestReport(
                 nodeid="test_cost.py::test_cost",
                 location=("test_cost.py", 1, "test_cost"),
@@ -81,12 +81,16 @@ class Adapter:
             self.reports()
         elif op == "testFailure":
             self.reports(failed=True)
-        elif op in ("collectOnly", "distributedRun"):
+        elif op in ("collectOnly", "distributedRun", "setupOnly", "lastFailed"):
             assert self.config is not None
             self.config.option.collectonly = op == "collectOnly"
             self.config.option.numprocesses = 2 if op == "distributedRun" else 0
+            self.config.option.setuponly = op == "setupOnly"
+            self.config.option.lf = op == "lastFailed"
             self.plugin = _cost_plugin.CostCompleteness(self.config)
-            if op == "distributedRun":
+            if op == "setupOnly":
+                self.reports(call=False)
+            elif op in ("distributedRun", "lastFailed"):
                 self.reports(measured=True)
         elif op == "completeRun":
             self.reports(measured=True)
@@ -102,6 +106,7 @@ class Adapter:
             "baseline": {entry.contract for entry in load_cost_baseline(self.work).costs},
             "visited": set(self.plugin.visited),
             "finished": self.plugin.finished,
+            "passedCalls": self.plugin.passed_calls,
         }
 
     def close(self) -> None:
