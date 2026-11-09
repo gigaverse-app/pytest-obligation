@@ -2,7 +2,10 @@
   "extends": "workflow",
   "lanes": {
     "core": {
-      "roots": ["package/tests/core", "integration_tests/core"]
+      "roots": [
+        "package/tests/core",
+        "integration_tests/core"
+      ]
     }
   },
   "rules": [
@@ -38,7 +41,9 @@
         "setup.cfg",
         "tox.ini"
       ],
-      "select": ["all"],
+      "select": [
+        "all"
+      ],
       "reason": "the environment every lane installs; documentation/ and publish/ requirements belong to their own readers"
     },
     {
@@ -58,8 +63,33 @@
         "examples/checkout_tutorial/**/*.py",
         "examples/rq_tutorial/**/*.py"
       ],
-      "select": ["lane:typecheck"],
+      "select": [
+        "lane:typecheck"
+      ],
       "reason": "pyrefly checks every file in pyproject.toml's [tool.pyrefly] project-includes"
+    },
+    {
+      "name": "adopter-handoff-scan",
+      "when": [
+        "examples/adopter/**/*.py"
+      ],
+      "select": [
+        "lane:actions"
+      ],
+      "reason": "the check action and due-work-harness check scan every Python file in the example adopter for handoff sites"
+    },
+    {
+      "name": "publisher-container",
+      "when": [
+        "publish/Dockerfile",
+        "publish/Dockerfile.dockerignore",
+        "publish/requirements.txt",
+        "publish/render.py"
+      ],
+      "select": [
+        "lane:actions"
+      ],
+      "reason": "publish/sandbox.test.cjs builds and runs the publisher container from them"
     }
   ]
 }
