@@ -122,9 +122,10 @@ it on filtered runs, which measure only some contracts.
 Update-mode pruning requires a serial run with successful collection, no
 deselections, skips or xfails, and a passed call and a completed teardown for
 every collected test. Failures, interruptions, `--collect-only`,
-`--setup-only`/`--setup-plan` (no test body runs), `--lf` (it skips whole files
-without deselecting them) and xdist runs preserve unmeasured entries, and the
-run ends with a `Cost baseline pruning skipped (...)` line naming each cause.
+`--setup-only`/`--setup-plan` (no test body runs), any `--lf` run (it skips whole
+files without deselecting them, which the plugin cannot see) and xdist runs
+preserve unmeasured entries, and the run ends with a
+`Cost baseline pruning skipped (...)` line naming each cause.
 Measurements already recorded by tests still update their own entries.
 
 A suite that always skips or xfails some test somewhere, say one that needs a
