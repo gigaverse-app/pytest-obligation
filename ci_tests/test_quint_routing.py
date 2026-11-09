@@ -2,15 +2,10 @@
 
 import unittest
 
-import test_routing
+from routing import RoutingSnapshot
 
 
-class QuintRoutingTests(unittest.TestCase):
-    setUpClass = classmethod(test_routing.RoutingTests.setUpClass.__func__)
-    tearDownClass = classmethod(test_routing.RoutingTests.tearDownClass.__func__)
-    git = classmethod(test_routing.RoutingTests.git.__func__)
-    commit = classmethod(test_routing.RoutingTests.commit.__func__)
-    selection = test_routing.RoutingTests.selection
+class QuintRoutingTests(RoutingSnapshot):
 
     def test_registered_inputs_select_quint_and_unrelated_prose_does_not(self):
         for path in (

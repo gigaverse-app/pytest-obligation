@@ -1,9 +1,14 @@
 # CI selection and execution costs
 
-Pull requests use pytest-selective's Python import graph plus consumer-owned lane
-inputs in [test-lanes.json](../.github/test-lanes.json). Once a lane is affected,
-CI runs its complete suite and existing evidence checks. It does not trim a
-conformance suite to individual tests.
+Pull requests plan lanes with [CI-esta](https://github.com/gigaverse-app/ci-esta)'s
+`plan-work`. The lanes are the names the jobs' conditions read, and a change selects
+a lane through what its jobs run: pytest-selective's Python import graph, the files
+tests declare they read (`<test>.gv-dependency.yaml` sidecars and
+`# gv:test-dependency:` comments), the Node tests' module graph, the files the wheel
+contains, and the scripts and local actions each job executes.
+[test-lanes.json](../.github/test-lanes.json) extends that with only what the graphs
+cannot see. Once a lane is affected, CI runs its complete suite and existing evidence
+checks. It does not trim a conformance suite to individual tests.
 
 ## Which changes run which checks?
 
@@ -11,12 +16,13 @@ conformance suite to individual tests.
 | --- | --- |
 | Root README, `docs/` prose, the Read the Docs site (`documentation/`, including its requirements files, `mkdocs.yml`), example READMEs or `package/docs/` | Local documentation links, lint and the documentation site build; no tests, builds or smoke checks unless a test declares the document |
 | Package README or LICENSE (embedded in the distributions) | Package lane: wheel/sdist build, Twine and metadata validation, installed-wheel smoke |
-| Python source or tests | Complete lanes whose tests import the change, explicit integration inputs, and type checking. The pytest plugin (`pytest_obligation.pytest_plugin`) is a global module: pytest loads it into every session, so a change to it or to anything it imports starts every test lane, while a framework integration starts only the lanes that import it |
+| Python source or tests | Complete lanes whose tests import the change, the jobs that run it, and type checking for every file in `[tool.pyrefly].project-includes`. The pytest plugin (`pytest_obligation.pytest_plugin`) is the package's `pytest11` entry point: pytest loads it into every session, so a change to it or to anything it imports starts every test lane, while a framework integration starts only the lanes that import it. Package source also runs the wheel build and Due's conformance, which install the wheel |
 | Demo recording tape/environment | Complete demo lane, including the executable GIF assertions |
 | Adoption evidence validator | Its direct workflow consumers and Python-dependent guard tests |
 | Published `check` action | Demo, Saleor, and example action lanes |
 | Published `test` action | Example action lane |
-| Lock files, project/pytest configuration, `.python-version`, or GitHub workflow/configuration | All lanes |
+| Lock files, project/pytest configuration, `.python-version`, the planner job or the lane file | All lanes |
+| A job in `ci.yml` | The lanes that job runs; a comment changes nothing |
 | Publisher container requirements (`publish/requirements.txt`) | Action and contract lanes |
 | Ordinary main push | Affected lanes, including zero runtime tests for unrelated prose |
 | Manual dispatch, rerun, `test:full` label, or missing history/planning proof | All lanes |
@@ -41,12 +47,14 @@ sources, `package/README.md` and `package/LICENSE` (pyproject's `readme` and
 There, Twine validates both distribution descriptions, and a separate check
 verifies that both archives contain the current package README.
 
-The selector's built-in environment policy treats any `*requirements*.txt` as a
-test environment, which made a Read the Docs dependency bump run every lane.
-`graph.global_inputs` therefore names this repository's environment files:
+CI-esta's built-in `python-environment` rule treats any `*requirements*.txt` as a
+test environment, which would make a Read the Docs dependency bump run every lane.
+The lane file therefore replaces that rule with this repository's environment files:
 every `pyproject.toml`, `uv.lock` and pytest configuration, `.python-version`, and
 alternate installer files at the root or in `package/`. `documentation/` is not
 among them; the documentation workflow installs its requirements itself.
+`publish/requirements.txt` is the publisher container's, so it runs the jobs that
+build that container.
 
 Package implementation changes retain explicit compatibility coverage across
 integrations, including Due's external checkout, whose tests are not present in
@@ -56,8 +64,9 @@ local dependencies. Do not replace these boundaries with a blanket `docs/**`,
 
 ## Regression checks
 
-`ci-contracts` installs the selector revision referenced by the
-workflow's action, resolved by `scripts/ci/selector_requirement.py`. It creates
+`ci-contracts` installs the CI-esta revision the workflow's `plan-work` action
+uses, resolved by `scripts/ci/selector_requirement.py`, and Bun for the Node tests'
+module graph, as `plan-work` has. It creates
 real Git snapshots of this repository and verifies README/guide changes, a
 documentation-only commit (including `documentation/requirements.txt`) that
 selects no lane, package-distribution inputs, demo inputs, validator consumers, action consumers, Python changes, test deletion,

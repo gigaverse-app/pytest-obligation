@@ -1,21 +1,15 @@
 """Exercise this consumer's real configuration against real Git snapshots."""
 
-import subprocess
-import tempfile
 import unittest
-from pathlib import Path
 
-from pytest_selective.ci import LaneConfig, plan
-
-ROOT = Path(__file__).resolve().parents[1]
+from routing import RoutingSnapshot
 
 
-class RoutingTests(unittest.TestCase):
+class RoutingTests(RoutingSnapshot):
     def test_nested_or_new_pytest_collection_policy_forces_every_lane(self):
         for path in ("package/pyproject.toml", "package/.pytest.ini"):
             with self.subTest(path=path):
-                self.git("reset", "--hard", self.base)
-                self.git("clean", "-fd")
+                self.reset()
                 target = self.repo / path
                 if target.exists():
                     target.write_text(
@@ -23,53 +17,9 @@ class RoutingTests(unittest.TestCase):
                     )
                 else:
                     target.write_text("[pytest]\ntestpaths = other_tests\n")
-                result = plan(self.repo, self.config, self.base, self.commit())
+                result = self.plan(self.base, self.commit())
                 self.assertTrue(all(result.lanes.values()), result.model_dump_json())
                 self.assertIn("fallback", result.reason)
-
-    @classmethod
-    def setUpClass(cls):
-        cls.temporary = tempfile.TemporaryDirectory()
-        cls.repo = Path(cls.temporary.name)
-        archive = subprocess.run(["git", "archive", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout
-        subprocess.run(["tar", "-xf", "-", "-C", str(cls.repo)], input=archive, check=True)
-        # Read working configuration too, so the same tests reproduce the bug before committing its fix.
-        config_text = (ROOT / ".github/test-lanes.json").read_text()
-        (cls.repo / ".github/test-lanes.json").write_text(config_text)
-        cls.config = LaneConfig.model_validate_json(config_text)
-        cls.git("init", "-q")
-        cls.git("config", "user.email", "ci@example.invalid")
-        cls.git("config", "user.name", "CI routing test")
-        cls.base = cls.commit()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.temporary.cleanup()
-
-    @classmethod
-    def git(cls, *args):
-        return subprocess.check_output(["git", *args], cwd=cls.repo, text=True).strip()
-
-    @classmethod
-    def commit(cls):
-        cls.git("add", "-A")
-        cls.git("commit", "-qm", "routing scenario")
-        return cls.git("rev-parse", "HEAD")
-
-    def selection(self, *paths, delete=False):
-        """Lanes selected by one commit that edits (or deletes) every path."""
-        self.git("reset", "--hard", self.base)
-        for path in paths:
-            file = self.repo / path
-            if delete:
-                file.unlink()
-            else:
-                file.parent.mkdir(parents=True, exist_ok=True)
-                with file.open("a") as output:
-                    output.write("\n# CI routing scenario\n")
-        result = plan(self.repo, self.config, self.base, self.commit())
-        self.assertNotIn("fallback", result.reason, result.model_dump_json())
-        return {name for name, enabled in result.lanes.items() if enabled}
 
     def test_prose_does_not_start_runtime_lanes(self):
         for path in (
@@ -124,12 +74,12 @@ class RoutingTests(unittest.TestCase):
             ".github/test-lanes.json",
         ):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), set(self.config.lanes))
+                self.assertEqual(self.selection(path), self.lanes)
 
     def test_other_dependency_installers_keep_every_lane(self):
         for path in ("requirements.txt", "package/requirements-dev.txt", "poetry.lock", "pylock.toml"):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), set(self.config.lanes))
+                self.assertEqual(self.selection(path), self.lanes)
 
     def test_publisher_container_dependencies_start_its_consumers(self):
         self.assertEqual(self.selection("publish/requirements.txt"), {"actions", "contracts"})
@@ -165,7 +115,7 @@ class RoutingTests(unittest.TestCase):
                 self.assertLessEqual({"due", "package", "typecheck"}, selected)
 
     def test_the_pytest_plugin_and_what_it_imports_start_every_rooted_lane(self):
-        rooted = {name for name, lane in self.config.lanes.items() if lane.roots}
+        rooted = {name for name, lane in self.resolved(self.base, self.base).config.lanes.items() if lane.roots}
         for path in ("pytest_plugin.py", "host.py"):
             with self.subTest(path=path):
                 self.assertLessEqual(rooted, self.selection(f"package/src/pytest_obligation/{path}"))
@@ -207,13 +157,13 @@ class RoutingTests(unittest.TestCase):
 
     def test_missing_history_and_explicit_full_checkpoint_run_every_lane(self):
         for result in (
-            plan(self.repo, self.config, "missing-history", self.base),
-            plan(self.repo, self.config, self.base, self.base, full=True),
+            self.plan("missing-history", self.base),
+            self.plan(self.base, self.base, full=True),
         ):
             self.assertTrue(all(result.lanes.values()), result.model_dump_json())
 
     def test_documentation_dependency_selects_its_declared_reader(self):
-        self.git("reset", "--hard", self.base)
+        self.reset()
         reader = self.repo / "package/tests/core/test_declared_doc.py"
         reader.parent.mkdir(parents=True, exist_ok=True)
         reader.write_text("# gv:test-dependency: md/declared.md\ndef test_document(): pass\n")
@@ -222,7 +172,7 @@ class RoutingTests(unittest.TestCase):
         doc.write_text("before\n")
         base = self.commit()
         doc.write_text("after\n")
-        result = plan(self.repo, self.config, base, self.commit())
+        result = self.plan(base, self.commit())
         self.assertTrue(result.lanes["core"], result.model_dump_json())
         self.assertNotIn("fallback", result.reason)
 

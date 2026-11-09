@@ -1,0 +1,13 @@
+dependencies:
+  - inputs:
+      - "//.github/test-lanes.json"
+      - "//.github/workflows/ci.yml"
+      - "//**/*.gv-dependency.yaml"
+      - "//**/*.py"
+      - "//**/*.pyi"
+      - "//**/*.cjs"
+      - "//**/action.yml"
+    kind: content
+    reason: >-
+      Plans a snapshot of the whole repository as CI does, so the lanes it asserts follow the lane file, the
+      workflow, every declaration, the Python and Node import graphs and the local actions the jobs use.

@@ -1,7 +1,7 @@
 # CI selection, caching and critical paths
 
-This repository uses pytest-selective to decide which complete validation lanes
-are affected. Routing regressions follow the `contracts` lane, and the package build and
+This repository uses CI-esta's `plan-work`, on pytest-selective's import graph, to
+decide which complete validation lanes are affected ([how](ci.md)). Routing regressions follow the `contracts` lane, and the package build and
 metadata checks follow the `package` lane; neither runs for documentation. An aggregate
 `Validation gate` checks every prerequisite and accepts a skipped runtime lane
 only when the planner explicitly returned boolean `false` for its inputs.

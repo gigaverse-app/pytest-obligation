@@ -102,24 +102,34 @@ See [package ownership and subtree development](package/docs/development.md) for
 
 ## Selective CI inputs
 
-`.github/test-lanes.json` selects complete framework/conformance lanes. A
-MongoDB-only test change runs MongoDB; changes to the shared plugin/runtime,
-shims, locks or CI configuration retain full testing. Explicit full runs and planner failures retain full-suite execution;
-ordinary main pushes use dependency selection.
+[CI-esta](https://github.com/gigaverse-app/ci-esta)'s `plan-work` plans complete
+framework/conformance lanes before any runner starts. The lanes are the names the
+jobs' conditions read (`fromJSON(needs.select-tests.outputs.lanes).<lane>`), and a
+change selects a lane through what its jobs run: the tests that import it
+([pytest-selective](https://github.com/gigaverse-app/pytest-selective)'s graph), the
+files tests declare they read, the Node tests' module graph, the files the wheel
+contains, and the scripts and local actions the job executes. A MongoDB-only test
+change runs MongoDB; the pytest plugin, which pytest loads into every session through
+its entry point, and anything it imports run every test lane; locks, project and
+pytest configuration run everything. Explicit full runs and planner failures retain
+full-suite execution; ordinary main pushes use dependency selection.
 
 Changes confined to `package/docs/`, the root README, `docs/` prose or the Read the
 Docs site (`documentation/`, its requirements files and `mkdocs.yml`) run no tests,
 builds or smoke checks. `package/README.md` and `package/LICENSE` are embedded in the
-distributions, so they select the package lane: the build, Twine/metadata checks and
-installed-wheel compatibility/identity tests. CI contract tests follow
-the contracts lane, and type checks follow their declared inputs. The
-package prose is not executed by the test lanes. Root `docs/demo.tape` and
-`docs/demo_env.sh` remain demo-lane inputs because the executable README demo
-reads them. If tests begin consuming package documentation, declare that input.
+distributions, so they select the jobs that build the wheel: `build` and `due`. Root
+`docs/demo.tape` and `docs/demo_env.sh` select the demo lane because the executable
+README demo reads them. If tests begin consuming package documentation, declare that input.
 
-The planner JSON names the tests/inputs selecting each lane. An affected test
-outside all configured lane roots falls back to every lane and names the missing
-mapping. Add new test directories to a lane whose pytest command executes them.
+When a test or a script starts reading a file by path, declare it next to the reader:
+a `<test>.gv-dependency.yaml` sidecar (`pytest-selective audit --write-declarations`
+writes them from a recorded run) or a `# gv:test-dependency: PATH` comment.
+[.github/test-lanes.json](.github/test-lanes.json) extends the workflow with only
+what the graphs cannot see: the `core` lane's roots, the environment files that run
+every lane, and the type-check's project files. `uv run --no-project --with
+"ci-esta[selection]>=1.12.0" ci-esta lanes --config .github/test-lanes.json --base
+origin/main` shows what a change would run and why. A test outside every lane's roots
+falls back to every lane; add a new test directory to a job's test command.
 # Measured conformance execution
 
 The Wagtail and Due sessions run every conformance case with four isolated

@@ -18,6 +18,10 @@ concurrency:
 # pyproject.toml fails CI instead of silently resolving something new.
 
 jobs:
+  # Plans whole lanes before any runner starts: each lane is the name a job's condition reads, and a change
+  # selects it through what that job runs: the tests that import it, the files tests declare they read, Node
+  # tests' module graph, the wheel's contents, and the scripts and actions the job executes. `ci-esta lanes`
+  # shows the lanes and why; .github/test-lanes.json adds only what those graphs cannot see.
   select-tests:
     runs-on: ubuntu-latest
     outputs:
@@ -27,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: select
-        uses: gigaverse-app/pytest-selective/actions/plan-lanes@v1
+        uses: gigaverse-app/ci-esta/actions/plan-work@v1
         with:
           config: .github/test-lanes.json
 
@@ -41,18 +45,21 @@ jobs:
         with:
           enable-cache: true
           python-version: '3.14'
+      # The planner follows the Node tests' imports through Bun's module graph, as plan-work does.
+      - uses: oven-sh/setup-bun@v2
+        if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).contracts }}
       - name: Prove consumer routing and documentation checks
         if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).contracts }}
-        # Resolve from the action pin above, so tests cannot silently use a different selector.
+        # Resolve from the action pin above, so tests cannot silently use a different planner.
         run: >-
           uv run --no-project --python 3.14
           --with "$(python scripts/ci/selector_requirement.py)"
           python -m unittest discover -s ci_tests -v
+      # Each lane-gated job's condition, the gate's lane-jobs and the lanes the workflow defines must agree.
       - name: Check aggregate gate against the execution lanes
         run: >-
           uv run --no-project --python 3.14
-          --with "ci-esta>=1.1.0,<2.0.0"
-          --with "$(python scripts/ci/selector_requirement.py)"
+          --with "ci-esta[selection]>=1.12.0,<2.0.0"
           ci-esta check-workflow --workflow .github/workflows/ci.yml --lanes .github/test-lanes.json
       - name: Check local documentation links
         run: python scripts/ci/check_docs.py
