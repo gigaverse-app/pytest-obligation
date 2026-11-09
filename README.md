@@ -206,11 +206,12 @@ CI-esta [timing report](.github/workflows/observe-ci.yml).</sub>
 See the [CI toolkit integration](docs/ci-toolkit.md) for lane selection, validated
 environment caches, required gates and real dependency critical-path reports.
 
-### Merge rules checked against a model
+### Behavior checked against models
 
-Distributed report merging is checked against a [Quint](https://quint.sh) model on every
-relevant pull request: generated histories are replayed through the real code, and deliberate
-mutants must be caught. [The contract and what it proves](docs/quint/README.md).
+Report merging, cost-baseline retirement and profile B's reference owner are each checked against a
+[Quint](https://quint.sh) model on every relevant pull request: generated histories are replayed
+through the real code, and deliberately planted bugs must be caught.
+[The contracts, what they model and the bugs they found](contracts/README.md).
 
 <!-- pytest-quint-connect:start -->
 <!-- pytest-quint-connect:contracts cost-baseline,fenced-lease,report-merge -->
@@ -223,9 +224,9 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 
 | | <img width="2000" height="1" align="right" alt="">Contract | Cases passed | [Mutants caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") |
 | :-: | :-- | --: | --: |
-| ✅ | `cost-baseline` `verification_tests/quint/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>24 histories (8 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 28/28 | 3/3 |
-| ✅ | `fenced-lease` `verification_tests/quint/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
-| ✅ | `report-merge` `verification_tests/quint/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `cost-baseline` `pytest_obligation/_cost_plugin/cost_baseline/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>24 histories (8 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 28/28 | 3/3 |
+| ✅ | `fenced-lease` `pytest_obligation/references/in_memory/fenced_lease/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `report-merge` `pytest_obligation/profiles/reporting/report_merge/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 
 </details>
 
@@ -235,7 +236,7 @@ mutants must be caught. [The contract and what it proves](docs/quint/README.md).
 | Contract | <img width="2000" height="1" align="right" alt="">Bug | Fixed in | Regression test |
 | :-- | :-- | :-- | :-- |
 | `cost-baseline` | Running with OBLIGATION_COST_BASELINE=update after an incomplete run (failed collection, deselection, early exit, failure, collect-only or xdist) deleted every baseline entry that run did not measure<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): baselineDeletionWitnessTest reaches the deletion after a collection error · mutant `shipped-389c5bb` reintroduces it: 19 of 24 histories diverge</sub> | #208 | <sub>`package/tests/core/test_costs.py`<br>`::test_incomplete_update_does_not_retire_unmeasured_contracts`</sub> |
-| `fenced-lease` | Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · mutant `shipped-9aa6ff2` reintroduces it: 3 of 21 histories diverge</sub> | #217 | <sub>`package/tests/core/profiles/test_bounded_ownership.py`<br>`::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`</sub> |
+| `fenced-lease` | Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · mutant `shipped-9aa6ff2` reintroduces it: 5 of 21 histories diverge</sub> | #217 | <sub>`package/tests/core/profiles/test_bounded_ownership.py`<br>`::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`</sub> |
 | `report-merge` | A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · mutant `shipped-389c5bb` reintroduces it: 16 of 21 histories diverge</sub> | #210 | <sub>`package/tests/core/test_profile_coverage.py`<br>`::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`</sub> |
 
 </details>
