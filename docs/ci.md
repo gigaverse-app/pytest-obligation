@@ -107,3 +107,5 @@ Saleor/demo reports. Saleor's slow cases exercise repeated crash and recovery
 histories; database services, cached migrations, complete profile checks, and
 full-suite checkpoints remain intact. The first optimization is avoiding these
 jobs for unrelated prose, without weakening what their passing result proves.
+
+A documentation-only probe line.
