@@ -147,6 +147,35 @@ class RoutingTests(unittest.TestCase):
     def test_package_code_keeps_external_due_conformance(self):
         self.assertIn("due", self.selection("package/src/pytest_obligation/host.py"))
 
+    # Framework lanes follow the import graph; the plugin is loaded into every session as a global module.
+    FRAMEWORK_LANES = {"django", "django_psycopg2", "redis", "mongodb", "aiokafka", "prefect", "demos", "saleor"}
+
+    def test_a_framework_integration_starts_only_the_lanes_that_import_it(self):
+        integrations = "package/src/pytest_obligation/integrations"
+        for module, lanes in (
+            ("aiokafka.py", {"aiokafka"}),
+            ("prefect.py", {"prefect"}),
+            ("redis_server.py", {"redis"}),
+            ("django/transactions.py", {"django", "django_psycopg2"}),
+        ):
+            with self.subTest(module=module):
+                selected = self.selection(f"{integrations}/{module}")
+                self.assertEqual(selected & self.FRAMEWORK_LANES, lanes)
+                # Distribution, typing and external Due conformance still see every package change.
+                self.assertLessEqual({"due", "package", "typecheck"}, selected)
+
+    def test_the_pytest_plugin_and_what_it_imports_start_every_rooted_lane(self):
+        rooted = {name for name, lane in self.config.lanes.items() if lane.roots}
+        for path in ("pytest_plugin.py", "host.py"):
+            with self.subTest(path=path):
+                self.assertLessEqual(rooted, self.selection(f"package/src/pytest_obligation/{path}"))
+
+    def test_a_subprocess_plugin_follows_the_module_that_loads_it(self):
+        reporting = "package/src/pytest_obligation/reporting"
+        loader = self.selection(f"{reporting}/collect.py")
+        self.assertTrue(loader & {"core", "actions"}, loader)
+        self.assertEqual(self.selection(f"{reporting}/_nodeids_plugin.py"), loader)
+
     def test_evidence_validators_only_start_their_consuming_lanes(self):
         self.assertEqual(
             self.selection("scripts/check_adoption_report.py"),
