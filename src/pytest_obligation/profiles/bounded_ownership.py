@@ -486,6 +486,12 @@ def _stale_owner_windows(ownership: FencedOwnership, operation: Callable[[Any, U
     reaper re-arms it, and again after the next claim. A design that rotates the
     fence only on claim passes the second check and fails the first; its dead
     owner can still write a row nobody has claimed yet.
+
+    The re-claim must reach this row whatever the claim order. Earlier proofs
+    leave other rows waiting, and a FIFO queue, a priority order or a reaper that
+    re-enqueues hands those out first; trying the token after claiming one of them
+    would test a row nobody owns, which the first window already covered. So it
+    keeps claiming until the claim returns this row.
     """
     windows: list[str] = []
     row_id, stale_token = _claim_one(ownership)
@@ -494,14 +500,28 @@ def _stale_owner_windows(ownership: FencedOwnership, operation: Callable[[Any, U
     if _stale_attempt_accepted(ownership, row_id, operation, stale_token, what):
         # The row may now be somewhere no claim reaches; the second window cannot be set up.
         return [f"{what} after the reaper re-armed the row, before anyone claimed it"]
-    assert ownership.claim() is not None, (
-        f"{ownership.name}: the row the reaper re-armed could not be claimed again after the "
-        f"refused {what}. Either the reaper did not make it claimable, or the refusal moved the "
-        f"row anyway and stranded it"
-    )
+    _claim_until(ownership, row_id, what)
     if _stale_attempt_accepted(ownership, row_id, operation, stale_token, what):
         windows.append(f"{what} after another worker claimed the row")
     return windows
+
+
+def _claim_until(ownership: FencedOwnership, row_id: Any, what: str) -> None:
+    """Claim rows until ``row_id`` is the one claimed, failing if the claims run out or repeat first."""
+    others: list[Any] = []
+    while (claimed := ownership.claim()) is not None and claimed[0] != row_id:
+        assert claimed[0] not in others, (
+            f"{ownership.name}: claim() returned row {claimed[0]!r} twice while the proof was "
+            f"claiming its way to the re-armed row {row_id!r}. A claim that hands out a row it "
+            f"already handed out is not exclusive"
+        )
+        others.append(claimed[0])
+    assert claimed is not None, (
+        f"{ownership.name}: the row the reaper re-armed could not be claimed again after the "
+        f"refused {what}; claim() ran out of rows after taking {len(others)} other(s) "
+        f"{others!r}. Either the reaper did not make it claimable, or the refusal moved the "
+        f"row anyway and stranded it"
+    )
 
 
 def assert_stale_token_is_rejected(ownership: FencedOwnership) -> None:
