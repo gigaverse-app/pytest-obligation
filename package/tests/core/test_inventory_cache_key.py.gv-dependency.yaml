@@ -1,5 +1,0 @@
-dependencies:
-  - inputs:
-      - "//package/src/pytest_obligation/reporting/**"
-    kind: import
-    reason: "Loaded or run outside the test's imports; recorded by pytest-selective audit --write-declarations."

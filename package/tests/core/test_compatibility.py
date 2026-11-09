@@ -1,5 +1,10 @@
 """Old and new adopters must execute one canonical harness implementation."""
 
+# These modules are loaded by name or executed in child processes.
+# gv:test-dependency: package/shims/due_work_harness/__init__.py
+# gv:test-dependency: package/src/pytest_obligation/evidence/observation_report.py
+# gv:test-dependency: package/src/pytest_obligation/reporting/_nodeids_plugin.py
+
 import importlib
 import pickle
 import subprocess
