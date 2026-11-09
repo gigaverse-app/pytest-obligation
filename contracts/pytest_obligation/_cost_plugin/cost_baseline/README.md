@@ -11,8 +11,8 @@ The reported history is `init → collectionError → finishUpdate`: no test mea
 | Model transition / field | Implementation boundary |
 | --- | --- |
 | `collectionError`, `skipOrDeselect`, `testFailure` | `CostCompleteness.pytest_collectreport`, `pytest_deselected`, `pytest_runtest_logreport` record incomplete execution |
-| `collectOnly`, `distributedRun` | Configuration excludes collection-only and xdist update pruning |
-| `collected`, `finished`, `status` | Session test count, teardown reports and final exit status |
+| `collectOnly`, `setupOnly`, `lastFailed`, `distributedRun` | Configuration excludes `--collect-only`, `--setup-only`/`--setup-plan`, `--lf` and xdist update pruning |
+| `collected`, `finished`, `passedCalls`, `status` | Session test count, teardown reports, passed call reports and final exit status |
 | `finishUpdate`, `completeEvidence` | `CostCompleteness.pytest_sessionfinish` gates `prune_cost_entries` |
 | `completeRun`, `emptyCollection` | Legitimate retirement, including the final contract |
 
@@ -64,7 +64,7 @@ uv run --no-sync pytest -c contracts/quint.ini contracts/pytest_obligation/_cost
 ```
 
 The adapter compares actual persisted cost entries, visited report contracts and the
-completed teardown count after every generated event. It unitizes real pytest
+completed teardown and passed call counts after every generated event. It unitizes real pytest
 Config/Session, CollectReport/TestReport and CostCompleteness hooks. Existing
 subprocess regressions retain full pytest lifecycle and real xdist crash coverage. It
 does not infer excluded paths or verify actual SQL costs.

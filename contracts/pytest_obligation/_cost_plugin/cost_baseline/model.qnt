@@ -2,32 +2,36 @@
 module cost_baseline_fixed {
   type State = {
     phase: str, baseline: Set[str], visited: Set[str], incomplete: bool,
-    collected: int, finished: int, status: int, serial: bool, collectOnly: bool
+    collected: int, finished: int, passedCalls: int, status: int, serial: bool, collectOnly: bool,
+    setupOnly: bool, lastFailed: bool
   }
   var s: State
   var event: { op: str, collected: int, status: int }
-  var observed: { baseline: Set[str], visited: Set[str], finished: int }
+  var observed: { baseline: Set[str], visited: Set[str], finished: int, passedCalls: int }
 
   // event contains hook inputs; observed contains values independently read by the adapter.
   action emit(nextState: State, op: str): bool = all {
     s' = nextState,
     event' = { op: op, collected: nextState.collected, status: nextState.status },
-    observed' = { baseline: nextState.baseline, visited: nextState.visited, finished: nextState.finished }
+    observed' = {
+      baseline: nextState.baseline, visited: nextState.visited,
+      finished: nextState.finished, passedCalls: nextState.passedCalls
+    }
   }
   action init = emit({
     phase: "collecting", baseline: Set("required", "retired"), visited: Set(),
-    incomplete: false, collected: 0, finished: 0, status: 0,
-    serial: true, collectOnly: false
+    incomplete: false, collected: 0, finished: 0, passedCalls: 0, status: 0,
+    serial: true, collectOnly: false, setupOnly: false, lastFailed: false
   }, "init")
   action collectionError = all {
     s.phase == "collecting", emit({ ...s, phase: "finish", incomplete: true, status: 2 }, "collectionError")
   }
   action skipOrDeselect = all {
     s.phase == "collecting",
-    emit({ ...s, phase: "finish", incomplete: true, collected: 1, finished: 1 }, "skipOrDeselect")
+    emit({ ...s, phase: "finish", incomplete: true, collected: 1, finished: 1, passedCalls: 1 }, "skipOrDeselect")
   }
   action earlySuccessfulExit = all {
-    s.phase == "collecting", emit({ ...s, phase: "finish", collected: 2, finished: 1 }, "earlySuccessfulExit")
+    s.phase == "collecting", emit({ ...s, phase: "finish", collected: 2, finished: 1, passedCalls: 1 }, "earlySuccessfulExit")
   }
   action testFailure = all {
     s.phase == "collecting",
@@ -38,17 +42,30 @@ module cost_baseline_fixed {
   }
   action distributedRun = all {
     s.phase == "collecting",
-    emit({ ...s, phase: "finish", serial: false, collected: 1, finished: 1, visited: Set("required") }, "distributedRun")
+    emit({ ...s, phase: "finish", serial: false, collected: 1, finished: 1, passedCalls: 1, visited: Set("required") },
+      "distributedRun")
+  }
+  // --setup-only and --setup-plan report setup and teardown but never call a test body.
+  action setupOnly = all {
+    s.phase == "collecting",
+    emit({ ...s, phase: "finish", setupOnly: true, collected: 1, finished: 1 }, "setupOnly")
+  }
+  // --lf skips files without a last failure through passed, empty collect reports: no deselection.
+  action lastFailed = all {
+    s.phase == "collecting",
+    emit({ ...s, phase: "finish", lastFailed: true, collected: 1, finished: 1, passedCalls: 1, visited: Set("required") },
+      "lastFailed")
   }
   action completeRun = all {
     s.phase == "collecting",
-    emit({ ...s, phase: "finish", collected: 1, finished: 1, visited: Set("required") }, "completeRun")
+    emit({ ...s, phase: "finish", collected: 1, finished: 1, passedCalls: 1, visited: Set("required") }, "completeRun")
   }
   action emptyCollection = all {
     s.phase == "collecting", emit({ ...s, phase: "finish", status: 5 }, "emptyCollection")
   }
-  val completeEvidence = s.serial and not(s.collectOnly) and not(s.incomplete)
-    and s.collected == s.finished and Set(0, 5).contains(s.status)
+  val completeEvidence = s.serial and not(s.collectOnly) and not(s.setupOnly) and not(s.lastFailed)
+    and not(s.incomplete) and s.collected == s.finished and s.collected == s.passedCalls
+    and Set(0, 5).contains(s.status)
   action finishUpdate = all {
     s.phase == "finish",
     emit({ ...s, phase: "done",
@@ -57,7 +74,7 @@ module cost_baseline_fixed {
   action inspect = emit(s, "inspect")
   action step = any {
     collectionError, skipOrDeselect, earlySuccessfulExit, testFailure, collectOnly,
-    distributedRun, completeRun, emptyCollection, finishUpdate,
+    distributedRun, setupOnly, lastFailed, completeRun, emptyCollection, finishUpdate,
     all { s.phase == "done", inspect }
   }
   val incompletePreservesBaseline = s.phase != "done" or completeEvidence
@@ -74,6 +91,10 @@ module cost_baseline_fixed {
     .then(all { assert(incompletePreservesBaseline), inspect })
   run distributedRunPreservesTest = init.then(distributedRun).then(finishUpdate)
     .then(all { assert(incompletePreservesBaseline), inspect })
+  run setupOnlyPreservesTest = init.then(setupOnly).then(finishUpdate)
+    .then(all { assert(s.baseline == Set("required", "retired")), inspect })
+  run lastFailedPreservesTest = init.then(lastFailed).then(finishUpdate)
+    .then(all { assert(s.baseline == Set("required", "retired")), inspect })
   run retirementControlTest = init.then(completeRun).then(finishUpdate)
     .then(all { assert(s.baseline == Set("required")), inspect })
   run emptyRetirementControlTest = init.then(emptyCollection).then(finishUpdate)
