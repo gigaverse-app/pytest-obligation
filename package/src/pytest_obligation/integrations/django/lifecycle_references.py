@@ -384,6 +384,8 @@ RECIPIENT = Recipient()
 
 def complete_attempt_notifying(pk: int) -> None:
     """Notify, then record completion: a death between the two leaves the attempt running."""
+    # dry-lint: distinct-from package/src/pytest_obligation/references/in_memory_handoffs.py::complete_notifying_async
+    # Each backend's reference implementation stands alone, so a proof exercises exactly that backend's code.
     RECIPIENT.notify(pk)
     LifecycleAttempt.objects.filter(pk=pk).update(status=Status.COMPLETE)
 

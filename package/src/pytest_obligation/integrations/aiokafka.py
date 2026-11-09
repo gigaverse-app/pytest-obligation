@@ -14,7 +14,7 @@ from functools import partial
 from typing import Any
 
 from pytest_obligation.models import ObligationContractDesignError
-from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker, counted_worker_killer
 
 
 @contextmanager
@@ -72,14 +72,7 @@ def aiokafka_fenced(consumer: Any, worker: CommitWorker) -> Iterator[None]:
 
 def aiokafka_worker_killer(consumer: Any) -> Callable[[int | None], AbstractContextManager[CommitWorker]]:
     """Fence this consumer's fetches and commits after an acknowledged offset commit kills it."""
-
-    @contextmanager
-    def killer(kill_after: int | None) -> Iterator[CommitWorker]:
-        worker = CommitWorker(kill_after)
-        with _watching(consumer, worker.refuse_if_dead, worker.committed):
-            yield worker
-
-    return killer
+    return counted_worker_killer(partial(_watching, consumer))
 
 
 class AIOKafkaLostOffsetReplies(LostCommitReplies):
