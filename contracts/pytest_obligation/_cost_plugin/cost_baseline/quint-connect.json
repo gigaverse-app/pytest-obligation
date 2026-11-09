@@ -2,15 +2,15 @@
   "version": 1,
   "name": "cost-baseline",
   "description": "Cost baseline entries are retired only after a complete, unfiltered, serial run, through the real CostCompleteness hooks.",
-  "root": "../../..",
+  "root": "../../../..",
   "attest": {
     "package": "pytest_obligation",
     "source": "package/src"
   },
   "module": "cost_baseline_fixed",
   "invariant": "incompletePreservesBaseline",
-  "model": "fixed.qnt",
-  "historical": "audit.qnt",
+  "model": "model.qnt",
+  "historical": "history/audit.qnt",
   "historical_sha256": "64bc901c721adc767ad27fabddd39d843bfeb8b8fbcb8a5fa637f32ee8f0dd54",
   "sources": [
     "package/src/pytest_obligation/_cost_plugin.py",
@@ -74,6 +74,6 @@
     "Existing test_costs.py subprocess tests retain real lifecycle and real xdist worker-loss coverage.",
     "Two baseline contracts, at most two collected items; measured contract properties are report inputs, not SQL measurement proof.",
     "Explicit caller path omissions/custom collector exclusions remain outside completeness inference.",
-    "shipped-389c5bb runs sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
+    "shipped-389c5bb runs history/sessionfinish-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py; it replaces the earlier hand-written unconditional-prune control, which reproduced the same rule."
   ]
 }

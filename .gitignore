@@ -17,3 +17,4 @@ profiles-*.json
 
 # Maintained Quint tool cache and replay evidence
 /.artifacts/
+/contracts/.artifacts/

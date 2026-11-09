@@ -2,14 +2,14 @@
   "version": 1,
   "name": "ambiguity",
   "description": "Profile C's reference machine: a dead claim with an open attempt is ambiguous, ambiguity is never due work, and settled work stays settled.",
-  "root": "../../..",
+  "root": "../../../../..",
   "attest": {
     "package": "pytest_obligation",
     "source": "package/src"
   },
   "module": "ambiguity_fixed",
   "invariant": "contract",
-  "model": "fixed.qnt",
+  "model": "model.qnt",
   "sources": [
     "package/src/pytest_obligation/references/in_memory.py",
     "package/src/pytest_obligation/profiles/crash_ambiguity.py"
@@ -60,6 +60,6 @@
   "limits": [
     "One claimed row. The reaper runs only on an expired lease, and late evidence arrives only for an ambiguous or settled row: whether a live claim may be resolved, and whether evidence may settle a still-claimed row, are open design questions this model does not decide.",
     "This contracts the reference machine the profile C proofs are calibrated against, not an adopter's binding; adopters are judged by the proofs in crash_ambiguity.py.",
-    "shipped-9aa6ff2 runs resolve-9aa6ff2.py.txt, the pre-fix reaper copied verbatim from 9aa6ff2 and pinned by SHA-256 in adapter.py."
+    "shipped-9aa6ff2 runs history/resolve-9aa6ff2.py.txt, the pre-fix reaper copied verbatim from 9aa6ff2 and pinned by SHA-256 in adapter.py."
   ]
 }

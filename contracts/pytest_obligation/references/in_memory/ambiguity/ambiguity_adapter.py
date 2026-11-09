@@ -15,7 +15,7 @@ def _machine_type(mutant: str | None) -> type[InMemoryMachine]:
     if mutant == "shipped-9aa6ff2":
         # The exact pre-fix reaper, run on a subclass of today's machine. The hash keeps this
         # frozen evidence from being edited until it agrees with the model.
-        shipped = Path(__file__).with_name("resolve-9aa6ff2.py.txt")
+        shipped = Path(__file__).with_name("history") / "resolve-9aa6ff2.py.txt"
         text = shipped.read_bytes()
         assert hashlib.sha256(text).hexdigest() == SHIPPED_9AA6FF2_SHA256, f"{shipped} was edited"
         namespace: dict[str, Any] = {}

@@ -361,6 +361,9 @@ class InMemoryOwner:
     ``False``. A row that returns to READY (reaped, retried or released) has no
     owner, so its last token is dropped then rather than at the next claim. The
     self-tests' broken variants each override exactly one of those properties.
+
+    Contract: contracts/pytest_obligation/references/in_memory/fenced_lease/ replays Quint
+    histories against this class. Change it and the model in the same pull request.
     """
 
     def __init__(self) -> None:
@@ -460,6 +463,9 @@ class InMemoryMachine:
     holding an open attempt goes to ``UNKNOWN``; one with no attempt is re-armed
     ``READY``. Late evidence settles ``UNKNOWN`` rows to a terminal state and is
     refused-by-no-op afterwards.
+
+    Contract: contracts/pytest_obligation/references/in_memory/ambiguity/ replays Quint
+    histories against this class. Change it and the model in the same pull request.
     """
 
     def __init__(self) -> None:

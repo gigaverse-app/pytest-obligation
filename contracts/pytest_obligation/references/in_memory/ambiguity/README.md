@@ -1,19 +1,19 @@
 # Ambiguity: profile C's reference machine
 
 Profile C (crash ambiguity) judges how an adopter recovers a claim whose owner died mid-call,
-through the proofs in [`crash_ambiguity.py`](../../../package/src/pytest_obligation/profiles/crash_ambiguity.py).
+through the proofs in [`crash_ambiguity.py`](../../../../../package/src/pytest_obligation/profiles/crash_ambiguity.py).
 Those proofs are calibrated against a reference machine,
-[`InMemoryMachine`](../../../package/src/pytest_obligation/references/in_memory.py), and the
-broken variants in [`test_crash_ambiguity.py`](../../../package/tests/core/profiles/test_crash_ambiguity.py).
+[`InMemoryMachine`](../../../../../package/src/pytest_obligation/references/in_memory.py), and the
+broken variants in [`test_crash_ambiguity.py`](../../../../../package/tests/core/profiles/test_crash_ambiguity.py).
 This contract states what the reference must do and replays generated histories through it.
 
-[fixed.qnt](fixed.qnt) models one claimed row: whether an attempt is open, whether the lease
-expired, and its state (`CLAIMED`, `READY`, `UNKNOWN`, `SENT`). [adapter.py](adapter.py)
+[model.qnt](model.qnt) models one claimed row: whether an attempt is open, whether the lease
+expired, and its state (`CLAIMED`, `READY`, `UNKNOWN`, `SENT`). [adapter.py](ambiguity_adapter.py)
 drives the real `InMemoryMachine` and reads back the state, whether an attempt is open, and
 whether the row is in `due_work_ids()`.
 
 ```sh
-uv run --no-sync pytest verification_tests/quint/test_ambiguity_contract.py --quint-require-complete
+uv run --no-sync pytest -c contracts/quint.ini contracts/pytest_obligation/references/in_memory/ambiguity
 ```
 
 ## The bug this contract records
@@ -26,8 +26,8 @@ leaves terminal rows alone, and invariant 6 now runs a sweep on the settled row.
 
 ## Planted bugs
 
-- `shipped-9aa6ff2` runs [`resolve-9aa6ff2.py.txt`](resolve-9aa6ff2.py.txt), the pre-fix
-  reaper copied verbatim from `9aa6ff2` and pinned by SHA-256 in `adapter.py`.
+- `shipped-9aa6ff2` runs [`history/resolve-9aa6ff2.py.txt`](history/resolve-9aa6ff2.py.txt), the pre-fix
+  reaper copied verbatim from `9aa6ff2` and pinned by SHA-256 in `ambiguity_adapter.py`.
 - `blind-retry` re-arms every dead claim, even one whose call may have applied.
 - `ambiguous-redispatch` puts `UNKNOWN` rows in the due-work selection.
 
