@@ -209,13 +209,15 @@ def ownership(
     def heartbeat(job_id: int, token: UUID) -> bool:
         # A heartbeat renews a worker, and through it the jobs that worker holds. A stale
         # worker may still send one; it renews only its own row, never a job reclaimed
-        # from it, so report whether this job's lease was the one renewed.
+        # from it, so report whether this job's lease was the one renewed. Only a job in
+        # 'doing' holds a lease: retry_job puts a reclaimed job back to 'todo' but leaves
+        # its worker_id, and the old worker's heartbeat keeps nothing of it alive.
         worker_id = workers[token]
         _run(manager.update_heartbeat(worker_id=worker_id))
         owner = app.connector.execute_query_one(
-            "SELECT worker_id FROM procrastinate_jobs WHERE id = %(job_id)s", job_id=job_id
+            "SELECT worker_id, status FROM procrastinate_jobs WHERE id = %(job_id)s", job_id=job_id
         )
-        return owner is not None and owner["worker_id"] == worker_id
+        return owner is not None and owner["status"] == "doing" and owner["worker_id"] == worker_id
 
     def expire(job_id: int) -> None:
         # FAULT INJECTION: the owning worker stopped heartbeating long ago.
@@ -235,8 +237,12 @@ def ownership(
 
     def observe(job_id: int) -> Any:
         # The job's state, its owner, and the owner's heartbeat: procrastinate's lease deadline.
+        # Only a 'doing' job has a lease; a retried job keeps its old worker_id, whose heartbeat
+        # is no longer this job's deadline.
         return app.connector.execute_query_one(
-            "SELECT job.status, job.worker_id, worker.last_heartbeat FROM procrastinate_jobs job "
+            "SELECT job.status, job.worker_id, "
+            "CASE WHEN job.status = 'doing' THEN worker.last_heartbeat END AS last_heartbeat "
+            "FROM procrastinate_jobs job "
             "LEFT JOIN procrastinate_workers worker ON worker.id = job.worker_id WHERE job.id = %(job_id)s",
             job_id=job_id,
         )

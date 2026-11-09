@@ -24,6 +24,7 @@ class QuintRoutingTests(unittest.TestCase):
             "docs/quint/example/README.md",
             "verification_tests/quint/test_report_merge_contract.py",
             "verification_tests/quint/test_resource_identity_contract.py",
+            "verification_tests/quint/test_fenced_lease_contract.py",
             "verification_tests/quint/test_cost_baseline_contract.py",
         ):
             with self.subTest(path=path):
