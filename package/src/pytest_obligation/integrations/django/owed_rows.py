@@ -14,7 +14,6 @@ from django.test import TestCase
 from pytest_obligation.binding import (
     INVOCATION_AUTHORING_OPERATIONS,
     assert_binding_reaches_production,
-    assert_test_binding_consumes_its_first_parameter,
 )
 from pytest_obligation.host import HandoffsNeverStop, current_host
 from pytest_obligation.integrations.django.edge_values import CandidateEdge, write_unvalidated
@@ -32,6 +31,7 @@ from pytest_obligation.poison import (
 )
 from pytest_obligation.profiles.automatic_recovery import (
     DueWorkSweep,
+    assert_still_owed_is_production_bound,
     declared_recovery_delay,
 )
 from pytest_obligation.selection import selected_identities as _selected
@@ -419,8 +419,6 @@ def assert_owed_row_bindings_are_production_bound(name: str, rows: OwedRows) -> 
         ("execute", rows.execute, "the per-identity step the scheduled tick runs"),
         ("run_tick", rows.run_tick, "the scheduled task body"),
     ]
-    if rows.still_owed is not None:
-        bindings.append(("still_owed", rows.still_owed, "the production selection that owns the row next"))
     if rows.listed is not None:
         bindings.append(("listed", rows.listed, "the production listing of owed resources the tick reads"))
     for field_name, binding, shape in bindings:
@@ -432,9 +430,8 @@ def assert_owed_row_bindings_are_production_bound(name: str, rows: OwedRows) -> 
             production_shape=shape,
         )
     if rows.still_owed is not None:
-        # A still_owed that ignores its row ("is anything owed at all") would pass any poisoned row.
-        assert_test_binding_consumes_its_first_parameter(
-            adopter=name, field="owed_rows.still_owed", binding=rows.still_owed, parameter_shape="the poisoned row"
+        assert_still_owed_is_production_bound(
+            name, "owed_rows.still_owed", rows.still_owed, "the production selection that owns the row next"
         )
 
 

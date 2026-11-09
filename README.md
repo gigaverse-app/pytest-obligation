@@ -217,16 +217,16 @@ through the real code, and deliberately planted bugs must be caught.
 <!-- pytest-quint-connect:contracts ambiguity,cost-baseline,fenced-lease,report-merge -->
 <a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 4 contracts passed · 86 histories · 12/12 mutants caught" src="https://img.shields.io/badge/Quint_contracts-4_contracts_passed_%C2%B7_86_histories_%C2%B7_12%2F12_mutants_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 4 contracts passed · 88 histories · 12/12 mutants caught" src="https://img.shields.io/badge/Quint_contracts-4_contracts_passed_%C2%B7_88_histories_%C2%B7_12%2F12_mutants_caught-brightgreen"></a>
 
 <details>
-<summary>✅ 4 contracts · 102/102 cases · 12/12 mutants caught · 86 histories</summary>
+<summary>✅ 4 contracts · 104/104 cases · 12/12 mutants caught · 88 histories</summary>
 
 | | <img width="2000" height="1" align="right" alt="">Contract | Cases passed | [Mutants caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") |
 | :-: | :-- | --: | --: |
 | ✅ | `ambiguity` `pytest_obligation/references/in_memory/ambiguity/test_ambiguity_contract.py::test_ambiguity`<br><sub>20 histories (4 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 24/24 | 3/3 |
 | ✅ | `cost-baseline` `pytest_obligation/_cost_plugin/cost_baseline/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>24 histories (8 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 28/28 | 3/3 |
-| ✅ | `fenced-lease` `pytest_obligation/references/in_memory/fenced_lease/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `fenced-lease` `pytest_obligation/references/in_memory/fenced_lease/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>23 histories (5 witnesses, 18 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 27/27 | 3/3 |
 | ✅ | `report-merge` `pytest_obligation/profiles/reporting/report_merge/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 
 </details>
@@ -238,7 +238,7 @@ through the real code, and deliberately planted bugs must be caught.
 | :-- | :-- | :-- | :-- |
 | `ambiguity` | Profile C's reference machine re-armed a settled row on the next reaper sweep, putting an already-applied effect back into due work; invariant 6 never ran the reaper on settled work, so adopters with the same reaper passed<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, attempt, expire, resolve, evidence and a second sweep against the real InMemoryMachine · mutant `shipped-9aa6ff2` reintroduces it: 3 of 20 histories diverge</sub> | #218 | <sub>`package/tests/core/profiles/test_crash_ambiguity.py`<br>`::test_the_reaper_leaves_settled_work_settled`</sub> |
 | `cost-baseline` | Running with OBLIGATION_COST_BASELINE=update after an incomplete run (failed collection, deselection, early exit, failure, collect-only or xdist) deleted every baseline entry that run did not measure<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): baselineDeletionWitnessTest reaches the deletion after a collection error · mutant `shipped-389c5bb` reintroduces it: 19 of 24 histories diverge</sub> | #208 | <sub>`package/tests/core/test_costs.py`<br>`::test_incomplete_update_does_not_retire_unmeasured_contracts`</sub> |
-| `fenced-lease` | Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · mutant `shipped-9aa6ff2` reintroduces it: 5 of 21 histories diverge</sub> | #217 | <sub>`package/tests/core/profiles/test_bounded_ownership.py`<br>`::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`</sub> |
+| `fenced-lease` | Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · mutant `shipped-9aa6ff2` reintroduces it: 5 of 23 histories diverge</sub> | #217 | <sub>`package/tests/core/profiles/test_bounded_ownership.py`<br>`::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`</sub> |
 | `report-merge` | A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · mutant `shipped-389c5bb` reintroduces it: 16 of 21 histories diverge</sub> | #210 | <sub>`package/tests/core/test_profile_coverage.py`<br>`::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`</sub> |
 
 </details>
@@ -348,7 +348,7 @@ through the real code, and deliberately planted bugs must be caught.
 
 **Witnesses**, scenarios replayed exactly as written: `reapedOwnerCannotWriteTest`, `reapedOwnerCannotRenewTest`, `supersededOwnerCannotWriteTest`, `currentOwnerWritesTest`, `liveLeaseBlocksReclaimTest`.
 
-**Bounds**: seed `20261108` · max_samples `200` · max_steps `8` · n_traces `16`.
+**Bounds**: seed `20261108` · max_samples `200` · max_steps `8` · n_traces `18`.
 
 **Witness `reapedOwnerCannotWriteTest`, step by step**: the observation the model starts from, then what it expects each action to change.
 
@@ -402,5 +402,14 @@ accepted backlog. [Contributor setup and cleanup workflow](CONTRIBUTING.md#dupli
 <!-- dry-lint-progress:start -->
 <a href="https://github.com/gigaverse-app/dry-lint"><picture><source media="(prefers-color-scheme: dark)" srcset="https://dry-lint-counter.gigaverse-oss.workers.dev/v1/sign.svg?theme=dark&amp;key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;cleaned=39&amp;remaining=0&amp;dismissed=1"><img alt="dry-lint in gigaverse-app/pytest-obligation: new duplicates kept out of its pull requests, 39 old duplicates cleaned up, 0 remaining" src="https://dry-lint-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;cleaned=39&amp;remaining=0&amp;dismissed=1" width="100%"></picture></a>
 
+**Reviewed duplication debt** · Counts from the committed baselines.
+
+| Accepted pairs | Remaining | Retired | Dismissed |
+| :-- | --: | --: | --: |
+| Functions | 0 | 39 | 1 |
+| Models | Not initialized | — | — |
+
 [Accepted backlog](.dry-lint/baseline.json) · [Weekly audit](https://github.com/gigaverse-app/pytest-obligation/actions/workflows/dry-lint-audit.yml)
+
+Retired means a side was removed, or (functions only) the judge now finds the pair separate. It is not a count of refactors. Dismissals stay separate; an uninitialized model baseline is unknown.
 <!-- dry-lint-progress:end -->

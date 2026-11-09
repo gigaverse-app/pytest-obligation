@@ -65,7 +65,7 @@
     "incremental-admission compiles a mutation of the real merge_reports source moving commit inside validation.",
     "replace-case-identity is an explicit post-call output mutation replacing a CaseEvidence object with an equal deep copy; not claimed as original production source.",
     "Historical audit.qnt remains unchanged; broader audit models are not connected contracts.",
-    "shipped-389c5bb runs history/merge_reports-389c5bb.py.txt, the pre-fix function copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py."
+    "shipped-389c5bb runs history/merge_reports-389c5bb.py.txt, the pre-fix function copied verbatim from 389c5bb and pinned by SHA-256 in report_merge_adapter.py."
   ],
   "historical_sha256": "1d2a1941bc98e48a0f0151e8490b7639c4fcf495dff15b93ce7c8c619b878375"
 }
