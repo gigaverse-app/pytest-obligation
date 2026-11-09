@@ -16,7 +16,10 @@ scans only its own Python files. New matching readers inherit the convention; a 
 required input fails planning with the reader's path. Source scans retain `content` edges,
 so a scanned module's imports do not expand the scan's dependencies. Simple runtime
 dependencies stay inline; the README recording and repository routing harness retain
-sidecars for their more complex input sets. Shared-manifest edits select all their readers.
+sidecars for their more complex input sets. The compatibility test also keeps its dynamic
+imports in a sidecar: pytest's graph already covers them, while inline declarations make
+workflow discovery reread those modules on every plan. Shared-manifest edits select all
+their readers.
 
 ## Which changes run which checks?
 
