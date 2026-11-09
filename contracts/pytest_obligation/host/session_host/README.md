@@ -1,6 +1,6 @@
 # Application host ownership across pytest sessions
 
-[audit.qnt](audit.qnt) is the **unchanged historical audit model** (`session_persistence.qnt`) used to express and reproduce this report against [389c5bb](https://github.com/gigaverse-app/pytest-obligation/tree/389c5bb84f7ab186fa9c7815c2e15cb9332b67a4). Its unsafe behavior is intentional; it describes the pre-fix implementation. [fixed.qnt](fixed.qnt) is a separate model of this PR's decision boundary.
+[history/audit.qnt](history/audit.qnt) is the **unchanged historical audit model** (`session_persistence.qnt`) used to express and reproduce this report against [389c5bb](https://github.com/gigaverse-app/pytest-obligation/tree/389c5bb84f7ab186fa9c7815c2e15cb9332b67a4). Its unsafe behavior is intentional; it describes the pre-fix implementation. [model.qnt](model.qnt) is a separate model of this PR's decision boundary.
 
 Historical model SHA-256: `64bc901c721adc767ad27fabddd39d843bfeb8b8fbcb8a5fa637f32ee8f0dd54`.
 
@@ -15,7 +15,7 @@ The reported history is `init → configureA → nextSession`: session B has no 
 | `host`, `configured` | Global host/factory ownership rather than framework behavior |
 | `manualSessionWithoutIni` | No ini host means deliberate manual configuration remains in effect |
 
-Implementation evidence: [plugin](../../../package/src/pytest_obligation/pytest_plugin.py), [host scope](../../../package/src/pytest_obligation/host.py), [repeated-session regressions](../../../package/tests/core/test_host_initialization.py).
+Implementation evidence: [plugin](../../../../package/src/pytest_obligation/pytest_plugin.py), [host scope](../../../../package/src/pytest_obligation/host.py), [repeated-session regressions](../../../../package/tests/core/test_host_initialization.py).
 
 ## Reproduce
 
@@ -40,7 +40,7 @@ This command is **expected to exit 1 with `Invariant violated`** and a counterex
 npx --yes @informalsystems/quint@0.33.1 run fixed.qnt --main session_host_fixed --invariant maintained --max-samples 1000 --max-steps 12 --seed 1 --backend typescript
 ```
 
-The historical witness and invariant commands reproduce the old defect. The current model-to-code bridge uses the exact witness names, seed and bounds declared in `manifest.json`; its recorded results and generated traces are retained as CI artifacts, separately from historical audit evidence.
+The historical witness and invariant commands reproduce the old defect. The current model-to-code bridge uses the exact witness names, seed and bounds declared in `quint-connect.json`; its recorded results and generated traces are retained as CI artifacts, separately from historical audit evidence.
 
 ## Scope
 
@@ -51,18 +51,18 @@ These are handwritten state-machine specifications. The maintained bridge checks
 
 ## Maintained model-to-code replay
 
-The current `fixed.qnt` exports ITF `event` and `observed` records. Its registered
-[manifest](manifest.json) maps operations to the [production adapter](adapter.py),
+The current `model.qnt` exports ITF `event` and `observed` records. Its registered
+[manifest](quint-connect.json) maps operations to the [production adapter](session_host_adapter.py),
 pins witness/bounded generation and semantic controls, and protects historical
 `audit.qnt` with its original hash. CI now replays the generated events against
 real pytest configuration/cleanup and host APIs in the current checkout.
 
 [pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) generates
 fresh traces and replays each through the adapter as its own pytest case
-([guide](../README.md)):
+([guide](../../../README.md)):
 
 ```sh
-uv run --no-sync pytest verification_tests/quint/test_session_host_contract.py --quint-require-complete
+uv run --no-sync pytest -c contracts/quint.ini contracts/pytest_obligation/host/session_host
 ```
 
 The independent projection reads the raw host identity and actual manual
@@ -72,9 +72,9 @@ lazy state. Inputs cover manual hosts and unresolved factories, used/unused ini
 hosts, cleanup and a following configuration without host settings. The same
 generated traces must catch two planted bugs:
 
-- `shipped-389c5bb` runs [`pytest_configure-389c5bb.py.txt`](pytest_configure-389c5bb.py.txt),
+- `shipped-389c5bb` runs [`history/pytest_configure-389c5bb.py.txt`](history/pytest_configure-389c5bb.py.txt),
   the pre-fix `pytest_configure` copied verbatim from `389c5bb` and pinned by SHA-256 in
-  `adapter.py`. The manifest's `bugs_found` entry names it, so every history is replayed
+  `session_host_adapter.py`. The manifest's `bugs_found` entry names it, so every history is replayed
   through it and the report shows how many diverge. It replaces the earlier hand-written
   `omit-host-restoration` control, which reproduced the same behavior.
 - `eager-previous-resolution` resolves the previous lazy factory while scoping.

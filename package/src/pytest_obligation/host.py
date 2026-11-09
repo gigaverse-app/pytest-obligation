@@ -364,7 +364,12 @@ _HostT = TypeVar("_HostT", Host, Callable[[], Host])
 
 @contextmanager
 def hosted(host: _HostT) -> Iterator[_HostT]:
-    """Temporarily configure a host, restoring prior state without resolving factories."""
+    """
+    Temporarily configure a host, restoring prior state without resolving factories.
+
+    Contract: contracts/pytest_obligation/host/session_host/ replays Quint histories against this
+    and the plugin's pytest_configure. Change them and the model in the same pull request.
+    """
     previous = _host
     configure(host)
     try:

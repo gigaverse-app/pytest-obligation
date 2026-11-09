@@ -21,6 +21,7 @@ uv run --no-sync pytest -c contracts/quint.ini contracts
 
 | Contract | Models | Real bug it found |
 | --- | --- | --- |
+| [session-host](pytest_obligation/host/session_host/README.md) | `host.py::hosted` and the plugin's `pytest_configure` | Repeated `pytest.main()` sessions inherited an earlier session's host (#209) |
 | [fenced-lease](pytest_obligation/references/in_memory/fenced_lease/README.md) | Profile B's reference owner, `references/in_memory.py::InMemoryOwner` | A reaped owner's token stayed valid until the next claim (#217) |
 | [report-merge](pytest_obligation/profiles/reporting/report_merge/README.md) | `profiles/reporting.py::merge_reports` | A rejected shard leaked evidence into the combined report (#210) |
 | [cost-baseline](pytest_obligation/_cost_plugin/cost_baseline/README.md) | `_cost_plugin.py::CostCompleteness` | Update mode pruned the baseline after incomplete runs (#208) |

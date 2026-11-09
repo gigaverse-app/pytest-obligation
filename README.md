@@ -214,35 +214,37 @@ through the real code, and deliberately planted bugs must be caught.
 [The contracts, what they model and the bugs they found](contracts/README.md).
 
 <!-- pytest-quint-connect:start -->
-<!-- pytest-quint-connect:contracts cost-baseline,fenced-lease,report-merge -->
+<!-- pytest-quint-connect:contracts cost-baseline,fenced-lease,report-merge,session-host -->
 <a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 3 contracts passed · 66 histories · 9/9 mutants caught" src="https://img.shields.io/badge/Quint_contracts-3_contracts_passed_%C2%B7_66_histories_%C2%B7_9%2F9_mutants_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 4 contracts passed · 86 histories · 11/11 mutants caught" src="https://img.shields.io/badge/Quint_contracts-4_contracts_passed_%C2%B7_86_histories_%C2%B7_11%2F11_mutants_caught-brightgreen"></a>
 
 <details>
-<summary>✅ 3 contracts · 78/78 cases · 9/9 mutants caught · 66 histories</summary>
+<summary>✅ 4 contracts · 101/101 cases · 11/11 mutants caught · 86 histories</summary>
 
 | | <img width="2000" height="1" align="right" alt="">Contract | Cases passed | [Mutants caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") |
 | :-: | :-- | --: | --: |
 | ✅ | `cost-baseline` `pytest_obligation/_cost_plugin/cost_baseline/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>24 histories (8 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 28/28 | 3/3 |
 | ✅ | `fenced-lease` `pytest_obligation/references/in_memory/fenced_lease/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
 | ✅ | `report-merge` `pytest_obligation/profiles/reporting/report_merge/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `session-host` `pytest_obligation/host/session_host/test_session_host_contract.py::test_session_host`<br><sub>20 histories (4 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 23/23 | 2/2 |
 
 </details>
 
 <details>
-<summary>🐞 3 real bugs found by these contracts</summary>
+<summary>🐞 4 real bugs found by these contracts</summary>
 
 | Contract | <img width="2000" height="1" align="right" alt="">Bug | Fixed in | Regression test |
 | :-- | :-- | :-- | :-- |
 | `cost-baseline` | Running with OBLIGATION_COST_BASELINE=update after an incomplete run (failed collection, deselection, early exit, failure, collect-only or xdist) deleted every baseline entry that run did not measure<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): baselineDeletionWitnessTest reaches the deletion after a collection error · mutant `shipped-389c5bb` reintroduces it: 19 of 24 histories diverge</sub> | #208 | <sub>`package/tests/core/test_costs.py`<br>`::test_incomplete_update_does_not_retire_unmeasured_contracts`</sub> |
 | `fenced-lease` | Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window<br><sub>found by a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner · mutant `shipped-9aa6ff2` reintroduces it: 5 of 21 histories diverge</sub> | #217 | <sub>`package/tests/core/profiles/test_bounded_ownership.py`<br>`::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again`</sub> |
 | `report-merge` | A rejected report shard leaked its earlier cases and new suites into the combined report, which then showed that refused evidence as available<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): its partialPromotionWitnessTest reaches the leak · mutant `shipped-389c5bb` reintroduces it: 16 of 21 histories diverge</sub> | #210 | <sub>`package/tests/core/test_profile_coverage.py`<br>`::test_rejected_shard_cannot_promote_or_mutate_any_prior_evidence`</sub> |
+| `session-host` | Repeated pytest.main() sessions in one process inherited an earlier session's due_work_harness_host instead of getting their previous host back<br><sub>found by the historical audit model (audit.qnt, pinned to 389c5bb): leakedHostWitnessTest reaches the leaked host · mutant `shipped-389c5bb` reintroduces it: 10 of 20 histories diverge</sub> | #209 | <sub>`package/tests/core/test_host_initialization.py`<br>`::test_independent_sessions_restore_the_previous_manual_host`</sub> |
 
 </details>
 
 <details>
-<summary>🧪 9 mutants (planted fake bugs), all caught</summary>
+<summary>🧪 11 mutants (planted fake bugs), all caught</summary>
 
 | Contract | [Mutant](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") | <img width="2000" height="1" align="right" alt="">What it breaks | Caught by | At |
 | :-- | :-- | :-- | :-- | :-- |
@@ -255,6 +257,8 @@ through the real code, and deliberately planted bugs must be caught.
 | `report-merge` | `shipped-389c5bb` | The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard<br><sub>reintroduces a real bug found earlier</sub> | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
 | `report-merge` | `incremental-admission` | Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
 | `report-merge` | `replace-case-identity` | After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence | `witness-compatibleRepeatedEvidenceTest` | state 1, after `merge(location='later-suite', mismatch='', payload='passed')` |
+| `session-host` | `shipped-389c5bb` | The exact pytest_plugin.pytest_configure shipped at 389c5bb, before the fix: it configures the ini host process-wide and never restores the previous one<br><sub>reintroduces a real bug found earlier</sub> | `witness-unusedFactoryRestorationTest` | state 2, after `cleanupA(kind='cleanup')` |
+| `session-host` | `eager-previous-resolution` | Scoping the host resolves the previous lazy factory first, importing an application the session never asked for | `witness-unusedFactoryRestorationTest` | state 1, after `configureA(kind='ini')` |
 
 </details>
 
@@ -351,6 +355,41 @@ through the real code, and deliberately planted bugs must be caught.
 | `2` | `reject(location='later-suite', mismatch='debt', payload='passed')` | unchanged |
 | `3` | `reject(location='same-suite', mismatch='declaration', payload='passed')` | unchanged |
 | `4` | `inspect(location='', mismatch='', payload='')` | unchanged |
+
+</details>
+
+<details open>
+<summary>What <code>session-host</code> says</summary>
+
+**Actions**, and the code each one drives:
+
+- `initFactory`: host.configure with a lazy manual factory.
+- `initManual`: host.configure with an actual Host.
+- `configureA`: Actual pytest Config.fromdictargs then _do_configure, with due_work_harness_host ini.
+- `resolveApplication`: host.current_host resolves application factory.
+- `cleanupA`: Actual pytest Config._ensure_unconfigure invokes registered cleanup stack.
+- `configureWithoutIni`: Independent pytest Config._do_configure with no host ini.
+- `resolveManual`: host.current_host on second configuration.
+- `cleanupB`: Second config _ensure_unconfigure.
+- `inspect`: Read raw production host identity and real factory counters, without resolving factories.
+
+**Invariant** `maintained`, checked while sampling histories.
+
+**Witnesses**, scenarios replayed exactly as written: `unusedFactoryRestorationTest`, `resolvedFactoryRestorationTest`, `manualConfigurationControlTest`, `manualRestorationControlTest`.
+
+**Bounds**: seed `1` · max_samples `64` · max_steps `8` · n_traces `16`.
+
+**Witness `unusedFactoryRestorationTest`, step by step**: the observation the model starts from, then what it expects each action to change.
+
+| State | Action | Model expects |
+| --: | :-- | :-- |
+| `0` | `initFactory(kind='factory')` | `{ applicationCalls: 0, host: "manual_factory", manualCalls: 0 }` |
+| `1` | `configureA(kind='ini')` | `host: "manual_factory" → "application_factory"` |
+| `2` | `cleanupA(kind='cleanup')` | `host: "application_factory" → "manual_factory"` |
+| `3` | `configureWithoutIni(kind='no-ini')` | unchanged |
+| `4` | `resolveManual(kind='api')` | `host: "manual_factory" → "manual"`<br>`manualCalls: 0 → 1` |
+| `5` | `cleanupB(kind='cleanup')` | unchanged |
+| `6` | `inspect(kind='observation')` | unchanged |
 
 </details>
 
