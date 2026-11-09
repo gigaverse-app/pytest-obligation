@@ -60,7 +60,7 @@ This contract covers two cases per suite, two existing suites and one optional n
 
 ## Current-source effect proof
 
-The [Python source contract](../../source-contracts/report-merge.md) now checks the
+The [Python source contract](../../../../../docs/source-contracts/report-merge.md) now checks the
 real merge AST in addition to this bounded API replay. Its conditional rejection
 frame and structural mutation rules use explicit external model contracts; it
 does not prove the concrete truth of compatibility predicates. The normal replay
