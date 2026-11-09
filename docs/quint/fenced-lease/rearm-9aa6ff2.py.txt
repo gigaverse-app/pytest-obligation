@@ -1,0 +1,31 @@
+# Frozen evidence: the three InMemoryOwner methods that re-arm a row, exactly as shipped
+# at 9aa6ff21 (main before this fix). Each returns the row to READY but keeps the previous
+# owner's token, so that owner can still write or renew the row until the next claim.
+# The planted bug `shipped-9aa6ff2` installs them on a subclass of today's InMemoryOwner.
+# adapter.py checks this file's SHA-256; never edit it.
+
+def fenced_retry(self, row_id: int, token: UUID) -> bool:
+    """A second owner write: the attempt failed, so the row goes back to be claimed again."""
+    row = self.rows[row_id]
+    if token != row.token:
+        return False
+    row.state = "READY"
+    row.lease_expires_at = None
+    return True
+
+
+def reclaim_stalled(self, row_id: int) -> str | None:
+    row = self.rows[row_id]
+    if row.state == "CLAIMED" and row.lease_expires_at is not None and row.lease_expires_at < self.clock:
+        row.state = "READY"
+        return "REARMED"
+    return None
+
+
+def release_unchanged(self, row_id: int, token: UUID) -> bool:
+    row = self.rows[row_id]
+    if token != row.token:
+        return False
+    row.state = "READY"
+    row.lease_expires_at = None
+    return True

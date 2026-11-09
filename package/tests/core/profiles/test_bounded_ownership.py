@@ -186,7 +186,7 @@ class _ReaperIgnoresTheLease(_InMemoryOwner):
     """Breaks invariant 4: a live owner's row is taken from under it."""
 
     def reclaim_stalled(self, row_id: int) -> str | None:
-        self.rows[row_id].state = "READY"
+        self._rearm(self.rows[row_id])
         return "REARMED"
 
 
@@ -195,6 +195,37 @@ class _ReaperNeverReclaims(_InMemoryOwner):
 
     def reclaim_stalled(self, row_id: int) -> str | None:
         return None
+
+
+class _KeepsTokenThroughReclaim(_InMemoryOwner):
+    """
+    Breaks invariants 3 and 6 in the window recovery opens: the reaper re-arms
+    the row but leaves the dead owner's token current until the next claim.
+
+    This was the reference owner itself before #217. The stale
+    proofs used to claim again right after reclaiming, so they only ever tried
+    the old token once it had been rotated, and never saw this window. A worker
+    that wakes up in it can renew a lease on a READY row or write it to
+    RETRYABLE, where neither claim() nor the reaper will ever pick it up.
+    """
+
+    def reclaim_stalled(self, row_id: int) -> str | None:
+        row = self.rows[row_id]
+        if row.state == "CLAIMED" and row.lease_expires_at is not None and row.lease_expires_at < self.clock:
+            row.state = "READY"
+            return "REARMED"
+        return None
+
+    def fenced_retry(self, row_id: int, token: UUID) -> bool:
+        row = self.rows[row_id]
+        if token != row.token:
+            return False
+        row.state = "READY"
+        row.lease_expires_at = None
+        return True
+
+    def release_unchanged(self, row_id: int, token: UUID) -> bool:
+        return self.fenced_retry(row_id, token)
 
 
 class _ReleaseStrandsTheRow(_InMemoryOwner):
@@ -282,6 +313,14 @@ def test_the_conforming_owner_passes_without_observe_too() -> None:
             id="reaper-never-reclaims",
         ),
         pytest.param(
+            _KeepsTokenThroughReclaim,
+            {
+                assert_stale_token_is_rejected.__name__,
+                assert_lease_renewal_is_fenced.__name__,
+            },
+            id="reaped-owner-token-still-current",
+        ),
+        pytest.param(
             _ReleaseStrandsTheRow,
             {assert_release_returns_the_row_unspent.__name__},
             id="release-strands-the-row",
@@ -292,6 +331,27 @@ def test_each_broken_owner_fails_exactly_its_own_proofs(
     make_owner: Callable[[], _InMemoryOwner], expected_failures: set[str]
 ) -> None:
     assert _verdicts(make_owner) == expected_failures
+
+
+def test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again() -> None:
+    """
+    Regression: once the reaper re-arms a dead owner's row, that owner's token is
+    dead too, not only after the next claim. Before the fix its late write moved
+    the READY row to RETRYABLE, where no claim and no reaper would reach it.
+    """
+    owner = _InMemoryOwner()
+    row_id = owner.make_claimable()
+    claimed = owner.claim()
+    assert claimed is not None
+    _, dead = claimed
+    owner.expire_lease(row_id)
+    assert owner.reclaim_stalled(row_id) == "REARMED"
+    assert owner.renew_lease(row_id, dead) is False
+    assert owner.fenced_write(row_id, dead) is False
+    assert owner.fenced_retry(row_id, dead) is False
+    assert owner.release_unchanged(row_id, dead) is False
+    assert owner.observe(row_id) == ("READY", -1.0)
+    assert owner.claim() is not None, "the re-armed row must still be claimable"
 
 
 def test_a_do_nothing_owner_no_longer_passes_the_profile() -> None:
@@ -324,7 +384,10 @@ def test_observe_is_what_catches_a_liar() -> None:
     An owner that refuses stale tokens correctly but writes nothing on success
     passes the whole profile without ``observe`` and fails the two acceptance
     proofs with it. An owner that refuses correctly but has already written
-    fails the two refusal proofs only under ``observe``.
+    fails the two refusal proofs under ``observe``. Without it, the write proof
+    still catches it: the refused write it made to a row the reaper had just
+    re-armed strands that row, so it cannot be claimed again. The renewal it
+    makes does not strand anything, so only ``observe`` sees that one.
     """
     liar = _ReportsSuccessWritesNothing
     assert _verdicts(liar, observe=False) == set()
@@ -334,7 +397,7 @@ def test_observe_is_what_catches_a_liar() -> None:
     }
 
     late_guard = _RefusesAfterWriting
-    assert _verdicts(late_guard, observe=False) == set()
+    assert _verdicts(late_guard, observe=False) == {assert_stale_token_is_rejected.__name__}
     assert _verdicts(late_guard) == {
         assert_stale_token_is_rejected.__name__,
         assert_lease_renewal_is_fenced.__name__,

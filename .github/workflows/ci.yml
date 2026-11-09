@@ -52,6 +52,7 @@ jobs:
         run: >-
           uv run --no-project --python 3.14
           --with "ci-esta>=1.1.0,<2.0.0"
+          --with "$(python scripts/ci/selector_requirement.py)"
           ci-esta check-workflow --workflow .github/workflows/ci.yml --lanes .github/test-lanes.json
       - name: Check local documentation links
         run: python scripts/ci/check_docs.py
@@ -87,6 +88,7 @@ jobs:
           # Every registered contract; a run that collects fewer fails --quint-require-complete.
           QUINT_REQUIRED_CONTRACTS: |-
             report-merge
+            fenced-lease
             cost-baseline
         run: >-
           uv run --no-sync pytest verification_tests/quint -p no:cacheprovider
