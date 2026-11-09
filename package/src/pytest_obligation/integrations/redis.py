@@ -41,7 +41,7 @@ from typing import Any
 
 from pytest_obligation.host import Host, PublicationBreaker, ReceiverBreaker
 from pytest_obligation.integrations.clocks import time_machine_clock
-from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker
+from pytest_obligation.worker_death import CommitWorker, LostCommitReplies, counted_reply_breaker, counted_worker_killer
 
 #: Commands whose writes the server cannot report in advance.
 SCRIPT_COMMANDS = frozenset({"EVAL", "EVALSHA", "FCALL"})
@@ -139,14 +139,7 @@ RedisWorker = CommitWorker
 
 def redis_worker_killer(client: Any) -> Callable[[int | None], AbstractContextManager[RedisWorker]]:
     """A worker killer for every client and pipeline sharing ``client``'s connection pool."""
-
-    @contextmanager
-    def killer(kill_after: int | None) -> Iterator[RedisWorker]:
-        worker = RedisWorker(kill_after)
-        with _watching(client, worker.refuse_if_dead, worker.committed):
-            yield worker
-
-    return killer
+    return counted_worker_killer(partial(_watching, client))
 
 
 @contextmanager

@@ -131,7 +131,7 @@ def test_late_validation_rejection_preserves_both_inputs(mismatch):
     references = dict(target)
     before = {key: value.model_dump(round_trip=True) for key, value in target.items()}
     incoming_before = {key: value.model_dump(round_trip=True) for key, value in shard.items()}
-    with pytest.raises(AssertionError):
+    with pytest.raises(reporting.IncompatibleShard):
         reporting.merge_reports(target, shard)
     assert {key: value.model_dump(round_trip=True) for key, value in target.items()} == before
     assert {key: value.model_dump(round_trip=True) for key, value in shard.items()} == incoming_before

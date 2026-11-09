@@ -10,6 +10,13 @@ SOURCE_MUTANTS = (
 )
 
 
+def _is_guard(node: ast.Expr) -> bool:
+    # Compatibility checks are _agree(compatible, disagreement) calls, which raise IncompatibleShard
+    # even under python -O (#225); before that they were assert statements.
+    call = node.value
+    return isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "_agree"
+
+
 def mutate_source(source: str, mutant: str) -> str:
     if mutant not in SOURCE_MUTANTS:
         raise ValueError(f"unknown source mutant {mutant}")
@@ -29,6 +36,8 @@ def mutate_source(source: str, mutant: str) -> str:
         def visit_Expr(self, node):
             if mutant == "replace-retained-case" and ast.unparse(node) == "pairs.append((old, case))":
                 return [node, *ast.parse("existing_cases[case_id] = case").body]
+            if mutant == "remove-compatibility-guards" and _is_guard(node):
+                return None
             return node
 
     if mutant == "omit-evidence-commit":

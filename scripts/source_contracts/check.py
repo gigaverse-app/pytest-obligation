@@ -62,6 +62,7 @@ def main() -> None:
             "-c",
             "contracts/quint.ini",
             "contracts/pytest_obligation/profiles/reporting/report_merge",
+            "--quint-require-complete",
             "-o",
             "quint_required_contracts=report-merge",
         ]
