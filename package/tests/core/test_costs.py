@@ -233,9 +233,21 @@ def test_a_full_update_run_prunes_entries_no_test_measured(
         ("import pytest\ndef test_skip():\n    pytest.skip('unavailable')", []),
         ("def test_other(): pass", ["-k", "kept"]),
         ("def test_other(): pass", ["--collect-only"]),
+        ("def test_other(): pass", ["--setup-only"]),
+        ("def test_other(): pass", ["--setup-plan"]),
         ("import pytest\ndef test_exit():\n    pytest.exit('stopped', returncode=0)", []),
     ],
-    ids=["collection-error", "collection-skip", "failure", "skip", "deselection", "collect-only", "early-success-exit"],
+    ids=[
+        "collection-error",
+        "collection-skip",
+        "failure",
+        "skip",
+        "deselection",
+        "collect-only",
+        "setup-only",
+        "setup-plan",
+        "early-success-exit",
+    ],
 )
 def test_incomplete_update_does_not_retire_unmeasured_contracts(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, source: str, arguments: list[str]
@@ -247,6 +259,48 @@ def test_incomplete_update_does_not_retire_unmeasured_contracts(
     monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     pytester.runpytest_subprocess("--obligation-cost-baseline-complete", "-p", "no:xdist", *arguments)
     assert baseline.read_text(encoding="utf-8") == _STALE_BASELINE
+
+
+def test_last_failed_update_does_not_retire_contracts_in_skipped_files(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # --lf skips each file without a last failure through a passed, empty collect report:
+    # nothing is deselected and collection succeeds, yet the skipped file's cost test never ran.
+    pytester.makepyfile(test_kept=_COST_TEST, test_flaky="def test_flaky():\n    assert False")
+    baseline = pytester.path / COST_BASELINE
+    baseline.write_text(_STALE_BASELINE, encoding="utf-8")
+    assert pytester.runpytest_subprocess("-p", "no:xdist").ret == pytest.ExitCode.TESTS_FAILED
+    pytester.makepyfile(test_flaky="def test_flaky():\n    pass")
+    monkeypatch.setenv(COST_UPDATE_ENVIRONMENT, "update")
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    result = pytester.runpytest_subprocess("--obligation-cost-baseline-complete", "-p", "no:xdist", "--lf")
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines(["*skipped 1 file*"])
+    assert baseline.read_text(encoding="utf-8") == _STALE_BASELINE
+
+
+@pytest.mark.parametrize(
+    ("source", "arguments", "cause"),
+    [
+        ("import pytest\ndef test_skip():\n    pytest.skip('unavailable')", [], "skipped or xfailed test"),
+        ("import pytest\n@pytest.mark.xfail\ndef test_x():\n    assert False", [], "skipped or xfailed test"),
+        ("def test_other(): pass", ["-k", "kept"], "deselected tests"),
+        ("def test_other(): pass", ["--setup-only"], "--setup-only/--setup-plan"),
+        ("def test_other(): pass", ["--lf"], "--lf"),
+    ],
+    ids=["skip", "xfail", "deselection", "setup-only", "last-failed"],
+)
+def test_blocked_pruning_names_its_cause_and_the_manual_removal(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, source: str, arguments: list[str], cause: str
+) -> None:
+    pytester.makepyfile(test_incomplete=source)
+    (pytester.path / COST_BASELINE).write_text(_STALE_BASELINE, encoding="utf-8")
+    monkeypatch.setenv(COST_UPDATE_ENVIRONMENT, "update")
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    result = pytester.runpytest_subprocess("--obligation-cost-baseline-complete", "-p", "no:xdist", *arguments)
+    result.stdout.fnmatch_lines(
+        [f"Cost baseline pruning skipped (*{cause}*delete the entries from {COST_BASELINE} by hand."]
+    )
 
 
 def test_complete_empty_update_can_retire_the_last_contract(
