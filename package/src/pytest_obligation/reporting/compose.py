@@ -1,6 +1,7 @@
 """Compose one report from evidence files, as data: shared by the CLI and the trusted re-render."""
 
 import os
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,9 @@ from pytest_obligation.profiles.reporting import merge_reports
 from .artifact import TestOutcome
 from .inventory import ApplicationInventory
 from .markdown import render
+
+#: A file name the Markdown notice can quote as code without the name changing the notice.
+_PLAIN_FILE_NAME = re.compile(r"[\w.-]{1,120}")
 
 
 def safe_run_url(url: str) -> bool:
@@ -54,7 +58,7 @@ def merge_evidence(
             f"{expected_reports} report{'s' * (expected_reports != 1)}" if expected_reports else "at least one report"
         )
         problems.append(f"Expected {wanted}; found {len(paths)}.")
-    for path in paths:
+    for number, path in enumerate(paths, start=1):
         try:
             if path.stat().st_size > 10_000_000:
                 raise ValueError("report exceeds 10 MB")
@@ -86,7 +90,11 @@ def merge_evidence(
             merge_reports(reports, incoming)
         except (OSError, ValidationError, ValueError, AssertionError) as error:
             # Preserve valid evidence; never print application input or exception messages.
-            problems.append(f"A report could not be read or combined ({type(error).__name__}).")
+            # Name the shard by position, and by file name only when it is plain enough to quote.
+            name = f" (`{path.name}`)" if _PLAIN_FILE_NAME.fullmatch(path.name) else ""
+            problems.append(
+                f"Report {number} of {len(paths)}{name} could not be read or combined ({type(error).__name__})."
+            )
     unavailable = " ".join(problems)
     collected_skips = None
     skips_unknown = ""

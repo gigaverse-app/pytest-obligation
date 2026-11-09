@@ -11,7 +11,7 @@ conformance suite to individual tests.
 | --- | --- |
 | Root README, `docs/` prose, the Read the Docs site (`documentation/`, including its requirements files, `mkdocs.yml`), example READMEs or `package/docs/` | Local documentation links, lint and the documentation site build; no tests, builds or smoke checks unless a test declares the document |
 | Package README or LICENSE (embedded in the distributions) | Package lane: wheel/sdist build, Twine and metadata validation, installed-wheel smoke |
-| Python source or tests | Import-dependent complete lanes, explicit integration inputs, and type checking |
+| Python source or tests | Complete lanes whose tests import the change, explicit integration inputs, and type checking. The pytest plugin (`pytest_obligation.pytest_plugin`) is a global module: pytest loads it into every session, so a change to it or to anything it imports starts every test lane, while a framework integration starts only the lanes that import it |
 | Demo recording tape/environment | Complete demo lane, including the executable GIF assertions |
 | Adoption evidence validator | Its direct workflow consumers and Python-dependent guard tests |
 | Published `check` action | Demo, Saleor, and example action lanes |
