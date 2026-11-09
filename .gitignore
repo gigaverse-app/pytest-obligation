@@ -17,3 +17,7 @@ profiles-*.json
 
 # Maintained Quint tool cache and replay evidence
 /.artifacts/
+/contracts/.artifacts/
+
+# pytest-selective's local import-graph cache
+.test-impact/

@@ -18,7 +18,8 @@
       "examples/adopter",
       "examples/checkout_tutorial",
       "examples/rq_tutorial",
-      "demos"
+      "demos",
+      "contracts"
     ],
     "pytest_policy": {
       "demos/dbos_transactional_outbox/pyproject.toml": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
@@ -31,7 +32,9 @@
       "package/pyproject.toml": "197e7f7507e5e55187d99781b4c7a4532cd222fc4ebdda624bb6d62cd3ad60a3",
       "pyproject.toml": "e22f1beebaa72b78345891da5d89dc21a513f9fd40c0f6e4367c844d8f505a92"
     },
-    "global_modules": [],
+    "global_modules": [
+      "pytest_obligation.pytest_plugin"
+    ],
     "global_inputs": [
       "pyproject.toml",
       "**/pyproject.toml",
@@ -70,10 +73,7 @@
         "integration_tests/core"
       ],
       "inputs": [
-        "package/src/pytest_obligation/**",
-        "package/shims/**",
         "package/tests_support/**",
-        "package/src/**",
         "scripts/check_core_is_framework_free.py",
         "docs/assets/report-glyphs/**"
       ]
@@ -86,8 +86,6 @@
         "examples/checkout_tutorial/tests"
       ],
       "inputs": [
-        "package/src/**",
-        "package/shims/**",
         "scripts/check_core_is_framework_free.py"
       ]
     },
@@ -96,10 +94,7 @@
         "package/tests/core",
         "integration_tests/core"
       ],
-      "inputs": [
-        "package/src/**",
-        "package/shims/**"
-      ]
+      "inputs": []
     },
     "django": {
       "roots": [
@@ -108,9 +103,7 @@
       ],
       "inputs": [
         "package/tests/django/**",
-        "examples/adopter/tests_django/**",
-        "package/src/**",
-        "package/shims/**"
+        "examples/adopter/tests_django/**"
       ]
     },
     "django_psycopg2": {
@@ -120,9 +113,7 @@
       ],
       "inputs": [
         "package/tests/django/**",
-        "examples/adopter/tests_django/**",
-        "package/src/**",
-        "package/shims/**"
+        "examples/adopter/tests_django/**"
       ]
     },
     "redis": {
@@ -134,8 +125,6 @@
         "examples/rq_tutorial/tests"
       ],
       "inputs": [
-        "package/src/**",
-        "package/shims/**",
         "scripts/check_celery_regressions.py",
         "scripts/check_adoption*.py"
       ]
@@ -144,19 +133,13 @@
       "roots": [
         "package/tests/mongodb"
       ],
-      "inputs": [
-        "package/src/**",
-        "package/shims/**"
-      ]
+      "inputs": []
     },
     "aiokafka": {
       "roots": [
         "package/tests/aiokafka"
       ],
-      "inputs": [
-        "package/src/**",
-        "package/shims/**"
-      ]
+      "inputs": []
     },
     "prefect": {
       "roots": [
@@ -164,8 +147,6 @@
         "integration_tests/prefect"
       ],
       "inputs": [
-        "package/src/**",
-        "package/shims/**",
         "scripts/check_adoption*.py"
       ]
     },
@@ -183,8 +164,6 @@
         "demos/fetch_upstream.py",
         "demos/cached_database.py",
         "demos/throwaway_postgres.sh",
-        "package/src/**",
-        "package/shims/**",
         "scripts/check_adoption*.py",
         "docs/demo.tape",
         "docs/demo_env.sh",
@@ -202,8 +181,6 @@
         "demos/cached_database.py",
         "demos/throwaway_postgres.sh",
         "check/**",
-        "package/src/**",
-        "package/shims/**",
         "scripts/check_adoption*.py"
       ]
     },
@@ -221,8 +198,6 @@
         "report/**",
         "publish/**",
         "preview/**",
-        "package/src/**",
-        "package/shims/**",
         "scripts/check_adoption*.py"
       ]
     },
@@ -265,12 +240,10 @@
     },
     "quint": {
       "roots": [
-        "verification_tests/quint"
+        "contracts"
       ],
       "inputs": [
-        "package/src/pytest_obligation/**",
-        "docs/quint/**",
-        "verification_tests/quint/**",
+        "contracts/**",
         "ci_tests/test_quint_routing.py"
       ]
     }
