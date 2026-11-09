@@ -1,5 +1,0 @@
-dependencies:
-  - inputs:
-      - "//pyproject.toml"
-    kind: content
-    reason: "Read at runtime; recorded by pytest-selective audit --write-declarations."

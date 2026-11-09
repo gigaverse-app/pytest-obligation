@@ -1,0 +1,13 @@
+dependencies:
+  - readers: ["**/test_*_contract.py"]
+    relative_to: reader
+    inputs:
+      - "model.qnt"
+      - "quint-connect.json"
+      - "README.md"
+      - "history/**"
+      - "//contracts/quint.ini"
+    kind: content
+    reason: >-
+      Each Quint contract loads its own manifest, model and frozen history, and documents its rule
+      in its own README. The shared pytest configuration lists the required contracts.

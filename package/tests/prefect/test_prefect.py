@@ -1,3 +1,6 @@
+# Prefect reads the project configuration while starting its local server.
+# gv:test-dependency: pyproject.toml
+
 import asyncio
 from datetime import UTC, datetime, timedelta
 

@@ -1,5 +1,7 @@
 """Verify the hosted report assets against the renderer in the full checkout."""
 
+# gv:test-dependency: docs/assets/report-glyphs/**
+
 import re
 from html import unescape
 from pathlib import Path

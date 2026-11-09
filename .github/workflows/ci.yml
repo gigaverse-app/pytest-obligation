@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+# Preview pytest-selective #139 until its reader-relative rules are released.
+env:
+  SELECTOR_PREVIEW_REF: 756df888218786c3d8ef1f034da1115e6a111b23
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
@@ -24,12 +28,25 @@ jobs:
   # shows the lanes and why; .github/test-lanes.json adds only what those graphs cannot see.
   select-tests:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}/.ci-tools/pytest-selective/src
     outputs:
       lanes: ${{ steps.select.outputs.lanes }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - uses: actions/checkout@v7
+        with:
+          repository: gigaverse-app/pytest-selective
+          ref: ${{ env.SELECTOR_PREVIEW_REF }}
+          path: .ci-tools/pytest-selective
+          persist-credentials: false
+      - name: Verify the preview selector import path
+        run: >-
+          python -c "import importlib.util; from pathlib import Path;
+          assert Path(importlib.util.find_spec('pytest_selective').origin).resolve().is_relative_to(
+          Path('.ci-tools/pytest-selective/src').resolve())"
       - id: select
         uses: gigaverse-app/ci-esta/actions/plan-work@v1
         with:
@@ -39,8 +56,17 @@ jobs:
     needs: select-tests
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    env:
+      # Exercise the same selector revision as the public plan-work action.
+      PYTHONPATH: ${{ github.workspace }}/.ci-tools/pytest-selective/src
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: gigaverse-app/pytest-selective
+          ref: ${{ env.SELECTOR_PREVIEW_REF }}
+          path: .ci-tools/pytest-selective
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true

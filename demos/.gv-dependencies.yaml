@@ -1,0 +1,6 @@
+dependencies:
+  - readers: ["*/test_handoff_inventory.py"]
+    relative_to: reader
+    inputs: ["**/*.py"]
+    kind: content
+    reason: Each inventory scans Python source in its own demo without importing it.

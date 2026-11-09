@@ -121,9 +121,15 @@ distributions, so they select the jobs that build the wheel: `build` and `due`. 
 `docs/demo.tape` and `docs/demo_env.sh` select the demo lane because the executable
 README demo reads them. If tests begin consuming package documentation, declare that input.
 
-When a test or a script starts reading a file by path, declare it next to the reader:
-a `<test>.gv-dependency.yaml` sidecar (`pytest-selective audit --write-declarations`
-writes them from a recorded run) or a `# gv:test-dependency: PATH` comment.
+When a test or script starts reading a file by path, prefer a
+`# gv:test-dependency: PATH` comment for simple inputs or executed Python helpers.
+Repeated conventions belong in a directory `.gv-dependencies.yaml`: `relative_to: reader`
+resolves inputs beside each matched reader, keeping sibling contracts and demos separate.
+The manifests in `contracts/` and `demos/` cover new matching tests automatically.
+Use `kind: content` when scanning Python source without executing its imports; comments
+have import semantics. Keep a `<reader>.gv-dependency.yaml` for complex exceptions such
+as the README recording and routing harness. `pytest-selective audit --write-declarations`
+can discover missing reads; consolidate its output into these forms before committing.
 [.github/test-lanes.json](.github/test-lanes.json) extends the workflow with only
 what the graphs cannot see: the `core` lane's roots, the environment files that run
 every lane, and the type-check's project files. `uv run --no-project --with

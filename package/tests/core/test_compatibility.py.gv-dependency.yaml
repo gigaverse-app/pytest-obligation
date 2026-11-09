@@ -1,7 +1,0 @@
-dependencies:
-  - inputs:
-      - "//package/shims/due_work_harness/__init__.py"
-      - "//package/src/pytest_obligation/evidence/observation_report.py"
-      - "//package/src/pytest_obligation/reporting/_nodeids_plugin.py"
-    kind: import
-    reason: "Loaded or run outside the test's imports; recorded by pytest-selective audit --write-declarations."

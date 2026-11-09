@@ -3,6 +3,7 @@ dependencies:
       - "//.github/test-lanes.json"
       - "//.github/workflows/ci.yml"
       - "//**/*.gv-dependency.yaml"
+      - "//**/.gv-dependencies.yaml"
       - "//**/*.py"
       - "//**/*.pyi"
       - "//**/*.cjs"
