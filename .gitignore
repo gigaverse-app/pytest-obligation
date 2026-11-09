@@ -19,6 +19,9 @@ profiles-*.json
 /.artifacts/
 /contracts/.artifacts/
 
+# pytest-selective's local import-graph cache
+.test-impact/
+
 # Pinned source verifier tool cache and install receipts
 /.source-contract-tooling/
 /test-results/source-verifier/
