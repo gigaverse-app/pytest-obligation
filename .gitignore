@@ -21,4 +21,3 @@ profiles-*.json
 
 # pytest-selective's local import-graph cache
 .test-impact/
-.ci-tools/

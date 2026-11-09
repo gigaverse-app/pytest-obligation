@@ -133,7 +133,7 @@ can discover missing reads; consolidate its output into these forms before commi
 [.github/test-lanes.json](.github/test-lanes.json) extends the workflow with only
 what the graphs cannot see: the `core` lane's roots, the environment files that run
 every lane, and the type-check's project files. `uv run --no-project --with
-"ci-esta[selection]>=1.14.0" ci-esta lanes --config .github/test-lanes.json --base
+"ci-esta[selection]>=1.14.1" ci-esta lanes --config .github/test-lanes.json --base
 origin/main` shows what a change would run and why. A test outside every lane's roots
 falls back to every lane; add a new test directory to a job's test command.
 # Measured conformance execution
