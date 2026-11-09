@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "name": "fenced-lease",
+  "description": "Profile B's reference owner: a reaped or superseded owner's token is refused, and a READY row has no owner.",
+  "root": "../../..",
+  "attest": {
+    "package": "pytest_obligation",
+    "source": "package/src"
+  },
+  "module": "fenced_lease_fixed",
+  "invariant": "contract",
+  "model": "fixed.qnt",
+  "sources": [
+    "package/src/pytest_obligation/references/in_memory.py",
+    "package/src/pytest_obligation/profiles/bounded_ownership.py"
+  ],
+  "actions": {
+    "init": "A fresh InMemoryOwner and one claimable row",
+    "claim": "InMemoryOwner.claim(); the returned token is remembered as the last issued",
+    "expire": "InMemoryOwner.expire_lease(row): the owner stopped renewing",
+    "reclaim": "InMemoryOwner.reclaim_stalled(row): the reaper",
+    "write": "InMemoryOwner.fenced_write(row, token) with the last or previous issued token",
+    "retry": "InMemoryOwner.fenced_retry(row, token) with the last or previous issued token",
+    "release": "InMemoryOwner.release_unchanged(row, token) with the last or previous issued token",
+    "renew": "InMemoryOwner.renew_lease(row, token) with the last or previous issued token",
+    "inspect": "Read InMemoryOwner.observe(row) without changing it"
+  },
+  "witnesses": [
+    "reapedOwnerCannotWriteTest",
+    "reapedOwnerCannotRenewTest",
+    "supersededOwnerCannotWriteTest",
+    "currentOwnerWritesTest",
+    "liveLeaseBlocksReclaimTest"
+  ],
+  "mutants": [
+    {
+      "name": "shipped-9aa6ff2",
+      "description": "The exact InMemoryOwner re-arm methods shipped at 9aa6ff2, before the fix: the row returns to READY but keeps the previous owner's token, which can still write or renew it"
+    },
+    {
+      "name": "reaper-ignores-lease",
+      "description": "The reaper re-arms any claimed row, taking it from an owner whose lease is still live"
+    },
+    {
+      "name": "unfenced-renewal",
+      "description": "renew_lease ignores the token, so a dead owner can keep a lease alive"
+    }
+  ],
+  "bugs_found": [
+    {
+      "summary": "Profile B's reference owner kept a reaped owner's token valid until the next claim, so that owner could still renew a READY row or write it to RETRYABLE, where no claim or reaper reaches it; the profile's stale-token proofs never tried the token in that window",
+      "fixed_in": "#217",
+      "found_by": "a state-machine audit of the references, confirmed by replaying claim, expire, reclaim and a late write against the real InMemoryOwner",
+      "regression_test": "package/tests/core/profiles/test_bounded_ownership.py::test_a_reaped_owner_cannot_touch_the_row_before_it_is_claimed_again",
+      "mutant": "shipped-9aa6ff2"
+    }
+  ],
+  "bounds": {
+    "seed": 20261108,
+    "max_samples": 200,
+    "n_traces": 16,
+    "max_steps": 8
+  },
+  "limits": [
+    "One row and the reference's own clock, which never advances; lease state is read as none, live or expired from the deadline.",
+    "Tokens are named by age (last or previous issued); a never-issued token stands in when there is no such token.",
+    "This contracts the reference owner the profile B proofs are calibrated against, not an adopter's binding; adopters are judged by the proofs in bounded_ownership.py.",
+    "shipped-9aa6ff2 runs rearm-9aa6ff2.py.txt, the three pre-fix methods copied verbatim from 9aa6ff2 and pinned by SHA-256 in adapter.py."
+  ]
+}

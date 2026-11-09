@@ -89,6 +89,7 @@ jobs:
           QUINT_REQUIRED_CONTRACTS: |-
             report-merge
             ambiguity
+            fenced-lease
             cost-baseline
         run: >-
           uv run --no-sync pytest verification_tests/quint -p no:cacheprovider

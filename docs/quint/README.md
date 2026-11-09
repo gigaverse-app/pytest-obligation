@@ -15,6 +15,7 @@ uv run --no-sync pytest verification_tests/quint --quint-require-complete
 | --- | --- | --- |
 | [report-merge](report-merge/README.md) | `profiles.reporting.merge_reports` | [test_report_merge_contract.py](../../verification_tests/quint/test_report_merge_contract.py) |
 | [ambiguity](ambiguity/README.md) | Profile C's reference `InMemoryMachine` | [test_ambiguity_contract.py](../../verification_tests/quint/test_ambiguity_contract.py) |
+| [fenced-lease](fenced-lease/README.md) | Profile B's reference `InMemoryOwner` | [test_fenced_lease_contract.py](../../verification_tests/quint/test_fenced_lease_contract.py) |
 | [cost-baseline](cost-baseline/README.md) | `CostCompleteness` hooks in `_cost_plugin.py` | [test_cost_baseline_contract.py](../../verification_tests/quint/test_cost_baseline_contract.py) |
 
 To register a topic, add its directory with an `adapter.py` exposing

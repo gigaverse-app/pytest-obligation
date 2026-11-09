@@ -461,9 +461,55 @@ def assert_current_token_renewal_is_accepted(ownership: FencedOwnership) -> None
     )
 
 
+def _stale_attempt_accepted(
+    ownership: FencedOwnership, row_id: Any, operation: Callable[[Any, UUID], object], token: UUID, what: str
+) -> bool:
+    """Try ``operation`` with a superseded token; True when it was accepted, after checking a refusal changed nothing."""
+    before = _observed(ownership, row_id)
+    try:
+        result: object = operation(row_id, token)
+    except Exception:
+        _assert_untouched(ownership, row_id, before, f"the refused {what}")
+        return False  # raising is a legitimate refusal
+    if not _is_refused(result):
+        return True
+    _assert_untouched(ownership, row_id, before, f"the refused {what}")
+    return False
+
+
+def _stale_owner_windows(ownership: FencedOwnership, operation: Callable[[Any, UUID], object], what: str) -> list[str]:
+    """
+    The windows in which a reaped owner's token was accepted by ``operation``.
+
+    A token is superseded the moment the reaper takes the row back, not only once
+    another worker claims it. So it is tried twice on one row: right after the
+    reaper re-arms it, and again after the next claim. A design that rotates the
+    fence only on claim passes the second check and fails the first; its dead
+    owner can still write a row nobody has claimed yet.
+    """
+    windows: list[str] = []
+    row_id, stale_token = _claim_one(ownership)
+    ownership.expire_lease(row_id)
+    ownership.reclaim_stalled(row_id)
+    if _stale_attempt_accepted(ownership, row_id, operation, stale_token, what):
+        # The row may now be somewhere no claim reaches; the second window cannot be set up.
+        return [f"{what} after the reaper re-armed the row, before anyone claimed it"]
+    assert ownership.claim() is not None, (
+        f"{ownership.name}: the row the reaper re-armed could not be claimed again after the "
+        f"refused {what}. Either the reaper did not make it claimable, or the refusal moved the "
+        f"row anyway and stranded it"
+    )
+    if _stale_attempt_accepted(ownership, row_id, operation, stale_token, what):
+        windows.append(f"{what} after another worker claimed the row")
+    return windows
+
+
 def assert_stale_token_is_rejected(ownership: FencedOwnership) -> None:
     """
     INVARIANT 3: a superseded owner cannot write.
+
+    Superseded means reaped: the token is tried both right after the reaper
+    re-arms the row and after the next claim (see ``_stale_owner_windows``).
 
     With ``observe`` this also asserts the row is untouched. Refusing and
     writing anyway is a real shape — a guard that reports failure after the
@@ -474,25 +520,12 @@ def assert_stale_token_is_rejected(ownership: FencedOwnership) -> None:
     for field, write in _fenced_writes(ownership):
         # Each write gets its own superseded owner: an accepted one has already
         # moved the row, which would decide the next write's verdict for it.
-        row_id, stale_token = _claim_one(ownership)
-        ownership.expire_lease(row_id)
-        ownership.reclaim_stalled(row_id)
-        assert ownership.claim() is not None, f"{ownership.name}: re-claim failed"
-        before = _observed(ownership, row_id)
-
-        try:
-            result: object = write(row_id, stale_token)
-        except Exception:
-            _assert_untouched(ownership, row_id, before, f"the refused {field}")
-            continue  # raising is a legitimate refusal
-        if not _is_refused(result):
-            accepted.append(field)
-            continue
-        _assert_untouched(ownership, row_id, before, f"the refused {field}")
+        accepted.extend(_stale_owner_windows(ownership, write, field))
     assert not accepted, (
-        f"{ownership.name}: {', '.join(accepted)} carrying a superseded token was "
-        f"accepted. A slow worker that wakes up after its claim was reaped would "
-        f"corrupt the new owner's state"
+        f"{ownership.name}: a superseded token was accepted by {'; '.join(accepted)}. "
+        f"A slow worker that wakes up after its claim was reaped would corrupt the row: "
+        f"before a new claim it can move a re-armed row where no claim or reaper reaches "
+        f"it, and after one it overwrites the new owner's state"
     )
 
 
@@ -523,28 +556,17 @@ def assert_lease_renewal_is_fenced(ownership: FencedOwnership) -> None:
     """
     INVARIANT 6: a dead owner cannot keep its lease alive.
 
-    With ``observe`` this also asserts the deadline did not move, which is the
-    thing that actually matters: a renewal that reports refusal and extends the
-    lease anyway keeps the row away from the reaper just as effectively as one
-    that reports success.
+    Tried both right after the reaper re-arms the row and after the next claim
+    (see ``_stale_owner_windows``). With ``observe`` this also asserts the
+    deadline did not move, which is the thing that actually matters: a renewal
+    that reports refusal and extends the lease anyway keeps the row away from
+    the reaper just as effectively as one that reports success.
     """
-    row_id, stale_token = _claim_one(ownership)
-    ownership.expire_lease(row_id)
-    ownership.reclaim_stalled(row_id)
-    assert ownership.claim() is not None, f"{ownership.name}: re-claim failed"
-    before = _observed(ownership, row_id)
-
-    try:
-        result: object = ownership.renew_lease(row_id, stale_token)
-    except Exception:
-        _assert_untouched(ownership, row_id, before, "the refused renewal")
-        return
-    assert _is_refused(result), (
-        f"{ownership.name}: lease renewal accepted the superseded token "
-        f"{stale_token!r}, so a dead owner could hold the lease open and block "
-        f"reclaim indefinitely"
+    accepted = _stale_owner_windows(ownership, ownership.renew_lease, "lease renewal")
+    assert not accepted, (
+        f"{ownership.name}: a superseded token was accepted by {'; '.join(accepted)}, so a dead "
+        f"owner could hold the lease open and block reclaim indefinitely"
     )
-    _assert_untouched(ownership, row_id, before, "the refused renewal")
 
 
 def assert_the_lease_outlives_the_work(

@@ -358,8 +358,9 @@ class InMemoryOwner:
 
     Claiming issues a fresh token and a lease; the reaper re-arms only expired
     claims; every owner-gated mutation checks the token first and refuses with
-    ``False``. The self-tests' broken variants each override exactly one of
-    those properties.
+    ``False``. A row that returns to READY (reaped, retried or released) has no
+    owner, so its last token is dropped then rather than at the next claim. The
+    self-tests' broken variants each override exactly one of those properties.
     """
 
     def __init__(self) -> None:
@@ -397,9 +398,16 @@ class InMemoryOwner:
         row = self.rows[row_id]
         if token != row.token:
             return False
-        row.state = "READY"
-        row.lease_expires_at = None
+        self._rearm(row)
         return True
+
+    @staticmethod
+    def _rearm(row: OwnedRow) -> None:
+        # A READY row has no owner: the previous token is dead from this moment,
+        # not from the next claim, or its holder could still write the row.
+        row.state = "READY"
+        row.token = None
+        row.lease_expires_at = None
 
     def renew_lease(self, row_id: int, token: UUID) -> bool:
         row = self.rows[row_id]
@@ -414,7 +422,9 @@ class InMemoryOwner:
     def reclaim_stalled(self, row_id: int) -> str | None:
         row = self.rows[row_id]
         if row.state == "CLAIMED" and row.lease_expires_at is not None and row.lease_expires_at < self.clock:
-            row.state = "READY"
+            deadline = row.lease_expires_at
+            self._rearm(row)
+            row.lease_expires_at = deadline  # observable: the reaper keeps the expired deadline
             return "REARMED"
         return None
 
@@ -422,8 +432,7 @@ class InMemoryOwner:
         row = self.rows[row_id]
         if token != row.token:
             return False
-        row.state = "READY"
-        row.lease_expires_at = None
+        self._rearm(row)
         return True
 
     def observe(self, row_id: int) -> tuple[str, float | None]:
