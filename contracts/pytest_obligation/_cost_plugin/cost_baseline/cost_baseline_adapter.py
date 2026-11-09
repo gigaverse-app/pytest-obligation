@@ -28,7 +28,7 @@ class Adapter:
         if mutant == "shipped-389c5bb":
             # The exact pre-fix sessionfinish, run in the real module's namespace. The hash keeps
             # this frozen evidence from being edited until it agrees with the model.
-            shipped = Path(__file__).with_name("sessionfinish-389c5bb.py.txt")
+            shipped = Path(__file__).with_name("history") / "sessionfinish-389c5bb.py.txt"
             text = shipped.read_bytes()
             assert hashlib.sha256(text).hexdigest() == SHIPPED_389C5BB_SHA256, f"{shipped} was edited"
             namespace = dict(vars(_cost_plugin))
