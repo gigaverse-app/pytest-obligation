@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.26.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.26.0...v0.26.1) (2026-11-09)
+
+
+### Bug fixes
+
+* **costs:** never prune after setup-only or --lf runs ([#227](https://github.com/gigaverse-app/pytest-obligation/issues/227)) ([ae92a37](https://github.com/gigaverse-app/pytest-obligation/commit/ae92a37923c699039f9a2ce4c50a395f78014900))
+* **costs:** preserve unmeasured baselines after incomplete runs ([#208](https://github.com/gigaverse-app/pytest-obligation/issues/208)) ([590f89c](https://github.com/gigaverse-app/pytest-obligation/commit/590f89c49b5c759bca575bc421b73c84e369627c))
+* **profiles:** re-claim the reaped row itself, whatever the claim order ([#224](https://github.com/gigaverse-app/pytest-obligation/issues/224)) ([1d4b05e](https://github.com/gigaverse-app/pytest-obligation/commit/1d4b05e763eba7ab0ea4ce7680518974b4d45278))
+* **profiles:** reject a reaped owner's token before the next claim ([#217](https://github.com/gigaverse-app/pytest-obligation/issues/217)) ([f474e29](https://github.com/gigaverse-app/pytest-obligation/commit/f474e29e7197cea7682ecdd924147ce6ea7db760))
+* **quint:** require complete contracts only in the full run ([#226](https://github.com/gigaverse-app/pytest-obligation/issues/226)) ([cea2069](https://github.com/gigaverse-app/pytest-obligation/commit/cea20693dc385edcfe7ed10c1eca505406168311))
+* **reporting:** reject incompatible shards before merging evidence ([#210](https://github.com/gigaverse-app/pytest-obligation/issues/210)) ([9aa6ff2](https://github.com/gigaverse-app/pytest-obligation/commit/9aa6ff22cd93b1498dd81f9512d3765fb070435a))
+
 ## [0.26.0](https://github.com/gigaverse-app/pytest-obligation/compare/v0.25.2...v0.26.0) (2026-11-04)
 
 
