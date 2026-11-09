@@ -57,11 +57,16 @@ class RoutingTests(RoutingSnapshot):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), set())
 
-    def test_embedded_distribution_files_select_only_the_package_build(self):
-        # pyproject's readme and license-files: twine and check_metadata.py validate them in the build job.
-        for path in ("package/README.md", "package/LICENSE"):
+    def test_embedded_distribution_files_select_only_the_wheel_builders(self):
+        # pyproject's readme and license-files are in the wheel: the build job validates it with twine and
+        # check_metadata.py, and Due's conformance installs it. ci_tests/test_metadata.py exercises
+        # check_metadata.py, which reads the README.
+        for path, lanes in (
+            ("package/README.md", {"package", "due", "contracts"}),
+            ("package/LICENSE", {"package", "due"}),
+        ):
             with self.subTest(path=path):
-                self.assertEqual(self.selection(path), {"package"})
+                self.assertEqual(self.selection(path), lanes)
 
     def test_global_environment_changes_keep_full_validation(self):
         for path in (
@@ -70,11 +75,34 @@ class RoutingTests(RoutingSnapshot):
             "package/pyproject.toml",
             "demos/wagtail_tasks/pyproject.toml",
             ".python-version",
-            ".github/workflows/ci.yml",
             ".github/test-lanes.json",
         ):
             with self.subTest(path=path):
                 self.assertEqual(self.selection(path), self.lanes)
+
+    def edited(self, path, old, new):
+        """Lanes selected by one commit that replaces old with new in path."""
+        self.reset()
+        file = self.repo / path
+        text = file.read_text(encoding="utf-8")
+        self.assertEqual(text.count(old), 1, old)
+        file.write_bytes(text.replace(old, new).encode("utf-8"))
+        result = self.plan(self.base, self.commit())
+        self.assertNotIn("fallback", result.reason, result.model_dump_json())
+        return {name for name, enabled in result.lanes.items() if enabled}
+
+    def test_a_workflow_edit_selects_the_lanes_of_the_jobs_it_changes(self):
+        workflow = ".github/workflows/ci.yml"
+        # A comment changes no job: only the tests that read the workflow run.
+        self.assertEqual(self.selection(workflow), {"contracts"})
+        # One job's command runs that job's lane.
+        self.assertEqual(
+            self.edited(workflow, "pytest package/tests/mongodb -q", "pytest package/tests/mongodb -q -rA"),
+            {"mongodb", "contracts"},
+        )
+        # The planner decides every lane, so changing it runs them all.
+        planner = "  select-tests:\n    runs-on: ubuntu-latest"
+        self.assertEqual(self.edited(workflow, planner, planner.replace("ubuntu-latest", "ubuntu-24.04")), self.lanes)
 
     def test_other_dependency_installers_keep_every_lane(self):
         for path in ("requirements.txt", "package/requirements-dev.txt", "poetry.lock", "pylock.toml"):
@@ -82,7 +110,10 @@ class RoutingTests(RoutingSnapshot):
                 self.assertEqual(self.selection(path), self.lanes)
 
     def test_publisher_container_dependencies_start_its_consumers(self):
-        self.assertEqual(self.selection("publish/requirements.txt"), {"actions", "contracts"})
+        # The sandbox smoke builds the publisher container from them; the contracts lane's Node tests do not.
+        for path in ("publish/requirements.txt", "publish/Dockerfile"):
+            with self.subTest(path=path):
+                self.assertEqual(self.selection(path), {"actions"})
 
     def test_demo_recording_inputs_keep_the_complete_demo_lane(self):
         for path in ("docs/demo.tape", "docs/demo_env.sh"):
@@ -139,15 +170,17 @@ class RoutingTests(RoutingSnapshot):
                 "demos",
                 "saleor",
                 "actions",
-                "due",
                 "typecheck",
                 "contracts",
             },
         )
+        # The due job runs Due's own copy of these validators, in its checkout of gigaverse-app/due.
+        self.assertNotIn("due", self.selection("scripts/check_adoption_cases.py"))
 
     def test_published_actions_only_start_their_consumers(self):
-        self.assertEqual(self.selection("check/action.yml"), {"demos", "saleor", "actions"})
-        self.assertEqual(self.selection("test/action.yml"), {"actions"})
+        # contracts too: these routing tests plan through every local action the workflow uses.
+        self.assertEqual(self.selection("check/action.yml"), {"demos", "saleor", "actions", "contracts"})
+        self.assertEqual(self.selection("test/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("report/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("publish/action.yml"), {"actions", "contracts"})
         self.assertEqual(self.selection("preview/preview.cjs"), {"actions", "contracts"})
