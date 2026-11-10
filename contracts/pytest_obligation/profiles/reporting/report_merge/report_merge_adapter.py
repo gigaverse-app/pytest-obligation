@@ -2,6 +2,7 @@
 
 import ast
 import hashlib
+import importlib.util
 import inspect
 import sys
 from pathlib import Path
@@ -66,6 +67,28 @@ def create(root: Path, work: Path, mutant: str | None = None):
         assert hashlib.sha256(text).hexdigest() == SHIPPED_389C5BB_SHA256, f"{shipped} was edited"
         namespace = dict(reporting.__dict__)
         exec(compile(text, str(shipped), "exec"), namespace)
+        merge = namespace["merge_reports"]
+    elif mutant in (
+        "early-evidence-write",
+        "replace-retained-case",
+        "remove-compatibility-guards",
+        "omit-evidence-commit",
+    ):
+        module_path = root / "scripts/source_contracts/mutations.py"
+        spec = importlib.util.spec_from_file_location("report_source_mutations", module_path)
+        assert spec is not None and spec.loader is not None
+        mutations = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mutations)
+        source_text = mutations.mutate_source(expected.read_text(), mutant)
+        work.mkdir(parents=True, exist_ok=True)
+        source = work / f"{mutant}.py"
+        source.write_text(source_text)
+        namespace = dict(reporting.__dict__)
+        exec(compile(source_text, str(source), "exec"), namespace)
+        # The mutated text is the whole module, so it defines a new IncompatibleShard; only
+        # merge_reports is mutated, so keep the real rejection type the adapter observes.
+        namespace["IncompatibleShard"] = reporting.IncompatibleShard
+        namespace["_agree"] = reporting._agree
         merge = namespace["merge_reports"]
     elif mutant not in (None, "replace-case-identity"):
         raise ValueError(f"unknown implementation mutant: {mutant}")

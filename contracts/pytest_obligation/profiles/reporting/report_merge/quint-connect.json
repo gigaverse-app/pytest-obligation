@@ -14,7 +14,8 @@
   "sources": [
     "package/src/pytest_obligation/profiles/reporting.py",
     "package/src/pytest_obligation/profiles/coverage.py",
-    "package/src/pytest_obligation/debt.py"
+    "package/src/pytest_obligation/debt.py",
+    "scripts/source_contracts/mutations.py"
   ],
   "actions": {
     "init": "Construct real SuiteCoverage / ProfileCoverage / CaseEvidence fixtures; no production merge guard patched",
@@ -41,6 +42,22 @@
     {
       "name": "replace-case-identity",
       "description": "After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence"
+    },
+    {
+      "name": "early-evidence-write",
+      "description": "Today's merge_reports with one evidence write (collected) moved inside validation, before a later mismatch can reject the shard"
+    },
+    {
+      "name": "replace-retained-case",
+      "description": "Today's merge_reports replacing a retained case with the incoming one instead of extending it"
+    },
+    {
+      "name": "remove-compatibility-guards",
+      "description": "Today's merge_reports with every compatibility assertion deleted, so incompatible shards merge silently; the source proof alone would still pass"
+    },
+    {
+      "name": "omit-evidence-commit",
+      "description": "Today's merge_reports that validates and then never writes, so compatible evidence is dropped; the source proof alone would still pass"
     }
   ],
   "bugs_found": [
@@ -65,6 +82,7 @@
     "incremental-admission compiles a mutation of the real merge_reports source moving commit inside validation.",
     "replace-case-identity is an explicit post-call output mutation replacing a CaseEvidence object with an equal deep copy; not claimed as original production source.",
     "Historical audit.qnt remains unchanged; broader audit models are not connected contracts.",
+    "Additional source mutants compile current merge AST: preflight evidence write, retained case replacement, compatibility guard removal and omitted commit; runtime rejection/accumulation checks complement the conditional source effect theorem.",
     "shipped-389c5bb runs history/merge_reports-389c5bb.py.txt, the pre-fix function copied verbatim from 389c5bb and pinned by SHA-256 in report_merge_adapter.py."
   ],
   "historical_sha256": "1d2a1941bc98e48a0f0151e8490b7639c4fcf495dff15b93ce7c8c619b878375"

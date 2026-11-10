@@ -1,0 +1,14 @@
+[
+  "test_actual_source_proves_and_imports_current_tree",
+  "test_actual_source_semantic_mutants_fail_dafny[early-evidence-write]",
+  "test_actual_source_semantic_mutants_fail_dafny[replace-retained-case]",
+  "test_compatible_accumulation_retains_every_borrowed_identity[False]",
+  "test_compatible_accumulation_retains_every_borrowed_identity[True]",
+  "test_external_case_group_contract_yields_borrowed_maps_without_writes",
+  "test_late_validation_rejection_preserves_both_inputs[assessment]",
+  "test_late_validation_rejection_preserves_both_inputs[case-set]",
+  "test_late_validation_rejection_preserves_both_inputs[declaration]",
+  "test_late_validation_rejection_preserves_both_inputs[family]",
+  "test_late_validation_rejection_preserves_both_inputs[name]",
+  "test_late_validation_rejection_preserves_both_inputs[source]"
+]

@@ -15,7 +15,7 @@ uv run --no-sync pytest -c contracts/quint.ini contracts/pytest_obligation/profi
 
 [pytest-quint-connect](https://github.com/gigaverse-app/pytest-quint-connect) runs the contract. It installs its locked Quint **0.33.1** with `npm ci` when no `QUINT`/`--quint` executable is given, checks the immutable `audit.qnt` hash, typechecks the maintained model, writes fresh ITF traces for every named witness and bounded sample, and replays each one through [report_merge_adapter.py](report_merge_adapter.py) as its own pytest case. Missing tooling, missing witnesses or traces, empty traces, unknown events, imports from outside `package/src`, mismatches and surviving mutants fail. Existing traces are removed before generation, and a filtered run (`-k`) is reported as partial and fails under `--quint-require-complete`.
 
-The checked-in [manifest](quint-connect.json) declares seed `20261107`, 150 bounded samples, 16 emitted sample traces, at most six API calls per sampled trace, plus five named witness traces: 21 histories, 25 cases with the three mutation controls and the action-coverage check. `.artifacts/quint-connect/results.json` records the source head and hashes, imported production paths, per-case outcomes, mutation mismatches, bounds and the exact Quint commands. ITF files, command logs and `mismatch-*.json` files stay beside it, including on CI failure. A mismatch names the trace, state, event, a field-level expected/actual difference, the seed and a reproduction command. To replay a saved trace against the current implementation, optionally through a mutant:
+The checked-in [manifest](quint-connect.json) declares seed `20261107`, 150 bounded samples, 16 emitted sample traces, at most six API calls per sampled trace, plus five named witness traces: 21 histories, 29 cases with the seven mutation controls and the action-coverage check. `contracts/.artifacts/quint-connect/results.json` records the source head and hashes, imported production paths, per-case outcomes, mutation mismatches, bounds and the exact Quint commands. ITF files, command logs and `mismatch-*.json` files stay beside it, including on CI failure. A mismatch names the trace, state, event, a field-level expected/actual difference, the seed and a reproduction command. To replay a saved trace against the current implementation, optionally through a mutant:
 
 ```sh
 uv run --no-sync pytest -c contracts/quint.ini contracts/pytest_obligation/profiles/reporting/report_merge --quint-replay contracts/.artifacts/quint-connect/report-merge/sample-0.itf.json
@@ -57,3 +57,17 @@ Every file in this directory is an executable-contract input: the driver imports
 ## Limits
 
 This contract covers two cases per suite, two existing suites and one optional new suite, six incompatibility shapes, and three phase-payload shapes in finite histories. Failure diagnostic **content**, arbitrary profile matrices, hostile Python object behavior, true xdist execution, threading and filesystem IO are outside the projection. The composer still explicitly warns about incompatible evidence; no formerly silent successful whole pytest run is claimed. Quint sampling and API-level projection are executable drift detection, not exhaustive verification, liveness proof or full-source refinement. Broader audit models without an adapter remain unconnected historical abstractions.
+
+## Current-source effect proof
+
+The [Python source contract](../../../../../docs/source-contracts/report-merge.md) now checks the
+real merge AST in addition to this bounded API replay. Its conditional rejection
+frame and structural mutation rules use explicit external model contracts; it
+does not prove the concrete truth of compatibility predicates. The normal replay
+therefore also includes four **actual source** mutants: an early evidence write,
+a retained-case replacement, removed compatibility assertions and an omitted
+commit. The last two prevent a vacuous conditional source theorem from satisfying
+the complete lane. Their helper `scripts/source_contracts/mutations.py` is an
+explicit input to both the Quint and source-contract lanes. All seven mutations,
+including the shipped pre-fix code, must produce an observation mismatch on fresh traces. Historical `audit.qnt`
+remains unchanged.

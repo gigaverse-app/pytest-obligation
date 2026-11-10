@@ -67,6 +67,40 @@ jobs:
         if: ${{ needs.select-tests.result != 'success' || fromJSON(needs.select-tests.outputs.lanes).contracts }}
         run: node --test report/publish.test.cjs publish/publish.test.cjs preview/preview.test.cjs
 
+  source-contracts:
+    needs: select-tests
+    if: >-
+      ${{ always() && !cancelled() && (needs.select-tests.result != 'success' ||
+          fromJSON(needs.select-tests.outputs.lanes).source_contracts) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: '3.14'
+      - run: uv sync --all-packages --locked --no-default-groups --extra debt --group xdist --group quint
+      - name: Install reviewed source verifier and pinned Dafny
+        run: |
+          .venv/bin/python scripts/bootstrap_source_verifier.py
+          bash tooling/source-contracts/install-dafny.sh
+      - name: Prove current report source and replay independent histories
+        run: .venv/bin/python -m scripts.source_contracts.check
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report-source-contracts
+          path: |
+            .artifacts/source-contracts
+            contracts/.artifacts/quint-connect
+            proofs/generated
+            test-results/source-verifier
+          if-no-files-found: error
+
   quint:
     needs: select-tests
     if: >-
@@ -818,7 +852,7 @@ jobs:
 
   validation-gate:
     name: Validation gate
-    needs: [select-tests, ci-contracts, quint, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
+    needs: [select-tests, ci-contracts, source-contracts, quint, lint, typecheck, core, minimum-models, exploration, django, django-psycopg2, redis, mongodb, aiokafka, prefect, demos, saleor, build, actions, due]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -826,4 +860,4 @@ jobs:
         with:
           needs: ${{ toJSON(needs) }}
           lanes: ${{ needs.select-tests.outputs.lanes || '{}' }}
-          lane-jobs: '{"quint":["quint"],"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"build":["package"],"actions":["actions"],"due":["due"]}'
+          lane-jobs: '{"source-contracts":["source_contracts"],"quint":["quint"],"typecheck":["typecheck"],"core":["core"],"minimum-models":["minimum_models"],"exploration":["exploration"],"django":["django"],"django-psycopg2":["django_psycopg2"],"redis":["redis"],"mongodb":["mongodb"],"aiokafka":["aiokafka"],"prefect":["prefect"],"demos":["demos"],"saleor":["saleor"],"build":["package"],"actions":["actions"],"due":["due"]}'

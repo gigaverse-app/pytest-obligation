@@ -217,16 +217,16 @@ through the real code, and deliberately planted bugs must be caught.
 <!-- pytest-quint-connect:contracts cost-baseline,fenced-lease,report-merge -->
 <a href="https://github.com/gigaverse-app/pytest-quint-connect#impact"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation&amp;theme=dark"><img alt="What pytest-quint-connect&#x27;s contracts caught in gigaverse-app/pytest-obligation&#x27;s pull requests" src="https://pytest-quint-connect-counter.gigaverse-oss.workers.dev/v1/sign.svg?key=eb2a2dd1d87695cae7c70267ac665e69d35510ca2ee36ffa3b8ee4d86dc37ea4&amp;name=gigaverse-app%2Fpytest-obligation" width="100%"></picture></a>
 
-<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 3 contracts passed · 70 histories · 9/9 mutants caught" src="https://img.shields.io/badge/Quint_contracts-3_contracts_passed_%C2%B7_70_histories_%C2%B7_9%2F9_mutants_caught-brightgreen"></a>
+<a href="https://github.com/gigaverse-app/pytest-quint-connect" title="Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug"><img alt="Quint contracts: 3 contracts passed · 70 histories · 13/13 mutants caught" src="https://img.shields.io/badge/Quint_contracts-3_contracts_passed_%C2%B7_70_histories_%C2%B7_13%2F13_mutants_caught-brightgreen"></a>
 
 <details>
-<summary>✅ 3 contracts · 82/82 cases · 9/9 mutants caught · 70 histories</summary>
+<summary>✅ 3 contracts · 86/86 cases · 13/13 mutants caught · 70 histories</summary>
 
 | | <img width="2000" height="1" align="right" alt="">Contract | Cases passed | [Mutants caught](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") |
 | :-: | :-- | --: | --: |
 | ✅ | `cost-baseline` `pytest_obligation/_cost_plugin/cost_baseline/test_cost_baseline_contract.py::test_cost_baseline`<br><sub>26 histories (10 witnesses, 16 samples, seed 1) · every action covered · Quint 0.33.1</sub> | 30/30 | 3/3 |
 | ✅ | `fenced-lease` `pytest_obligation/references/in_memory/fenced_lease/test_fenced_lease_contract.py::test_fenced_lease`<br><sub>23 histories (5 witnesses, 18 samples, seed 20261108) · every action covered · Quint 0.33.1</sub> | 27/27 | 3/3 |
-| ✅ | `report-merge` `pytest_obligation/profiles/reporting/report_merge/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 25/25 | 3/3 |
+| ✅ | `report-merge` `pytest_obligation/profiles/reporting/report_merge/test_report_merge_contract.py::test_report_merge`<br><sub>21 histories (5 witnesses, 16 samples, seed 20261107) · every action covered · Quint 0.33.1</sub> | 29/29 | 7/7 |
 
 </details>
 
@@ -242,7 +242,7 @@ through the real code, and deliberately planted bugs must be caught.
 </details>
 
 <details>
-<summary>🧪 9 mutants (planted fake bugs), all caught</summary>
+<summary>🧪 13 mutants (planted fake bugs), all caught</summary>
 
 | Contract | [Mutant](https://github.com/gigaverse-app/pytest-quint-connect/blob/main/docs/why.md#proof-that-the-tests-can-fail "Mutants are planted fake bugs: deliberately broken copies of the code, used only during this test run. Each must make some history diverge, proving the tests are meaningful: they would notice that kind of bug") | <img width="2000" height="1" align="right" alt="">What it breaks | Caught by | At |
 | :-- | :-- | :-- | :-- | :-- |
@@ -255,6 +255,10 @@ through the real code, and deliberately planted bugs must be caught.
 | `report-merge` | `shipped-389c5bb` | The exact merge_reports shipped at 389c5bb, before the fix: it writes a shard's earlier cases and new suites into the report before a later mismatch rejects the shard<br><sub>reintroduces a real bug found earlier</sub> | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
 | `report-merge` | `incremental-admission` | Today's merge_reports with its commit loop moved back inside validation, so the same bug returns even after other edits to the function | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
 | `report-merge` | `replace-case-identity` | After a compatible merge, a retained case is swapped for an equal copy, so code holding the old object stops seeing new evidence | `witness-compatibleRepeatedEvidenceTest` | state 1, after `merge(location='later-suite', mismatch='', payload='passed')` |
+| `report-merge` | `early-evidence-write` | Today's merge_reports with one evidence write (collected) moved inside validation, before a later mismatch can reject the shard | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
+| `report-merge` | `replace-retained-case` | Today's merge_reports replacing a retained case with the incoming one instead of extending it | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
+| `report-merge` | `remove-compatibility-guards` | Today's merge_reports with every compatibility assertion deleted, so incompatible shards merge silently; the source proof alone would still pass | `witness-repeatedLateRejectionTest` | state 1, after `reject(location='later-suite', mismatch='family', payload='passed')` |
+| `report-merge` | `omit-evidence-commit` | Today's merge_reports that validates and then never writes, so compatible evidence is dropped; the source proof alone would still pass | `witness-compatibleRepeatedEvidenceTest` | state 1, after `merge(location='later-suite', mismatch='', payload='passed')` |
 
 </details>
 

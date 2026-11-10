@@ -246,3 +246,11 @@ tests and migrations; changing the detection contract requires a reviewed migrat
 
 See the [full adoption playbook](https://github.com/gigaverse-app/dry-lint/blob/main/docs/adoption-playbook.md)
 and [sweep semantics](https://github.com/gigaverse-app/dry-lint/blob/main/docs/sweeps.md).
+
+## Python source contracts
+
+The report merge API has a source-preserved structural effect proof, real
+Pydantic identity/rejection histories and mandatory generated replay controls.
+Follow [setup, the one-command check and maintenance rules](docs/source-contracts/report-merge.md)
+when editing the enrolled implementation or its external contracts. The CI
+`source_contracts` lane checks current source and refuses stale or omitted targets.
