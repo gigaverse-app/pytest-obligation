@@ -17,7 +17,7 @@ from pydantic import ConfigDict, Field, ValidationError
 
 from pytest_obligation.models import HarnessModel
 
-from .inventory import ApplicationInventory
+from .inventory import ApplicationInventory, InventoryFailure
 
 MANIFEST = "manifest.json"
 MARKDOWN = "report.md"
@@ -59,6 +59,7 @@ class RenderManifest(HarnessModel):
     revision: str = Field(default="", pattern=r"^([0-9a-fA-F]{40})?$")
     junit: bool = False
     inventory_unavailable: bool = False
+    inventory_failure: InventoryFailure | None = None
     #: The report's lane title; the producer's text, so it is rendered as text and bounded.
     title: str = Field(default="", max_length=120)
     #: A requested lane was missing, stale or invalid. Survives trusted re-rendering.
@@ -66,7 +67,7 @@ class RenderManifest(HarnessModel):
 
 
 #: Fields added to version 1 after its first release: written only when set (see :class:`RenderManifest`).
-_OPTIONAL_LATER = frozenset({"title", "evidence_unavailable"})
+_OPTIONAL_LATER = frozenset({"title", "evidence_unavailable", "inventory_failure"})
 
 
 @dataclass(frozen=True)
@@ -196,7 +197,13 @@ def load(directory: Path) -> StagedEvidence:
         )
     inventory = None
     # A rejected collected inventory may still leave the statically discovered one in use.
-    problems = [INVENTORY_UNAVAILABLE] if manifest.inventory_unavailable else []
+    problems = (
+        [manifest.inventory_failure.explain()]
+        if manifest.inventory_failure
+        else [INVENTORY_UNAVAILABLE]
+        if manifest.inventory_unavailable
+        else []
+    )
     if manifest.evidence_unavailable:
         problems.append("One or more requested CI evidence lanes were unavailable or incompatible.")
     inventory_path = directory / INVENTORY

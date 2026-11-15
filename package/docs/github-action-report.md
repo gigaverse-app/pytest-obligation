@@ -237,6 +237,137 @@ preserves configured pytest plugins and targets only missing files. Collection i
 files and runs collection hooks, but does not execute fixtures or test bodies.
 The timeout defaults to 120 seconds and is configurable.
 
+### Collect and report in separate jobs
+
+A collected inventory belongs to the commit checked out by its producer. When
+moving collection into a separate job, carry that same immutable commit through
+test execution and reporting. On a PR, `github.sha` can be the synthetic merge
+commit while `github.event.pull_request.head.sha` is the branch head. Both testing
+policies are valid; mixing them makes the inventory unusable.
+
+This example chooses the PR head and resolves an optional dispatch ref once.
+For merge testing, change the **source job only** to use `inputs.ref || github.sha`.
+If your workflow already exposes a resolved tested SHA, reuse that output instead
+of adding another source job. Adapt dependency setup and pytest targets to your
+project; keep each downstream checkout bound to the resolved output. An inventory
+can reuse a selector's complete pre-filter nodeids, as above, but the reporter
+still needs the same revision even when no application suites were selected.
+
+<!-- separate-report-jobs:start -->
+```yaml
+name: Application evidence
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Optional branch or commit to test
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      revision: ${{ steps.commit.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - id: commit
+        shell: bash
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  tests:
+    needs: source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - run: uv run --no-sync pytest tests --due-work-profile-report=obligation.json --junitxml=junit.xml
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: test-evidence
+          path: |
+            obligation.json
+            junit.xml
+  inventory:
+    needs: source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - uses: gigaverse-app/pytest-obligation/collect@v1
+        id: collect
+        with:
+          python-version: '3.12'
+          application-paths: tests
+          pytest-command: uv run --no-sync pytest
+      - uses: actions/upload-artifact@v7
+        with:
+          name: application-inventory
+          path: ${{ steps.collect.outputs.inventory-path }}
+          if-no-files-found: error
+  report:
+    needs: [source, tests, inventory]
+    if: ${{ !cancelled() && needs.source.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-evidence
+          path: test-evidence
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: application-inventory
+          path: prepared-inventory
+      - uses: gigaverse-app/pytest-obligation/report@v1
+        with:
+          python-version: '3.12'
+          application-paths: tests
+          inventory-path: prepared-inventory/application-inventory.json
+          report-path: test-evidence/obligation.json
+          junit-path: test-evidence/junit.xml
+          expected-reports: '1'
+          test-outcome: ${{ needs.tests.result }}
+```
+<!-- separate-report-jobs:end -->
+
+The download steps allow the reporter to explain missing evidence; they do not
+turn missing results into passes. With multiple test sessions, preserve their
+separate artifacts and pass the admitted session count as `expected-reports`.
+Use the existing [fork publisher](#fork-prs-publish-from-a-workflow_run-job) flow for trusted
+`workflow_run` publication; do not check out or execute fork code in a privileged
+publisher to repair an identity mismatch.
+
+If inventory is unavailable, the report distinguishes a missing file, an unreadable
+file, invalid JSON/schema, and a revision mismatch. A mismatch shows both revisions
+and asks you to align collection, execution and reporting. Keep revision validation
+enabled and regenerate evidence when needed; changing an old inventory's revision
+label does not establish that its contents match the new code.
+
 ### Reuse collection across runs
 
 For deterministic collection, add the same cache settings to both planning and
