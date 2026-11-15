@@ -231,3 +231,42 @@ def test_short_runtime_identity_uses_source_to_resolve_unreadable_display_name(t
     assert "1 blocked checks" in body
     # No test outcome was reported and nothing ran: the zero it would show is unknown.
     assert "? contract checks passed" in body
+
+
+@pytest.mark.parametrize("placement", ["module", "context", "function"])
+def test_contract_name_in_host_context_without_executing_source(tmp_path: Path, placement: str) -> None:
+    prefix = {"module": "", "context": "with hosted(host):\n", "function": "def factory():\n"}[placement]
+    indent = "" if placement == "module" else "    "
+    (tmp_path / "contracts.py").write_text(
+        "raise RuntimeError('must not import')\n"
+        + prefix
+        + indent
+        + "ORDERS = ObligationContract(name='Order delivery')\n"
+    )
+    (tmp_path / "test_orders.py").write_text(
+        "from pytest_obligation import due_work_contract_suite\n"
+        "from contracts import ORDERS\n"
+        "@due_work_contract_suite(ORDERS)\nclass TestOrders: pass\n"
+    )
+    inventory = discover(tmp_path, ["test_orders.py"])
+    assert inventory.applications["test_orders.TestOrders"].name == (
+        "TestOrders" if placement == "function" else "Order delivery"
+    )
+
+
+@pytest.mark.parametrize("source_root", [".", "src"])
+def test_exemption_name_uses_its_declared_callable_without_importing(tmp_path: Path, source_root: str) -> None:
+    production = tmp_path / source_root
+    production.mkdir(exist_ok=True)
+    (production / "cache.py").write_text(
+        "raise RuntimeError('must not import')\nclass Cache:\n    def invalidate(self): pass\n"
+    )
+    (tmp_path / "test_cache.py").write_text(
+        "from pytest_obligation import exempt_due_work_suite, DueWorkSource\n"
+        "from cache import Cache as C\n"
+        "@exempt_due_work_suite(DueWorkSource(C.invalidate), reason='TTL', prove=proof)\n"
+        "class TestCache: pass\n"
+    )
+    inventory = discover(tmp_path, ["test_cache.py"])
+    assert inventory.applications["test_cache.TestCache"].name == "Cache.invalidate exemption"
+    assert not any("name unresolved" in text for text in inventory.limitations)
