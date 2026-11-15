@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from pytest_obligation._internal.python_source import Module, qualified_name, top_level_imports
+from pytest_obligation._internal.python_source import Module, qualified_name, resolve_callable, top_level_imports
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SourceLocation
 
@@ -103,33 +103,13 @@ class _Sources:
 
     def callable_name(self, expression: ast.expr, path: Path) -> str | None:
         """Resolve a declared function/class method, including imported aliases, without imports."""
-        parts = self.qualified(expression, path).split(".")
-        candidates = [(path, parts)]
-        for split in range(len(parts) - 1, 0, -1):
-            source = self.module_file(parts[:split])
-            if source is not None:
-                candidates.append((source, parts[split:]))
-        for source, names in candidates:
-            body = self.tree(source).body
-            for index, name in enumerate(names):
-                node = next(
-                    (
-                        item
-                        for item in body
-                        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and item.name == name
-                    ),
-                    None,
-                )
-                if node is None:
-                    break
-                if index == len(names) - 1:
-                    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                        return ".".join(names)
-                elif isinstance(node, ast.ClassDef):
-                    body = node.body
-                else:
-                    break
-        return None
+
+        def module_tree(module: str) -> ast.Module | None:
+            source = self.module_file(module.split(".")) if module else path
+            return self.tree(source) if source is not None else None
+
+        resolved = resolve_callable(self.qualified(expression, path), module_tree, allow_nested_functions=False)
+        return resolved[0] if resolved is not None else None
 
     def contract_name(self, expression: ast.expr, path: Path, seen: set[tuple[Path, str]]) -> str | None:
         if isinstance(expression, ast.Call):

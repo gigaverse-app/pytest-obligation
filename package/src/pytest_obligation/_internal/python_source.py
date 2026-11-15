@@ -97,3 +97,43 @@ def python_files(
             path = here / name
             if name.endswith(".py") and (skip_file is None or not skip_file(path)):
                 yield path
+
+
+def resolve_callable(
+    path: str,
+    module_tree: Callable[[str], ast.Module | None],
+    *,
+    allow_nested_functions: bool = True,
+) -> tuple[str, ast.FunctionDef | ast.AsyncFunctionDef] | None:
+    """Resolve a callable to its module-relative name and AST; callers own source lookup.
+
+    The first existing module prefix owns the remaining path. An empty prefix
+    permits a caller to supply its current module for local declarations.
+    """
+    parts = path.split(".")
+    for split in range(len(parts) - 1, -1, -1):
+        tree = module_tree(".".join(parts[:split]))
+        if tree is None:
+            continue
+        body = tree.body
+        for index, name in enumerate(parts[split:], start=split):
+            scope = next(
+                (
+                    node
+                    for node in body
+                    if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name
+                ),
+                None,
+            )
+            if scope is None:
+                return None
+            if index == len(parts) - 1:
+                return (
+                    (".".join(parts[split:]), scope)
+                    if isinstance(scope, ast.FunctionDef | ast.AsyncFunctionDef)
+                    else None
+                )
+            if not allow_nested_functions and not isinstance(scope, ast.ClassDef):
+                return None
+            body = scope.body
+    return None
