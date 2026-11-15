@@ -347,3 +347,78 @@ def test_a_producer_cannot_claim_github_identity(tmp_path: Path) -> None:
     assert "workflow commit " + "d" * 40 not in body
     assert "/blob/" + "d" * 40 not in body
     assert "/blob/" + HEAD in body
+
+
+@pytest.mark.parametrize("damage", ["missing", "unreadable", "invalid", "revision"])
+def test_inventory_failure_explains_repair_and_survives_publication(tmp_path: Path, damage: str) -> None:
+    _evidence(tmp_path)
+    inventory = tmp_path / "inventory.json"
+    if damage == "missing":
+        inventory.unlink()
+    elif damage == "unreadable":
+        inventory.unlink()
+        inventory.mkdir()
+    elif damage == "invalid":
+        inventory.write_text('{"secret": "must-not-echo"')
+    expected = HEAD if damage == "revision" else MERGE
+    original = _report(
+        tmp_path,
+        "--inventory",
+        str(inventory),
+        "--collection-revision",
+        expected,
+        "--expected-reports",
+        "2",
+        "--test-outcome",
+        "success",
+    )
+    published = _republish(tmp_path / "artifact", tmp_path / "published.md")
+    for body in (original, published):
+        assert "Evidence unavailable" in body
+        assert "must-not-echo" not in body
+        if damage == "revision":
+            assert f"Inventory revision: {MERGE}" in body
+            assert f"reporting checkout: {HEAD}" in body
+            assert "same resolved commit" in body
+        elif damage == "missing":
+            assert "inventory file was not found" in body
+            assert "artifact download" in body
+        elif damage == "unreadable":
+            assert "inventory could not be read" in body
+            assert "file permissions" in body
+        else:
+            assert "invalid JSON or inventory schema" in body
+            assert "Regenerate" in body
+
+
+@pytest.mark.parametrize("revision", [HEAD, MERGE])
+def test_inventory_accepts_either_head_or_merge_when_both_jobs_agree(tmp_path: Path, revision: str) -> None:
+    _evidence(tmp_path)
+    inventory = tmp_path / "inventory.json"
+    content = ApplicationInventory.model_validate_json(inventory.read_bytes())
+    inventory.write_text(content.model_copy(update={"revision": revision}).model_dump_json())
+    body = _report(
+        tmp_path,
+        "--inventory",
+        str(inventory),
+        "--collection-revision",
+        revision,
+        "--expected-reports",
+        "2",
+        "--test-outcome",
+        "success",
+    )
+    assert "Evidence unavailable" not in body
+
+
+def test_inventory_diagnostic_does_not_render_artifact_revision_markup(tmp_path: Path) -> None:
+    _evidence(tmp_path)
+    _report(tmp_path, "--inventory", str(tmp_path / "inventory.json"), "--collection-revision", HEAD)
+    path = tmp_path / "artifact" / MANIFEST
+    manifest = json.loads(path.read_text())
+    manifest["inventory_failure"]["actual_revision"] = "@everyone <img src=x>"
+    path.write_text(json.dumps(manifest))
+    body = _republish(tmp_path / "artifact", tmp_path / "published.md")
+    assert "Inventory revision: unavailable" in body
+    assert "@everyone" not in body and "<img src=x>" not in body
+    assert "Evidence unavailable" in body

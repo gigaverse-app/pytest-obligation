@@ -14,6 +14,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pytest_obligation._internal.python_source import resolve_callable
 from pytest_obligation.coverage.project import Project, terminal_name
 
 if TYPE_CHECKING:
@@ -93,28 +94,13 @@ def _task_definitions(project: Project, task_names: Mapping[str, str] | None = N
 
 def _resolve_callable(path: str, project: Project) -> _Callable | None:
     """The production function an import-qualified path names: a module, then classes and functions inside it."""
-    parts = path.split(".")
-    for split in range(len(parts) - 1, 0, -1):
-        source = _module_source(".".join(parts[:split]), project)
-        if source is None:
-            continue
-        body: list[ast.stmt] = ast.parse(source.read_text(encoding="utf-8")).body
-        found: ast.FunctionDef | ast.AsyncFunctionDef | None = None
-        for name in parts[split:]:
-            scope = next(
-                (
-                    node
-                    for node in body
-                    if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
-                ),
-                None,
-            )
-            if scope is None:
-                return None
-            body = scope.body
-            found = scope if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)) else None
-        return None if found is None else _Callable(path, found)
-    return None
+
+    def module_tree(module: str) -> ast.Module | None:
+        source = _module_source(module, project)
+        return ast.parse(source.read_text(encoding="utf-8")) if source is not None else None
+
+    resolved = resolve_callable(path, module_tree)
+    return _Callable(path, resolved[1]) if resolved is not None else None
 
 
 def _references(node: ast.AST, name: str) -> bool:

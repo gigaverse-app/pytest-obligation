@@ -7,9 +7,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from pytest_obligation.reporting import badge, readme
-from pytest_obligation.reporting.artifact import INVENTORY_UNAVAILABLE, RenderManifest, stage
+from pytest_obligation.reporting.artifact import RenderManifest, stage
 from pytest_obligation.reporting.compose import merge_evidence, render_merged, safe_run_url, write_report
-from pytest_obligation.reporting.inventory import ApplicationInventory, discover
+from pytest_obligation.reporting.inventory import ApplicationInventory, InventoryFailure, discover
 from pytest_obligation.reporting.lanes import combine_lanes
 
 
@@ -84,18 +84,27 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     if args.run_url and not safe_run_url(args.run_url):
         parser.error("run URL must be an HTTPS URL without Markdown delimiters")
-    inventory_unavailable = False
+    inventory_failure = None
     if args.inventory:
         try:
             collected = ApplicationInventory.model_validate_json(args.inventory.read_bytes())
             if not args.collection_revision or collected.revision != args.collection_revision:
-                raise ValueError("Collection revision mismatch")
-            inventory = collected
-        except (OSError, ValueError):
-            inventory_unavailable = True
+                inventory_failure = InventoryFailure(
+                    kind="revision",
+                    expected_revision=args.collection_revision[:128],
+                    actual_revision=collected.revision[:128],
+                )
+            else:
+                inventory = collected
+        except FileNotFoundError:
+            inventory_failure = InventoryFailure(kind="missing")
+        except OSError:
+            inventory_failure = InventoryFailure(kind="unreadable")
+        except ValueError:
+            inventory_failure = InventoryFailure(kind="invalid")
     paths = [Path(path) for path in sorted(glob.glob(args.input, recursive=True))]
     junit = [Path(path) for path in sorted(glob.glob(args.junit_input, recursive=True))] if args.junit_input else None
-    problems = [INVENTORY_UNAVAILABLE] if inventory_unavailable else []
+    problems = [inventory_failure.explain()] if inventory_failure else []
     lane_problems = False
     if args.evidence_input:
         # Check the raw lane independently too, before adding other jobs' files.
@@ -166,7 +175,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             # Only an immutable commit ever links sources, so nothing else needs to survive a re-render.
             revision=args.revision if re.fullmatch(r"[0-9a-fA-F]{40}", args.revision) else "",
             junit=junit is not None,
-            inventory_unavailable=inventory_unavailable,
+            inventory_unavailable=inventory_failure is not None,
+            inventory_failure=inventory_failure,
             title=args.title[:120],
             evidence_unavailable=lane_problems,
         )

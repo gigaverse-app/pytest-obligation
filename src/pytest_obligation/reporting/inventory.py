@@ -1,12 +1,14 @@
 """Find literal suite declarations without importing tests, fixtures or application code."""
 
 import ast
-from collections.abc import Sequence
+import re
+from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 
-from pytest_obligation._internal.python_source import Module, qualified_name, top_level_imports
+from pytest_obligation._internal.python_source import Module, qualified_name, resolve_callable, top_level_imports
 from pytest_obligation.models import HarnessModel
 from pytest_obligation.profiles.coverage import SourceLocation
 
@@ -27,6 +29,43 @@ class ApplicationInventory(HarnessModel):
     collection_key: str = ""
     applications: dict[str, Application] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
+
+
+class InventoryFailure(HarnessModel):
+    """Bounded diagnostic data; never retain parser errors or file contents."""
+
+    kind: Literal["missing", "unreadable", "invalid", "revision"]
+    expected_revision: str = Field(default="", max_length=128)
+    actual_revision: str = Field(default="", max_length=128)
+
+    def explain(self) -> str:
+        if self.kind == "missing":
+            return "Collected test inventory file was not found. Check the artifact download and inventory-path."
+        if self.kind == "unreadable":
+            return "Collected test inventory could not be read. Check the artifact download and file permissions."
+        if self.kind == "invalid":
+            return (
+                "Collected test inventory has invalid JSON or inventory schema. Regenerate it with the collect action."
+            )
+
+        # Artifacts can be supplied by a fork. Only inert revision labels reach Markdown.
+        def label(value: str) -> str:
+            return value if re.fullmatch(r"[a-zA-Z0-9./_-]{1,128}", value) else "unavailable"
+
+        return (
+            f"Inventory revision: {label(self.actual_revision)}; "
+            f"reporting checkout: {label(self.expected_revision)}. "
+            "Collect and report against the same resolved commit as test execution. "
+            "For PRs, choose either the PR head or the merge commit consistently across jobs."
+        )
+
+
+def _module_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Context managers do not introduce a Python scope; functions and classes do."""
+    for node in body:
+        yield node
+        if isinstance(node, ast.With | ast.AsyncWith):
+            yield from _module_statements(node.body)
 
 
 class _Sources:
@@ -53,8 +92,38 @@ class _Sources:
     def qualified(self, expression: ast.expr, path: Path) -> str:
         return qualified_name(expression, "", self.imports(path), set(), allow_unbound=True) or ""
 
+    def module_file(self, parts: list[str]) -> Path | None:
+        """Find local source in flat or src layouts; never search installed packages."""
+        for root in (self.root, self.root / "src"):
+            module = root.joinpath(*parts)
+            for path in (module.with_suffix(".py"), module / "__init__.py"):
+                if path.is_file():
+                    return path
+        return None
+
+    def callable_name(self, expression: ast.expr, path: Path) -> str | None:
+        """Resolve a declared function/class method, including imported aliases, without imports."""
+
+        def module_tree(module: str) -> ast.Module | None:
+            source = self.module_file(module.split(".")) if module else path
+            return self.tree(source) if source is not None else None
+
+        resolved = resolve_callable(self.qualified(expression, path), module_tree, allow_nested_functions=False)
+        return resolved[0] if resolved is not None else None
+
     def contract_name(self, expression: ast.expr, path: Path, seen: set[tuple[Path, str]]) -> str | None:
         if isinstance(expression, ast.Call):
+            if self.qualified(expression.func, path) in (
+                "pytest_obligation.DueWorkSource",
+                "pytest_obligation.contract.DueWorkSource",
+            ):
+                target = (
+                    expression.args[0]
+                    if expression.args
+                    else next((kw.value for kw in expression.keywords if kw.arg == "callable"), None)
+                )
+                name = self.callable_name(target, path) if target is not None else None
+                return f"{name} exemption" if name else None
             return next(
                 (
                     kw.value.value
@@ -68,7 +137,7 @@ class _Sources:
             if identity in seen:
                 return None
             seen.add(identity)
-            for node in self.tree(path).body:
+            for node in _module_statements(self.tree(path).body):
                 targets = (
                     node.targets
                     if isinstance(node, ast.Assign)
@@ -83,10 +152,8 @@ class _Sources:
         if "." not in qualified:
             return None
         module, name = qualified.rsplit(".", 1)
-        imported = self.root.joinpath(*module.split(".")).with_suffix(".py")
-        if not imported.is_file():
-            imported = self.root.joinpath(*module.split("."), "__init__.py")
-        return self.contract_name(ast.Name(id=name), imported, seen) if imported.is_file() else None
+        imported = self.module_file(module.split("."))
+        return self.contract_name(ast.Name(id=name), imported, seen) if imported is not None else None
 
 
 def discover(root: Path, paths: list[str], *, suite_decorators: Sequence[str] = ()) -> ApplicationInventory:
