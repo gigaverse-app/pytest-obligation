@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.2](https://github.com/gigaverse-app/pytest-obligation/compare/v0.26.1...v0.26.2) (2026-11-15)
+
+
+### Bug fixes
+
+* **reporting:** explain inventory failures and resolve static names ([#233](https://github.com/gigaverse-app/pytest-obligation/issues/233)) ([7678e2f](https://github.com/gigaverse-app/pytest-obligation/commit/7678e2fde9dd0a27bb12fce9bb204f8bbb98515f))
+
 ## [0.26.1](https://github.com/gigaverse-app/pytest-obligation/compare/v0.26.0...v0.26.1) (2026-11-09)
 
 
