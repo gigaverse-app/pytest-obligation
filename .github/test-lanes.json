@@ -108,6 +108,25 @@
         "lane:actions"
       ],
       "reason": "publish/sandbox.test.cjs builds and runs the publisher container from them"
+    },
+    {
+      "name": "source-contract-proof",
+      "when": [
+        "package/src/pytest_obligation/**",
+        "scripts/source_contracts/**",
+        "scripts/bootstrap_source_verifier.py",
+        "tooling/source-contracts/**",
+        "veripy-project.json",
+        "proofs/generated/**",
+        "verification_tests/source_contracts/**",
+        "docs/source-contracts/**",
+        "contracts/quint.ini",
+        "contracts/pytest_obligation/profiles/reporting/report_merge/**"
+      ],
+      "select": [
+        "lane:source_contracts"
+      ],
+      "reason": "the source-contracts job proves merge_reports with VeriPy/Dafny against these pinned inputs and replays the report-merge contract; neither the proof inputs nor the files it runs through veripy and pytest are imports"
     }
   ]
 }

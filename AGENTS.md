@@ -60,3 +60,17 @@ edit it by hand. Keep `history/` files (audit models, shipped pre-fix code) immu
 retain known-bad mutation controls, and investigate drift instead of automatically
 weakening an invariant or expected observation. This applies to registered
 contracts; unrelated changes do not require inventing a new specification.
+
+## Maintained Python source contracts
+
+`veripy-project.json` enrolls the current report merge AST. For edits to its source,
+external model dependencies, heap schema, proof sidecar or verifier toolchain,
+review the source/effect proof and real API observations together, then run
+`python -m scripts.source_contracts.check` as described in
+[the source contract guide](docs/source-contracts/report-merge.md). Intentional
+source changes use `--generate` to prove and refresh artifacts before checking.
+Keep enrollment and exact runtime inventory nonempty and fixed; retain semantic
+source mutants and guard-removal/no-op runtime controls. Unsupported required
+targets, missing observations, stale proof artifacts and surviving mutants fail.
+State external purity/type assumptions and exception exclusions explicitly.
+Preserve the registered Quint contract and immutable historical audit model.

@@ -1,0 +1,178 @@
+{
+  "functions": [
+    "merge_reports"
+  ],
+  "generated_to_source": {
+    "2": 246,
+    "3": 246,
+    "4": 246,
+    "6": 246,
+    "7": 252,
+    "8": 252,
+    "9": 252,
+    "11": 252,
+    "12": 253,
+    "13": 255,
+    "14": 253,
+    "15": 253,
+    "16": 256,
+    "17": 257,
+    "18": 258,
+    "19": 259,
+    "20": 260,
+    "21": 260,
+    "22": 260,
+    "24": 260,
+    "25": 261,
+    "26": 262,
+    "27": 260,
+    "28": 268,
+    "29": 268,
+    "30": 268,
+    "31": 268,
+    "33": 268,
+    "34": 268,
+    "35": 273,
+    "36": 274,
+    "37": 274,
+    "38": 274,
+    "40": 274,
+    "41": 275,
+    "42": 276,
+    "43": 277,
+    "44": 278,
+    "45": 274,
+    "46": 268,
+    "47": 268,
+    "48": 252,
+    "49": 280,
+    "50": 280,
+    "51": 280,
+    "52": 281,
+    "53": 281,
+    "54": 281,
+    "56": 281,
+    "57": 282,
+    "58": 282,
+    "59": 282,
+    "60": 283,
+    "61": 283,
+    "62": 283,
+    "63": 284,
+    "64": 284,
+    "65": 284,
+    "67": 284,
+    "68": 285,
+    "69": 285,
+    "70": 285,
+    "71": 285,
+    "72": 285,
+    "73": 285,
+    "74": 284,
+    "75": 286,
+    "76": 286,
+    "77": 286,
+    "78": 287,
+    "79": 287,
+    "80": 287,
+    "81": 281
+  },
+  "source": "package/src/pytest_obligation/profiles/reporting.py",
+  "translation": {
+    "assumptions": [
+      "exact builtin containers, scalar metadata and externally contracted passive model fields/methods",
+      "stable imports/types, no reentrant or concurrent mutations, no hostile descriptors/equality",
+      "finite histories; MemoryError, async interruption and interpreter failure excluded",
+      "effect lowering trusted; metadata guard truth and business compatibility not proved"
+    ],
+    "external_type_contract": {
+      "types": {
+        "CaseEvidence": {
+          "fields": {
+            "collected": "bool",
+            "debt": "opaque",
+            "declaration": "opaque",
+            "durations": "list[float]",
+            "failures": "list[opaque]",
+            "family": "str",
+            "outcomes": "dict[str, list[str]]",
+            "selected": "bool"
+          }
+        },
+        "ProfileCoverage": {
+          "fields": {
+            "assessment": "opaque",
+            "cases": "dict[str, CaseEvidence]",
+            "families": "opaque",
+            "title": "str"
+          }
+        },
+        "SuiteCoverage": {
+          "fields": {
+            "exploration": "dict[str, CaseEvidence] | None",
+            "name": "str",
+            "profiles": "dict[str, ProfileCoverage]",
+            "source": "opaque"
+          },
+          "pure_methods": {
+            "case_groups": "iter[dict[str, CaseEvidence]]"
+          }
+        }
+      }
+    },
+    "source_sha256": "3fc0d6437b03a46592e1f646bd83cb5709ffc90bc71c7348986e29cc6781e8f3",
+    "theorem": "validation rejection has no borrowed writes; retained identities; monotone evidence",
+    "version": "heap-effects-1",
+    "write_effects": [
+      {
+        "evidence_monotone": true,
+        "field": "",
+        "identity_preserving": true,
+        "line": 280,
+        "operation": "update"
+      },
+      {
+        "evidence_monotone": true,
+        "field": "",
+        "identity_preserving": true,
+        "line": 282,
+        "operation": "or"
+      },
+      {
+        "evidence_monotone": true,
+        "field": "",
+        "identity_preserving": true,
+        "line": 283,
+        "operation": "or"
+      },
+      {
+        "evidence_monotone": true,
+        "field": "outcomes",
+        "identity_preserving": true,
+        "line": 285,
+        "operation": "setdefault"
+      },
+      {
+        "evidence_monotone": true,
+        "field": "",
+        "identity_preserving": true,
+        "line": 285,
+        "operation": "extend"
+      },
+      {
+        "evidence_monotone": true,
+        "field": "failures",
+        "identity_preserving": true,
+        "line": 286,
+        "operation": "extend"
+      },
+      {
+        "evidence_monotone": true,
+        "field": "durations",
+        "identity_preserving": true,
+        "line": 287,
+        "operation": "extend"
+      }
+    ]
+  }
+}

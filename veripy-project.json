@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "sources": ["package/src/pytest_obligation/profiles/reporting.py"],
+  "required_targets": ["report-merge"],
+  "targets": [{
+    "id": "report-merge",
+    "source": "package/src/pytest_obligation/profiles/reporting.py",
+    "backend": "dafny-heap",
+    "functions": ["merge_reports"],
+    "dependencies": [
+      "package/src/pytest_obligation/profiles/coverage.py",
+      "package/src/pytest_obligation/profiles/failures.py",
+      "package/src/pytest_obligation/models.py",
+      "package/src/pytest_obligation/debt.py"
+    ],
+    "sidecar": "package/src/pytest_obligation/profiles/reporting.proofs.dfy"
+  }],
+  "artifacts": "proofs/generated",
+  "dafny_version": "4.11.0"
+}
