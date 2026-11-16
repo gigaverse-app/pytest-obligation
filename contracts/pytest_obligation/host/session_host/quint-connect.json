@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "name": "session-host",
+  "description": "A due_work_harness_host ini setting owns its host only for that pytest session; cleanup restores the previous host or unresolved factory.",
+  "root": "../../../..",
+  "attest": {
+    "package": "pytest_obligation",
+    "source": "package/src"
+  },
+  "module": "session_host_fixed",
+  "invariant": "maintained",
+  "model": "model.qnt",
+  "historical": "history/audit.qnt",
+  "historical_sha256": "64bc901c721adc767ad27fabddd39d843bfeb8b8fbcb8a5fa637f32ee8f0dd54",
+  "sources": [
+    "package/src/pytest_obligation/host.py",
+    "package/src/pytest_obligation/pytest_plugin.py",
+    "package/tests/core/test_host_initialization.py"
+  ],
+  "actions": {
+    "initFactory": "host.configure with a lazy manual factory.",
+    "initManual": "host.configure with an actual Host.",
+    "configureA": "Actual pytest Config.fromdictargs then _do_configure, with due_work_harness_host ini.",
+    "resolveApplication": "host.current_host resolves application factory.",
+    "cleanupA": "Actual pytest Config._ensure_unconfigure invokes registered cleanup stack.",
+    "configureWithoutIni": "Independent pytest Config._do_configure with no host ini.",
+    "resolveManual": "host.current_host on second configuration.",
+    "cleanupB": "Second config _ensure_unconfigure.",
+    "inspect": "Read raw production host identity and real factory counters, without resolving factories."
+  },
+  "witnesses": [
+    "unusedFactoryRestorationTest",
+    "resolvedFactoryRestorationTest",
+    "manualConfigurationControlTest",
+    "manualRestorationControlTest"
+  ],
+  "mutants": [
+    {
+      "name": "shipped-389c5bb",
+      "description": "The exact pytest_plugin.pytest_configure shipped at 389c5bb, before the fix: it configures the ini host process-wide and never restores the previous one"
+    },
+    {
+      "name": "eager-previous-resolution",
+      "description": "Scoping the host resolves the previous lazy factory first, importing an application the session never asked for"
+    }
+  ],
+  "bugs_found": [
+    {
+      "summary": "Repeated pytest.main() sessions in one process inherited an earlier session's due_work_harness_host instead of getting their previous host back",
+      "fixed_in": "#209",
+      "found_by": "the historical audit model (audit.qnt, pinned to 389c5bb): leakedHostWitnessTest reaches the leaked host",
+      "regression_test": "package/tests/core/test_host_initialization.py::test_independent_sessions_restore_the_previous_manual_host",
+      "mutant": "shipped-389c5bb"
+    }
+  ],
+  "bounds": {
+    "seed": 1,
+    "max_samples": 64,
+    "n_traces": 16,
+    "max_steps": 8
+  },
+  "limits": [
+    "Unitized real pytest configuration/cleanup lifecycle, without full test collection in the replay.",
+    "Actual pytest.main regressions remain in test_host_initialization.py, including collection failure.",
+    "Raw private host identity is observed to avoid altering lazy factory state; factory resolution itself uses current_host API.",
+    "Two serial configurations per trace; no claim about concurrent/nested independent pytest sessions.",
+    "shipped-389c5bb runs history/pytest_configure-389c5bb.py.txt, the pre-fix hook copied verbatim from 389c5bb and pinned by SHA-256 in adapter.py; it replaces the earlier hand-written omit-host-restoration control, which reproduced the same behavior."
+  ]
+}
