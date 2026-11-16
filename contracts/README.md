@@ -25,6 +25,7 @@ run one contract's directory or to `--quint-replay` a saved trace.
 
 | Contract | Models | Real bug it found |
 | --- | --- | --- |
+| [resource-identity](pytest_obligation/integrations/django/owed_references/resource_identity/README.md) | `integrations/django/owed_references.py::ResourceProvider` | Deleting a resource let the next one overwrite a survivor (#211) |
 | [fenced-lease](pytest_obligation/references/in_memory/fenced_lease/README.md) | Profile B's reference owner, `references/in_memory.py::InMemoryOwner` | A reaped owner's token stayed valid until the next claim (#217) |
 | [report-merge](pytest_obligation/profiles/reporting/report_merge/README.md) | `profiles/reporting.py::merge_reports` | A rejected shard leaked evidence into the combined report (#210) |
 | [cost-baseline](pytest_obligation/_cost_plugin/cost_baseline/README.md) | `_cost_plugin.py::CostCompleteness` | Update mode pruned the baseline after incomplete runs (#208) |
@@ -43,8 +44,10 @@ run one contract's directory or to `--quint-replay` a saved trace.
 | `test_<name>_contract.py` | One `quint_contract("quint-connect.json", driver=...)` line |
 | `history/` | Frozen evidence, never edited: the shipped pre-fix code a planted bug runs, and any audit model that found a bug |
 
-report-merge and cost-baseline still use hand-written `<name>_adapter.py` drivers; converting them
-to generated bases is follow-up work.
+The other contracts still use hand-written `<name>_adapter.py` drivers, exposing
+`create(root, work, mutant)`. They share one fixture, `adapter_driver`, in
+[`conftest.py`](conftest.py), and declare `quint_contract("quint-connect.json", driver="adapter_driver")`.
+Converting them to generated bases is follow-up work.
 
 ## Adding or changing a contract
 

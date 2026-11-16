@@ -48,6 +48,20 @@ def _name(resource: ProviderResource) -> str:
     return resource.name
 
 
+@pytest.mark.parametrize("deleted", [0, 1], ids=["earlier-resource", "latest-resource"])
+def test_provider_creation_preserves_surviving_resource_identities(deleted: int) -> None:
+    provider = ResourceProvider()
+    originals = [provider.create(), provider.create()]
+    survivor = originals[1 - deleted]
+    provider.delete(originals[deleted].name)
+    replacement = provider.create()
+    assert replacement.name != survivor.name
+    assert provider.list() == [survivor, replacement]
+    assert provider.resources[survivor.name] is survivor
+    provider.delete(replacement.name)
+    assert provider.list() == [survivor]
+
+
 def reconciled(reconciler_type: type[OrphanReconciler] = OrphanReconciler, **changes: Any) -> Callable[[], OwedRows]:
     def bind() -> OwedRows:
         # ARRANGE: each case owns one provider fake and the reconciler reading it.
