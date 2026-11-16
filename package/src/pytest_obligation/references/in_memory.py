@@ -463,6 +463,9 @@ class InMemoryMachine:
     holding an open attempt goes to ``UNKNOWN``; one with no attempt is re-armed
     ``READY``. Late evidence settles ``UNKNOWN`` rows to a terminal state and is
     refused-by-no-op afterwards.
+
+    Contract: contracts/pytest_obligation/references/in_memory/ambiguity/ replays Quint
+    histories against this class. Change it and the model in the same pull request.
     """
 
     def __init__(self) -> None:
@@ -486,8 +489,12 @@ class InMemoryMachine:
     def expire_lease(self, row_id: int) -> None:
         self.rows[row_id].lease_expired = True
 
-    def resolve_stalled(self, row_id: int) -> str:
+    def resolve_stalled(self, row_id: int) -> str | None:
         row = self.rows[row_id]
+        if row.state in REFERENCE_TERMINAL_STATES:
+            # Settled work is not a dead claim: its attempt was closed by the evidence
+            # that settled it, so re-arming it would send an applied effect again.
+            return None
         if row.open_attempt is not None:
             row.state = "UNKNOWN"
             return "MARK_UNKNOWN"

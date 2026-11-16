@@ -254,7 +254,14 @@ def assert_late_evidence_resolves_ambiguity(ambiguity: AmbiguityAware) -> None:
 
 
 def assert_terminal_is_monotonic(ambiguity: AmbiguityAware) -> None:
-    """INVARIANT 6: settled work cannot be resurrected."""
+    """
+    INVARIANT 6: settled work cannot be resurrected.
+
+    Two things could reopen it: the reconciler applying evidence again, and the
+    reaper's next sweep. Settling usually closes the attempt, so a reaper that
+    only asks "is there an open attempt?" sees a dead claim with none and re-arms
+    it, which re-sends an effect that was already applied.
+    """
     row_id, token = ambiguity.claim()
     ambiguity.start_attempt(row_id, token)
     ambiguity.expire_lease(row_id)
@@ -265,11 +272,23 @@ def assert_terminal_is_monotonic(ambiguity: AmbiguityAware) -> None:
     try:
         again = ambiguity.apply_late_evidence(row_id)
     except Exception:
-        return  # refusing a second application is a legitimate design
-    assert again == settled, (
-        f"{ambiguity.name}: re-applying evidence moved a terminal row from "
-        f"{settled!r} to {again!r}. A slow or duplicated reconciler must not be "
-        f"able to reopen settled work"
+        pass  # refusing a second application is a legitimate design
+    else:
+        assert again == settled, (
+            f"{ambiguity.name}: re-applying evidence moved a terminal row from "
+            f"{settled!r} to {again!r}. A slow or duplicated reconciler must not be "
+            f"able to reopen settled work"
+        )
+
+    try:
+        ambiguity.resolve_stalled(row_id)
+    except Exception:
+        pass  # refusing to dispose of a settled row is a legitimate design
+    after_sweep = ambiguity.state_of(row_id)
+    assert after_sweep == settled and row_id not in ambiguity.due_work_ids(), (
+        f"{ambiguity.name}: a reaper sweep moved a settled row from {settled!r} to "
+        f"{after_sweep!r}{' and into the due-work selection' if row_id in ambiguity.due_work_ids() else ''}. "
+        f"The effect was already applied; re-arming it sends it again"
     )
 
 

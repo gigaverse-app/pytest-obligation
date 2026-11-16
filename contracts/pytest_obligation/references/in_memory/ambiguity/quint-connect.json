@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "name": "ambiguity",
+  "description": "Profile C's reference machine: a dead claim with an open attempt is ambiguous, ambiguity is never due work, and settled work stays settled.",
+  "root": "../../../../..",
+  "attest": {
+    "package": "pytest_obligation",
+    "source": "package/src"
+  },
+  "module": "ambiguity_fixed",
+  "invariant": "contract",
+  "model": "model.qnt",
+  "sources": [
+    "package/src/pytest_obligation/references/in_memory.py",
+    "package/src/pytest_obligation/profiles/crash_ambiguity.py"
+  ],
+  "actions": {
+    "init": "A fresh InMemoryMachine; claim() one row and keep its token",
+    "startAttempt": "InMemoryMachine.start_attempt(row, token): the attempt recorded before the provider call",
+    "expire": "InMemoryMachine.expire_lease(row): the owner died",
+    "resolve": "InMemoryMachine.resolve_stalled(row): the reaper",
+    "evidence": "InMemoryMachine.apply_late_evidence(row): the provider's late answer",
+    "inspect": "Read state_of, open_attempt and due_work_ids without changing anything"
+  },
+  "witnesses": [
+    "settledStaysSettledTest",
+    "deadClaimWithAttemptIsAmbiguousTest",
+    "deadClaimWithoutAttemptIsRetriedTest",
+    "evidenceIsIdempotentTest"
+  ],
+  "mutants": [
+    {
+      "name": "shipped-9aa6ff2",
+      "description": "The exact InMemoryMachine.resolve_stalled shipped at 9aa6ff2, before the fix: settling clears the attempt, so the next sweep re-arms the settled row READY and its applied effect becomes due work again"
+    },
+    {
+      "name": "blind-retry",
+      "description": "The reaper re-arms every dead claim, including one whose provider call may already have applied"
+    },
+    {
+      "name": "ambiguous-redispatch",
+      "description": "Ambiguous rows appear in the ordinary due-work selection, so the sweep re-sends a maybe-applied effect"
+    }
+  ],
+  "bugs_found": [
+    {
+      "summary": "Profile C's reference machine re-armed a settled row on the next reaper sweep, putting an already-applied effect back into due work; invariant 6 never ran the reaper on settled work, so adopters with the same reaper passed",
+      "fixed_in": "#218",
+      "found_by": "a state-machine audit of the references, confirmed by replaying claim, attempt, expire, resolve, evidence and a second sweep against the real InMemoryMachine",
+      "regression_test": "package/tests/core/profiles/test_crash_ambiguity.py::test_the_reaper_leaves_settled_work_settled",
+      "mutant": "shipped-9aa6ff2"
+    }
+  ],
+  "bounds": {
+    "seed": 20261108,
+    "max_samples": 200,
+    "n_traces": 16,
+    "max_steps": 8
+  },
+  "limits": [
+    "One claimed row. The reaper runs only on an expired lease, and late evidence arrives only for an ambiguous or settled row: whether a live claim may be resolved, and whether evidence may settle a still-claimed row, are open design questions this model does not decide.",
+    "This contracts the reference machine the profile C proofs are calibrated against, not an adopter's binding; adopters are judged by the proofs in crash_ambiguity.py.",
+    "shipped-9aa6ff2 runs history/resolve-9aa6ff2.py.txt, the pre-fix reaper copied verbatim from 9aa6ff2 and pinned by SHA-256 in adapter.py."
+  ]
+}
